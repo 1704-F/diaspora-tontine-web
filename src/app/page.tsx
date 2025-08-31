@@ -1,103 +1,183 @@
-import Image from "next/image";
+// ============================================
+// 8. PAGE ACCUEIL ROOT (src/app/page.tsx)
+// ============================================
+import { Button } from '@/components/ui/Button'
+import { Card, CardContent } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
+import Link from 'next/link'
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur border-b border-gray-200">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center justify-center w-8 h-8 bg-primary-500 rounded text-white font-bold text-sm">
+                DT
+              </div>
+              <span className="text-xl font-semibold text-gray-900">
+                DiasporaTontine
+              </span>
+              <Badge variant="success" className="ml-2">v1.0</Badge>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Link href="/login">
+                <Button variant="outline">Se connecter</Button>
+              </Link>
+              <Link href="/register">
+                <Button>S&apos;inscrire</Button>
+              </Link>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      </header>
+
+      {/* Hero section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4 text-center">
+          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
+            La <span className="text-primary-500">super-app</span> de la <br />
+            diaspora africaine
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+            Gérez vos associations, participez à des tontines, organisez vos finances familiales. Tout en un seul endroit.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/login">
+              <Button size="lg" className="w-full sm:w-auto">
+                🚀 Commencer maintenant
+              </Button>
+            </Link>
+            <Button variant="outline" size="lg" className="w-full sm:w-auto">
+              📱 Télécharger l&apos;app
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
+            Tout ce dont votre communauté a besoin
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="text-center">
+              <CardContent className="p-6">
+                <div className="text-4xl mb-4">🏛️</div>
+                <h3 className="text-xl font-semibold mb-2">Associations</h3>
+                <p className="text-gray-600">
+                  Gestion complète d&apos;associations multi-sections avec transparence totale
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center">
+              <CardContent className="p-6">
+                <div className="text-4xl mb-4">💰</div>
+                <h3 className="text-xl font-semibold mb-2">Tontines</h3>
+                <p className="text-gray-600">
+                  Épargne collective moderne avec tirages sécurisés et transparents
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center">
+              <CardContent className="p-6">
+                <div className="text-4xl mb-4">👨‍👩‍👧‍👦</div>
+                <h3 className="text-xl font-semibold mb-2">Budget Famille</h3>
+                <p className="text-gray-600">
+                  Gestion financière familiale diaspora avec suivi multi-devises
+                </p>
+                <Badge variant="secondary" className="mt-2">Bientôt</Badge>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center">
+              <CardContent className="p-6">
+                <div className="text-4xl mb-4">🏪</div>
+                <h3 className="text-xl font-semibold mb-2">Commerce</h3>
+                <p className="text-gray-600">
+                  Marketplace communautaire pour produits et services diaspora
+                </p>
+                <Badge variant="secondary" className="mt-2">Bientôt</Badge>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-16 bg-primary-500 text-white">
+        <div className="container mx-auto px-4 text-center">
+          <h2 className="text-3xl font-bold mb-4">
+            Prêt à rejoindre la communauté ?
+          </h2>
+          <p className="text-xl mb-8 text-primary-100">
+            Plus de 10,000 personnes nous font déjà confiance
+          </p>
+          <Link href="/login">
+            <Button size="lg" className="bg-white text-primary-500 hover:bg-gray-100">
+              Créer mon compte gratuitement
+            </Button>
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-gray-300 py-12">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="flex items-center justify-center w-8 h-8 bg-primary-500 rounded text-white font-bold text-sm">
+                  DT
+                </div>
+                <span className="text-xl font-semibold text-white">
+                  DiasporaTontine
+                </span>
+              </div>
+              <p className="text-gray-400">
+                La plateforme de référence pour les communautés diaspora
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Produit</h4>
+              <div className="space-y-2">
+                <a href="#" className="block hover:text-white">Associations</a>
+                <a href="#" className="block hover:text-white">Tontines</a>
+                <a href="#" className="block hover:text-white">Tarifs</a>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Support</h4>
+              <div className="space-y-2">
+                <a href="#" className="block hover:text-white">Centre d&apos;aide</a>
+                <a href="#" className="block hover:text-white">Contact</a>
+                <a href="#" className="block hover:text-white">Statut</a>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Légal</h4>
+              <div className="space-y-2">
+                <a href="#" className="block hover:text-white">Confidentialité</a>
+                <a href="#" className="block hover:text-white">CGU</a>
+                <a href="#" className="block hover:text-white">Cookies</a>
+              </div>
+            </div>
+          </div>
+          
+          <div className="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
+            <p>&copy; 2025 DiasporaTontine. Tous droits réservés.</p>
+          </div>
+        </div>
       </footer>
     </div>
-  );
+  )
 }

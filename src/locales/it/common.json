@@ -1,0 +1,34 @@
+{
+  "nav": {
+    "dashboard": "Pannello di controllo",
+    "associations": "Associazioni", 
+    "tontines": "Tontine",
+    "profile": "Profilo",
+    "logout": "Disconnetti"
+  },
+  "auth": {
+    "login": "Accedi",
+    "register": "Registrati",
+    "email": "Email", 
+    "password": "Password",
+    "phone": "Numero di telefono",
+    "loginFor": "Accedi per",
+    "selectContext": "Seleziona il tuo contesto"
+  },
+  "associations": {
+    "title": "Le Mie Associazioni",
+    "create": "Crea Associazione",
+    "members": "Membri",
+    "finances": "Finanze",
+    "settings": "Impostazioni"
+  },
+  "common": {
+    "loading": "Caricamento...",
+    "error": "Errore",
+    "success": "Successo", 
+    "save": "Salva",
+    "cancel": "Annulla",
+    "delete": "Elimina",
+    "edit": "Modifica"
+  }
+}

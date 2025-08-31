@@ -1,0 +1,34 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "associations": "Associations",
+    "tontines": "Tontines",
+    "profile": "Profil",
+    "logout": "Déconnexion"
+  },
+  "auth": {
+    "login": "Se connecter",
+    "register": "S'inscrire", 
+    "email": "Email",
+    "password": "Mot de passe",
+    "phone": "Numéro de téléphone",
+    "loginFor": "Me connecter pour",
+    "selectContext": "Sélectionnez votre contexte"
+  },
+  "associations": {
+    "title": "Mes Associations",
+    "create": "Créer une Association",
+    "members": "Membres",
+    "finances": "Finances",
+    "settings": "Paramètres"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier"
+  }
+}
