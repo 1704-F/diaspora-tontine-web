@@ -1,48 +1,29 @@
-// ============================================
-// 7. MIDDLEWARE DE REDIRECTION (src/middleware.ts) - MISE À JOUR
-// ============================================
 import { NextRequest, NextResponse } from 'next/server'
-import createMiddleware from 'next-intl/middleware'
-import { locales, defaultLocale } from './lib/i18n'
-
-const intlMiddleware = createMiddleware({
-  locales,
-  defaultLocale,
-  localePrefix: 'as-needed'
-})
 
 export default function middleware(request: NextRequest) {
-  // Routes publiques (pas d'auth requise)
-  const publicPaths = ['/login', '/register', '/', '/about']
-  
-  // Routes protégées (auth requise)
-  const protectedPaths = ['/dashboard', '/modules', '/profile', '/settings']
-  
   const { pathname } = request.nextUrl
+
+  // Routes publiques - pas de redirection
+  const publicPaths = ['/', '/login', '/register', '/about']
   
-  // Vérifier si c'est une route protégée
+  if (publicPaths.includes(pathname)) {
+    return NextResponse.next()
+  }
+
+  // Routes protégées - vérifier auth plus tard côté client
+  const protectedPaths = ['/dashboard', '/modules']
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path))
   
   if (isProtectedPath) {
-    // Vérifier token dans les cookies ou headers
-    const token = request.cookies.get('token')?.value || 
-                 request.headers.get('authorization')?.replace('Bearer ', '')
-    
-    if (!token) {
-      // Rediriger vers login avec returnUrl
-      const loginUrl = new URL('/login', request.url)
-      loginUrl.searchParams.set('returnUrl', pathname)
-      return NextResponse.redirect(loginUrl)
-    }
+    // Laisser passer, l'auth sera vérifiée côté client avec ProtectedRoute
+    return NextResponse.next()
   }
-  
-  // Appliquer middleware i18n
-  return intlMiddleware(request)
+
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    '/((?!api|_next|_vercel|.*\\..*).*)',
-    '/([\\w-]+)?/users/(.+)'
+    '/((?!api|_next|_vercel|.*\\..*).*)'
   ]
 }
