@@ -76,7 +76,9 @@ function DashboardContent() {
       {/* Module grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {moduleCards.map((module) => {
-          const isEnabled = user?.enabledModules[module.id as keyof typeof user.enabledModules]?.enabled
+          
+
+          const isEnabled = user?.enabledModules?.[module.id as keyof typeof user.enabledModules]?.enabled || false
           
           return (
             <Card 

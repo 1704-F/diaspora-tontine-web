@@ -39,7 +39,7 @@ interface AuthState {
   
   // Actions
   setUser: (user: User) => void
-  setToken: (token: string) => void
+  setToken: (token: string) => void 
   logout: () => void
   setSelectedModule: (module: 'associations' | 'tontines' | 'family' | 'commerce') => void
   login: (credentials: { phoneNumber: string; otpCode: string; module?: string }) => Promise<boolean>
@@ -67,13 +67,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
+      body: JSON.stringify({
+  phoneNumber: credentials.phoneNumber,
+  otp: credentials.otpCode
+})
     })
     
     const data = await response.json()
     
     if (data.success) {
-      const { user, token } = data.data
+      const { user, tokens, nextStep } = data
+       // Vérifier si l'utilisateur doit configurer son PIN
+  if (nextStep === 'setup_pin') {
+    // TODO: Rediriger vers la page de configuration PIN
+    console.log('Utilisateur doit configurer son PIN')
+    return false
+  }
+
+    if (!tokens) {
+    console.log('Pas de tokens reçus')
+    return false
+  }
+  
+const token = tokens.accessToken
       
       localStorage.setItem('token', token)
       localStorage.setItem('user', JSON.stringify(user))

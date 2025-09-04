@@ -31,7 +31,7 @@ export function ProtectedRoute({
 
     // Vérifier accès module
     if (user && requiredModule) {
-      const hasModuleAccess = user.enabledModules[requiredModule]?.enabled
+      const hasModuleAccess = user?.enabledModules?.[requiredModule]?.enabled || false
       if (!hasModuleAccess) {
         router.push('/dashboard')
         return

@@ -1,5 +1,6 @@
 // ============================================
-// 3. LOGIN FORM COMPONENT (src/components/auth/LoginForm.tsx)
+// LoginForm COMPLET avec workflow backend
+// src/components/auth/LoginForm.tsx
 // ============================================
 'use client'
 
@@ -14,7 +15,8 @@ import { ModuleSelector } from './ModuleSelector'
 import { useAuthStore } from '@/stores/authStore'
 import { toast } from 'sonner'
 
-const loginSchema = z.object({
+// Schémas de validation
+const phoneOtpSchema = z.object({
   phoneNumber: z.string()
     .min(10, 'Numéro de téléphone invalide')
     .regex(/^\+?[1-9]\d{1,14}$/, 'Format de numéro invalide'),
@@ -23,29 +25,40 @@ const loginSchema = z.object({
     .regex(/^\d{6}$/, 'Le code OTP ne doit contenir que des chiffres')
 })
 
-type LoginFormData = z.infer<typeof loginSchema>
+const setupPinSchema = z.object({
+  firstName: z.string().min(2, 'Prénom requis'),
+  lastName: z.string().min(2, 'Nom requis'),
+  pin: z.string()
+    .length(4, 'Le PIN doit contenir 4 chiffres')
+    .regex(/^\d{4}$/, 'Le PIN ne doit contenir que des chiffres'),
+  confirmPin: z.string()
+}).refine((data) => data.pin === data.confirmPin, {
+  message: "Les codes PIN ne correspondent pas",
+  path: ["confirmPin"],
+})
 
-interface LoginFormProps {
-  onSuccess?: () => void
-}
+type PhoneOtpData = z.infer<typeof phoneOtpSchema>
+type SetupPinData = z.infer<typeof setupPinSchema>
 
-export function LoginForm({ onSuccess }: LoginFormProps) {
-  const [step, setStep] = useState<'module' | 'phone' | 'otp'>('module')
+export function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
+  const [step, setStep] = useState<'module' | 'phone' | 'otp' | 'setup-pin'>('module')
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [newUser, setNewUser] = useState<any>(null)
   const [isRequestingOtp, setIsRequestingOtp] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+  const [isSettingUpPin, setIsSettingUpPin] = useState(false)
   
   const router = useRouter()
-  const { login, isLoading } = useAuthStore()
+  const { setUser, setToken } = useAuthStore()
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema)
+  // Forms
+  const phoneOtpForm = useForm<PhoneOtpData>({
+    resolver: zodResolver(phoneOtpSchema)
+  })
+
+  const setupPinForm = useForm<SetupPinData>({
+    resolver: zodResolver(setupPinSchema)
   })
 
   const moduleOptions = [
@@ -88,7 +101,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
   // Étape 1: Demande OTP
   const requestOtp = async () => {
-    const phone = watch('phoneNumber')
+    const phone = phoneOtpForm.watch('phoneNumber')
     if (!phone) {
       toast.error('Veuillez saisir votre numéro de téléphone')
       return
@@ -118,26 +131,100 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     }
   }
 
-  // Étape 2: Vérification OTP + Login
-  const onSubmit = async (data: LoginFormData) => {
-    const success = await login({
-      phoneNumber: data.phoneNumber,
-      otpCode: data.otpCode,
-      module: selectedModule || undefined
-    })
-
-    if (success) {
-      toast.success('Connexion réussie!')
-      onSuccess?.()
+  // Étape 2: Vérification OTP
+  const onVerifyOtp = async (data: PhoneOtpData) => {
+    setIsVerifyingOtp(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: data.phoneNumber,
+          otp: data.otpCode
+        })
+      })
       
-      // Redirection selon module sélectionné
-      if (selectedModule && selectedModule !== 'general') {
-        router.push(`/modules/${selectedModule}`)
+      const result = await response.json()
+      
+      if (result.success) {
+        if (result.nextStep === 'setup_pin') {
+          // Nouvel utilisateur - configuration PIN
+          setNewUser(result.user)
+          setStep('setup-pin')
+          toast.success('Compte créé ! Configurez votre PIN')
+        } else if (result.tokens) {
+          // Utilisateur existant - connexion directe
+          const token = result.tokens.accessToken
+          
+          localStorage.setItem('token', token)
+          localStorage.setItem('user', JSON.stringify(result.user))
+          
+          setUser(result.user)
+          setToken(token)
+          
+          toast.success('Connexion réussie!')
+          onSuccess?.()
+          
+          if (selectedModule && selectedModule !== 'general') {
+            router.push(`/modules/${selectedModule}`)
+          } else {
+            router.push('/dashboard')
+          }
+        }
       } else {
-        router.push('/dashboard')
+        toast.error(result.error || 'Code OTP invalide')
       }
-    } else {
-      toast.error('Code OTP invalide ou expiré')
+    } catch (error) {
+      toast.error('Erreur de vérification')
+    } finally {
+      setIsVerifyingOtp(false)
+    }
+  }
+
+  // Étape 3: Configuration PIN
+  const onSetupPin = async (data: SetupPinData) => {
+    if (!newUser) return
+
+    setIsSettingUpPin(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/setup-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: newUser.phoneNumber,
+          pin: data.pin,
+          confirmPin: data.confirmPin,
+          firstName: data.firstName,
+          lastName: data.lastName
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success && result.tokens) {
+        const token = result.tokens.accessToken
+        
+        localStorage.setItem('token', token)
+        localStorage.setItem('user', JSON.stringify(result.user))
+        
+        setUser(result.user)
+        setToken(token)
+        
+        toast.success('Configuration terminée avec succès!')
+        onSuccess?.()
+        
+        if (selectedModule && selectedModule !== 'general') {
+          router.push(`/modules/${selectedModule}`)
+        } else {
+          router.push('/dashboard')
+        }
+      } else {
+        toast.error(result.error || 'Erreur de configuration')
+      }
+    } catch (error) {
+      toast.error('Erreur de configuration')
+    } finally {
+      setIsSettingUpPin(false)
     }
   }
 
@@ -152,7 +239,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         <p className="text-gray-600 mt-2">Connectez-vous à votre espace</p>
       </div>
 
-      {/* Étape 1: Sélection module */}
+      {/* Contenu selon l'étape */}
       {step === 'module' && (
         <div className="space-y-4">
           <ModuleSelector
@@ -170,7 +257,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         </div>
       )}
 
-      {/* Étape 2: Numéro de téléphone */}
       {step === 'phone' && (
         <div className="space-y-4">
           <div className="text-center">
@@ -181,10 +267,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           </div>
           
           <Input
-            {...register('phoneNumber')}
+            {...phoneOtpForm.register('phoneNumber')}
             label="Numéro de téléphone"
             placeholder="+33 6 12 34 56 78"
-            error={errors.phoneNumber?.message}
+            error={phoneOtpForm.formState.errors.phoneNumber?.message}
             autoFocus
           />
           
@@ -207,9 +293,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         </div>
       )}
 
-      {/* Étape 3: Code OTP */}
       {step === 'otp' && (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={phoneOtpForm.handleSubmit(onVerifyOtp)} className="space-y-4">
           <div className="text-center">
             <h3 className="font-medium text-gray-900">Code de vérification</h3>
             <p className="text-sm text-gray-600 mt-1">
@@ -218,10 +303,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           </div>
 
           <Input
-            {...register('otpCode')}
+            {...phoneOtpForm.register('otpCode')}
             label="Code à 6 chiffres"
             placeholder="123456"
-            error={errors.otpCode?.message}
+            error={phoneOtpForm.formState.errors.otpCode?.message}
             autoFocus
             maxLength={6}
           />
@@ -237,10 +322,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             </Button>
             <Button
               type="submit"
-              loading={isLoading}
+              loading={isVerifyingOtp}
               className="flex-1"
             >
-              Se connecter
+              Vérifier
             </Button>
           </div>
           
@@ -255,6 +340,67 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             >
               Renvoyer le code
             </button>
+          </div>
+        </form>
+      )}
+
+      {step === 'setup-pin' && (
+        <form onSubmit={setupPinForm.handleSubmit(onSetupPin)} className="space-y-4">
+          <div className="text-center">
+            <h3 className="font-medium text-gray-900">Configuration du compte</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Finalisez votre inscription
+            </p>
+          </div>
+
+          <Input
+            {...setupPinForm.register('firstName')}
+            label="Prénom"
+            placeholder="John"
+            error={setupPinForm.formState.errors.firstName?.message}
+          />
+
+          <Input
+            {...setupPinForm.register('lastName')}
+            label="Nom"
+            placeholder="Doe"
+            error={setupPinForm.formState.errors.lastName?.message}
+          />
+
+          <Input
+            {...setupPinForm.register('pin')}
+            label="Code PIN (4 chiffres)"
+            type="password"
+            placeholder="1234"
+            maxLength={4}
+            error={setupPinForm.formState.errors.pin?.message}
+          />
+
+          <Input
+            {...setupPinForm.register('confirmPin')}
+            label="Confirmer le code PIN"
+            type="password"
+            placeholder="1234"
+            maxLength={4}
+            error={setupPinForm.formState.errors.confirmPin?.message}
+          />
+
+          <div className="flex space-x-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStep('otp')}
+              className="flex-1"
+            >
+              Retour
+            </Button>
+            <Button
+              type="submit"
+              loading={isSettingUpPin}
+              className="flex-1"
+            >
+              Finaliser
+            </Button>
           </div>
         </form>
       )}
