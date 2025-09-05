@@ -1,6 +1,3 @@
-// ============================================
-// 1. STORE AUTHENTIFICATION (src/stores/authStore.ts)
-// ============================================
 import { create } from 'zustand'
 
 interface User {
@@ -43,6 +40,10 @@ interface AuthState {
   logout: () => void
   setSelectedModule: (module: 'associations' | 'tontines' | 'family' | 'commerce') => void
   login: (credentials: { phoneNumber: string; otpCode: string; module?: string }) => Promise<boolean>
+  
+  // Nouveaux helpers
+  getUserModuleState: (module: string) => 'new' | 'active'
+  getLastSelectedModule: () => string | null
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -53,64 +54,113 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setUser: (user) => set({ user }),
   setToken: (token) => set({ token }),
-  setSelectedModule: (module) => set({ selectedModule: module }),
+  
+  setSelectedModule: (module) => {
+    set({ selectedModule: module })
+    // Persistance automatique
+    localStorage.setItem('lastSelectedModule', module)
+  },
   
   logout: () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    localStorage.removeItem('lastSelectedModule')
     set({ user: null, token: null, selectedModule: null })
   },
 
-  login: async (credentials) => {
-  set({ isLoading: true })
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-  phoneNumber: credentials.phoneNumber,
-  otp: credentials.otpCode
-})
-    })
+  // Helper pour déterminer l'état d'un utilisateur dans un module
+  getUserModuleState: (module: string) => {
+    const { user } = get()
+    if (!user) return 'new'
     
-    const data = await response.json()
-    
-    if (data.success) {
-      const { user, tokens, nextStep } = data
-       // Vérifier si l'utilisateur doit configurer son PIN
-  if (nextStep === 'setup_pin') {
-    // TODO: Rediriger vers la page de configuration PIN
-    console.log('Utilisateur doit configurer son PIN')
-    return false
-  }
-
-    if (!tokens) {
-    console.log('Pas de tokens reçus')
-    return false
-  }
-  
-const token = tokens.accessToken
-      
-      localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(user))
-      
-      const selected =
-  credentials.module && ['associations', 'tontines', 'family', 'commerce'].includes(credentials.module)
-    ? (credentials.module as 'associations' | 'tontines' | 'family' | 'commerce')
-    : null
-
-set({ user, token, selectedModule: selected })
-
-      return true
+    switch (module) {
+      case 'associations':
+        return user.associations && user.associations.length > 0 ? 'active' : 'new'
+      case 'tontines':
+        return user.tontines && user.tontines.length > 0 ? 'active' : 'new'
+      default:
+        return 'new'
     }
-    
-    return false
-  } catch (error) {
-    console.error('Login error:', error)
-    return false
-  } finally {
-    set({ isLoading: false })
+  },
+
+  // Helper pour récupérer le dernier module utilisé
+  getLastSelectedModule: () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lastSelectedModule')
+    }
+    return null
+  },
+
+  login: async (credentials) => {
+    set({ isLoading: true })
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: credentials.phoneNumber,
+          otp: credentials.otpCode
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        const { user, tokens, nextStep } = data
+        
+        // Vérifier si l'utilisateur doit configurer son PIN
+        if (nextStep === 'setup_pin') {
+          console.log('Utilisateur doit configurer son PIN')
+          return false
+        }
+
+        if (!tokens) {
+          console.log('Pas de tokens reçus')
+          return false
+        }
+        
+        const token = tokens.accessToken
+        
+        localStorage.setItem('token', token)
+        localStorage.setItem('user', JSON.stringify(user))
+        
+        // Ne pas auto-sélectionner un module, laisser l'utilisateur choisir
+        set({ user, token, selectedModule: null })
+
+        return true
+      }
+      
+      return false
+    } catch (error) {
+      console.error('Login error:', error)
+      return false
+    } finally {
+      set({ isLoading: false })
+    }
+  }
+}))
+
+// Hook personnalisé pour la persistence auth
+export const useAuthPersistence = () => {
+  const { setUser, setToken, user, token } = useAuthStore()
+
+  if (typeof window !== 'undefined') {
+    // Restaurer au démarrage si pas déjà chargé
+    if (!user && !token) {
+      const storedToken = localStorage.getItem('token')
+      const storedUserStr = localStorage.getItem('user')
+      
+      if (storedToken && storedUserStr) {
+        try {
+          const storedUser = JSON.parse(storedUserStr)
+          setToken(storedToken)
+          setUser(storedUser)
+        } catch (error) {
+          console.error('Error parsing stored user:', error)
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+        }
+      }
+    }
   }
 }
-
-}))
