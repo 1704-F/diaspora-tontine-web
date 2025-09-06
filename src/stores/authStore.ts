@@ -40,8 +40,9 @@ interface AuthState {
   logout: () => void
   setSelectedModule: (module: 'associations' | 'tontines' | 'family' | 'commerce') => void
   login: (credentials: { phoneNumber: string; otpCode: string; module?: string }) => Promise<boolean>
+  loadUserProfile: () => Promise<boolean>  // ← Ajouter cette ligne
   
-  // Nouveaux helpers
+  // Helpers
   getUserModuleState: (module: string) => 'new' | 'active'
   getLastSelectedModule: () => string | null
 }
@@ -80,6 +81,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return user.tontines && user.tontines.length > 0 ? 'active' : 'new'
       default:
         return 'new'
+    }
+  },
+
+  // Charger le profil complet avec associations/tontines
+  loadUserProfile: async () => {
+    const { token } = get()
+    if (!token) return false
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Erreur chargement profil')
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.data.user) {
+        set({ user: data.data.user })
+        localStorage.setItem('user', JSON.stringify(data.data.user))
+        return true
+      }
+      
+      return false
+    } catch (error) {
+      console.error('Erreur loadUserProfile:', error)
+      return false
     }
   },
 

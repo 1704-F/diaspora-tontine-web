@@ -12,6 +12,12 @@ export const apiClient = axios.create({
   },
 })
 
+// Endpoint pour récupérer le profil complet
+export const getUserProfile = async () => {
+  const response = await apiClient.get('/users/me');
+  return response.data;
+};
+
 // Intercepteur pour ajouter le token
 apiClient.interceptors.request.use(
   (config) => {

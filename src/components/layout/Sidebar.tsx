@@ -39,34 +39,38 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
           },
           { 
             label: 'Mes Associations', 
-            href: '/modules/associations/list', 
+            href: '/modules/associations', // ← Même page que tableau de bord pour l'instant
             icon: Building2,
-            active: pathname.includes('/modules/associations/list')
+            active: pathname === '/modules/associations'
           },
           { 
             label: 'Créer Association', 
-            href: '/modules/associations/create', 
+            href: '#', // ← Désactivé pour l'instant
             icon: Plus,
-            active: pathname.includes('/modules/associations/create')
+            active: false,
+            disabled: true
           },
           { 
             label: 'Membres', 
-            href: '/modules/associations/members', 
+            href: '#', // ← Désactivé pour l'instant
             icon: Users,
-            active: pathname.includes('/members'),
+            active: false,
+            disabled: true,
             badge: '12'
           },
           { 
             label: 'Cotisations', 
-            href: '/modules/associations/cotisations', 
+            href: '#', // ← Désactivé pour l'instant
             icon: CreditCard,
-            active: pathname.includes('/cotisations')
+            active: false,
+            disabled: true
           },
           { 
             label: 'Finances', 
-            href: '/modules/associations/finances', 
+            href: '#', // ← Désactivé pour l'instant
             icon: PieChart,
-            active: pathname.includes('/finances')
+            active: false,
+            disabled: true
           }
         ]
 
@@ -80,15 +84,16 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
           },
           { 
             label: 'Mes Tontines', 
-            href: '/modules/tontines/list', 
+            href: '/modules/tontines', // ← Même page que tableau de bord pour l'instant
             icon: Wallet,
-            active: pathname.includes('/modules/tontines/list')
+            active: pathname === '/modules/tontines'
           },
           { 
             label: 'Créer Tontine', 
-            href: '/modules/tontines/create', 
+            href: '#', // ← Désactivé pour l'instant
             icon: Plus,
-            active: pathname.includes('/modules/tontines/create')
+            active: false,
+            disabled: true
           }
         ]
 
@@ -137,15 +142,22 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigationItems.map((item) => {
               const Icon = item.icon
+              const isDisabled = item.disabled || item.href === '#'
               
               return (
                 <Button
-                  key={item.href}
+                  key={item.label}
                   variant={item.active ? "default" : "ghost"}
-                  className="w-full justify-start h-10 text-sm"
+                  className={cn(
+                    "w-full justify-start h-10 text-sm",
+                    isDisabled && "opacity-50 cursor-not-allowed"
+                  )}
+                  disabled={isDisabled}
                   onClick={() => {
-                    router.push(item.href)
-                    onClose?.()
+                    if (!isDisabled && item.href !== '#') {
+                      router.push(item.href)
+                      onClose?.()
+                    }
                   }}
                 >
                   <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -153,6 +165,11 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
                   {item.badge && (
                     <Badge variant="secondary" className="ml-auto text-xs">
                       {item.badge}
+                    </Badge>
+                  )}
+                  {isDisabled && (
+                    <Badge variant="secondary" className="ml-auto text-xs bg-gray-200 text-gray-500">
+                      Bientôt
                     </Badge>
                   )}
                 </Button>

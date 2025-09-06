@@ -12,9 +12,10 @@ import { useAuthPersistence } from '@/hooks/useAuthPersistence'
 interface MainLayoutProps {
   children: React.ReactNode
   currentModule: 'associations' | 'tontines' | 'family' | 'commerce'
+  additionalHeaderActions?: React.ReactNode
 }
 
-export function MainLayout({ children, currentModule }: MainLayoutProps) {
+export function MainLayout({ children, currentModule, additionalHeaderActions }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { user } = useAuthStore()
   
@@ -52,6 +53,7 @@ export function MainLayout({ children, currentModule }: MainLayoutProps) {
         user={user}
         currentModule={currentModule}
         onMenuClick={() => setSidebarOpen(true)}
+        additionalActions={additionalHeaderActions}
       />
 
       <div className="flex flex-1 overflow-hidden">

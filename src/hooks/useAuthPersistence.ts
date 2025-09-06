@@ -1,16 +1,14 @@
-// ============================================
-// src/hooks/useAuthPersistence.ts (si pas encore créé)
-// ============================================
+// src/hooks/useAuthPersistence.ts
 'use client'
 
 import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthPersistence() {
-  const { setUser, setToken, user, token } = useAuthStore()
+  const { setUser, setToken, user, token, loadUserProfile } = useAuthStore() 
 
   useEffect(() => {
-    // Ne restaurer que si pas déjà chargé
+    // 1. Restaurer depuis localStorage si pas déjà chargé
     if (!user && !token) {
       const storedToken = localStorage.getItem('token')
       const storedUserStr = localStorage.getItem('user')
@@ -31,11 +29,19 @@ export function useAuthPersistence() {
     }
   }, [setToken, setUser, user, token])
 
-  // Sauvegarder quand user/token change
+  // 2. Charger le profil complet depuis l'API après restauration
   useEffect(() => {
-    if (user && token) {
-      localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(user))
+    const loadProfile = async () => {
+      if (token && user && !user.associations) {
+        // On a un token et un user de base, mais pas les associations/tontines
+        console.log('Loading complete user profile from API...')
+        const success = await loadUserProfile()
+        if (success) {
+          console.log('User profile loaded successfully')
+        }
+      }
     }
-  }, [user, token])
+
+    loadProfile()
+  }, [token, user, loadUserProfile])
 }

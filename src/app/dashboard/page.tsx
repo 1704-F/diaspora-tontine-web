@@ -147,6 +147,18 @@ function DashboardContent() {
             const IconComponent = module.icon
             const isEnabled = user?.enabledModules?.[module.id as keyof typeof user.enabledModules]?.enabled || false
             
+            // Déterminer si l'utilisateur a des données dans ce module
+            let hasData = false
+            let dataCount = 0
+            
+            if (module.id === 'associations' && user?.associations) {
+              hasData = user.associations.length > 0
+              dataCount = user.associations.length
+            } else if (module.id === 'tontines' && user?.tontines) {
+              hasData = user.tontines.length > 0
+              dataCount = user.tontines.length
+            }
+            
             return (
               <Card 
                 key={module.id}
@@ -173,6 +185,11 @@ function DashboardContent() {
                           Activé
                         </Badge>
                       )}
+                      {hasData && (
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                          {dataCount} {module.id === 'associations' ? 'association(s)' : 'tontine(s)'}
+                        </Badge>
+                      )}
                       {getLastUsedBadge(module.id)}
                     </div>
                   </div>
@@ -183,6 +200,11 @@ function DashboardContent() {
                   </CardTitle>
                   <CardDescription className="text-gray-600 mb-6 text-sm leading-relaxed">
                     {module.description}
+                    {hasData && (
+                      <span className="block mt-2 text-xs text-green-600 font-medium">
+                        Vous avez {dataCount} {module.id === 'associations' ? 'association(s)' : 'tontine(s)'}
+                      </span>
+                    )}
                   </CardDescription>
                   <Button 
                     className={`w-full text-white ${

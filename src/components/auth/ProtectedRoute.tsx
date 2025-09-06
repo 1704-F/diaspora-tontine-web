@@ -33,8 +33,8 @@ export function ProtectedRoute({
     if (user && requiredModule) {
       const hasModuleAccess = user?.enabledModules?.[requiredModule]?.enabled || false
       if (!hasModuleAccess) {
-        router.push('/dashboard')
-        return
+        //router.push('/dashboard')
+        //return
       }
     }
 

@@ -16,6 +16,7 @@ interface HeaderProps {
   } | null
   currentModule?: 'associations' | 'tontines' | 'family' | 'commerce'
   onMenuClick?: () => void
+   additionalActions?: React.ReactNode
 }
 
 export function Header({ user, currentModule, onMenuClick }: HeaderProps) {
