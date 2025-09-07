@@ -374,20 +374,38 @@ export default function AssociationDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Actions */}
-      <div className="flex items-center gap-3">
-        <Button className="flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          Voir les membres
-        </Button>
-        <Button variant="outline" className="flex items-center gap-2">
-          <Settings className="h-4 w-4" />
-          Paramètres
-        </Button>
-        <Button variant="outline">
-          Finances
-        </Button>
-      </div>
+     {/* Actions */}
+<div className="flex items-center gap-3">
+  <Button className="flex items-center gap-2">
+    <Users className="h-4 w-4" />
+    Voir les membres
+  </Button>
+  <Button 
+    variant="outline" 
+    className="flex items-center gap-2"
+    onClick={() => {
+      const isAssociationConfigured = assoc.status === 'active' && 
+                                     assoc.centralBoard && 
+                                     Object.keys(assoc.centralBoard).length > 0
+      
+      router.push(`/modules/associations/${params.id}/${isAssociationConfigured ? 'settings' : 'setup'}`)
+    }}
+  >
+    <Settings className="h-4 w-4" />
+    {assoc.status === 'active' && 
+     assoc.centralBoard && 
+     Object.keys(assoc.centralBoard).length > 0 
+      ? 'Paramètres' 
+      : 'Terminer la configuration'
+    }
+  </Button>
+  <Button variant="outline">
+    Finances
+  </Button>
+</div>
+    
+
+
     </div>
   )
 }
