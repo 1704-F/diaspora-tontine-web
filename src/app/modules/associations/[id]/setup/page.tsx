@@ -1,3 +1,4 @@
+// src/app/modules/associations/create/page.tsx
 'use client'
 import React from 'react'
 import { useState, useEffect } from 'react'
@@ -244,13 +245,21 @@ const handlePrevious = () => {
     }
 
     const result = await bureauResponse.json()
-    console.log('Setup réussi:', result) // DEBUG
+    console.log('Setup réussi:', result)
 
-    // DEBUG: Vérifier si on arrive ici
-    console.log('Tentative redirection vers:', `/modules/associations/${associationId}`)
+    // 🔥 NOUVEAU: Forcer le refresh des données avec timestamp
+    const refreshUrl = `/modules/associations/${associationId}?refresh=${Date.now()}`
+    console.log('Redirection avec refresh vers:', refreshUrl)
     
-    // Redirection vers page association
-    router.push(`/modules/associations/${associationId}`)
+    // Nettoyer le cache des données association
+    if (typeof window !== 'undefined') {
+      // Invalider toutes les données en cache de cette association
+      sessionStorage.removeItem(`association_${associationId}`)
+      localStorage.removeItem(`association_${associationId}`)
+    }
+    
+    // Redirection avec paramètre refresh
+    router.push(refreshUrl)
     
   } catch (error) {
     console.error('Erreur setup:', error)

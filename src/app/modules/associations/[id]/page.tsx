@@ -75,6 +75,16 @@ interface Association {
     logo: null
   }
   created_at: string
+  centralBoard?: {
+    [key: string]: {
+      userId: number
+      name: string
+      role: string
+      phoneNumber?: string
+      assignedAt?: string
+    }
+  }
+  isMultiSection?: boolean
 }
 
 interface UserMembership {
@@ -102,38 +112,62 @@ export default function AssociationDetailPage() {
 
   const associationId = params.id as string
 
+  // Fonction helper pour vérifier si le setup est terminé
+  const isSetupComplete = (assoc: Association): boolean => {
+    return !!(
+      assoc.centralBoard && 
+      Object.keys(assoc.centralBoard).length > 0
+    )
+  }
+
   useEffect(() => {
     const fetchAssociation = async () => {
-      if (!token) return
-
+      if (!associationId || !token) return
+      
+      setIsLoading(true)
       try {
-        setIsLoading(true)
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+        const timestamp = Date.now()
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}?t=${timestamp}`, 
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
           }
-        })
-
-        if (!response.ok) {
-          throw new Error('Erreur lors du chargement de l\'association')
-        }
-
-        const data = await response.json()
+        )
         
-        if (data.success) {
-          setAssociation(data.data)
+        if (response.ok) {
+          const result = await response.json()
+          console.log('🔄 Données association rechargées:', result.data.association)
+          console.log('🔍 CentralBoard:', result.data.association.centralBoard)
+          console.log('🔍 IsSetupComplete:', isSetupComplete(result.data.association))
+          
+          // Assigner correctement toutes les données
+          setAssociation(result.data)
+          
         } else {
-          setError('Association introuvable')
+          console.error('Erreur chargement association')
+          setError('Erreur chargement association')
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur inconnue')
+      } catch (error) {
+        console.error('Erreur fetch association:', error)
+        setError('Erreur de connexion')
       } finally {
         setIsLoading(false)
       }
     }
-
+    
     fetchAssociation()
+    
+    // Vérifier paramètre refresh dans URL
+    const searchParams = new URLSearchParams(window.location.search)
+    if (searchParams.get('refresh')) {
+      console.log('🔄 Refresh détecté, rechargement des données...')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    
   }, [associationId, token])
 
   const getStatusBadge = (status: string) => {
@@ -169,6 +203,30 @@ export default function AssociationDetailPage() {
       )
     }
     return <Badge variant="secondary">{roles[0]}</Badge>
+  }
+
+  const refreshAssociationData = async () => {
+    console.log('🔄 Refresh manuel des données...')
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}?t=${Date.now()}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }
+      )
+      
+      if (response.ok) {
+        const result = await response.json()
+        setAssociation(result.data)
+        console.log('✅ Données rafraîchies:', result.data.association.centralBoard)
+      }
+    } catch (error) {
+      console.error('Erreur refresh:', error)
+    }
   }
 
   if (isLoading) {
@@ -218,6 +276,31 @@ export default function AssociationDetailPage() {
           {getRoleBadge(userMembership.roles)}
         </div>
       </div>
+
+      {/* Bureau Central - Affiché si setup terminé */}
+      {isSetupComplete(assoc) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Bureau Central
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(assoc.centralBoard!).map(([role, member]) => (
+                <div key={role} className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="font-semibold text-gray-900">{member.name}</div>
+                  <div className="text-sm text-gray-600 capitalize">{member.role}</div>
+                  {member.phoneNumber && (
+                    <div className="text-xs text-gray-500">{member.phoneNumber}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Informations principales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -374,38 +457,41 @@ export default function AssociationDetailPage() {
         </CardContent>
       </Card>
 
-     {/* Actions */}
-<div className="flex items-center gap-3">
-  <Button className="flex items-center gap-2">
-    <Users className="h-4 w-4" />
-    Voir les membres
-  </Button>
-  <Button 
-    variant="outline" 
-    className="flex items-center gap-2"
-    onClick={() => {
-      const isAssociationConfigured = assoc.status === 'active' && 
-                                     assoc.centralBoard && 
-                                     Object.keys(assoc.centralBoard).length > 0
-      
-      router.push(`/modules/associations/${params.id}/${isAssociationConfigured ? 'settings' : 'setup'}`)
-    }}
-  >
-    <Settings className="h-4 w-4" />
-    {assoc.status === 'active' && 
-     assoc.centralBoard && 
-     Object.keys(assoc.centralBoard).length > 0 
-      ? 'Paramètres' 
-      : 'Terminer la configuration'
-    }
-  </Button>
-  <Button variant="outline">
-    Finances
-  </Button>
-</div>
-    
-
-
+      {/* Actions */}
+      <div className="flex items-center gap-3">
+        <Button 
+        className="flex items-center gap-2"
+        onClick={() => router.push(`/modules/associations/${params.id}/members`)}
+      >
+        <Users className="h-4 w-4" />
+        Voir les membres
+      </Button>
+        
+        {/* BOUTON TEMPORAIRE DEBUG */}
+        <Button 
+          onClick={refreshAssociationData}
+          variant="outline"
+          className="border-blue-500 text-blue-600"
+        >
+          🔄 Refresh Data
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          className="flex items-center gap-2"
+          onClick={() => {
+            const setupComplete = isSetupComplete(assoc)
+            router.push(`/modules/associations/${params.id}/${setupComplete ? 'settings' : 'setup'}`)
+          }}
+        >
+          <Settings className="h-4 w-4" />
+          {isSetupComplete(assoc) ? 'Paramètres' : 'Terminer la configuration'}
+        </Button>
+        
+        <Button variant="outline">
+          Finances
+        </Button>
+      </div>
     </div>
   )
 }
