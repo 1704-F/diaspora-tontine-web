@@ -221,10 +221,15 @@ const handlePrevious = () => {
   
   setIsLoading(true)
   try {
-    console.log('Données envoyées au backend:', {
+    const setupData = {
       bureauCentral: formData.bureauCentral,
-      isMultiSection: formData.isMultiSection
-    })
+      isMultiSection: formData.isMultiSection,
+      ...(formData.isMultiSection && formData.firstSection ? { 
+        firstSection: formData.firstSection 
+      } : {})
+    }
+    
+    console.log('Données envoyées au backend:', setupData)
 
     const bureauResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/setup`, {
       method: 'PUT',
@@ -232,10 +237,7 @@ const handlePrevious = () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({
-        bureauCentral: formData.bureauCentral,
-        isMultiSection: formData.isMultiSection
-      })
+      body: JSON.stringify(setupData)
     })
 
     if (!bureauResponse.ok) {
@@ -247,18 +249,14 @@ const handlePrevious = () => {
     const result = await bureauResponse.json()
     console.log('Setup réussi:', result)
 
-    // 🔥 NOUVEAU: Forcer le refresh des données avec timestamp
     const refreshUrl = `/modules/associations/${associationId}?refresh=${Date.now()}`
     console.log('Redirection avec refresh vers:', refreshUrl)
     
-    // Nettoyer le cache des données association
     if (typeof window !== 'undefined') {
-      // Invalider toutes les données en cache de cette association
       sessionStorage.removeItem(`association_${associationId}`)
       localStorage.removeItem(`association_${associationId}`)
     }
     
-    // Redirection avec paramètre refresh
     router.push(refreshUrl)
     
   } catch (error) {

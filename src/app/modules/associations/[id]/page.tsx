@@ -85,6 +85,14 @@ interface Association {
     }
   }
   isMultiSection?: boolean
+  sectionsCount: number
+  sections?: Array<{
+    id: number
+    name: string
+    country: string
+    city: string
+    membersCount: number
+  }>
 }
 
 interface UserMembership {
@@ -302,6 +310,66 @@ export default function AssociationDetailPage() {
         </Card>
       )}
 
+      {/* Sections - Affiché si multi-section */}
+      {assoc.isMultiSection && assoc.sections && assoc.sections.length > 0 && (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Building2 className="h-5 w-5" />
+        Sections géographiques ({assoc.sections.length})
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {assoc.sections.map((section) => (
+          <div key={section.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-gray-900">{section.name}</h4>
+              <Badge variant="secondary" className="text-xs">
+                {section.membersCount} membres
+              </Badge>
+            </div>
+            <div className="text-sm text-gray-600 space-y-1">
+              <div className="flex items-center gap-2">
+                <span>📍</span>
+                <span>{section.city}, {section.country}</span>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full"
+                onClick={() => router.push(`/modules/associations/${params.id}/sections/${section.id}`)}
+              >
+                Gérer la section
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Bouton ajouter section si moins que le maximum autorisé */}
+      {assoc.sections.length < assoc.features.maxSections && (
+        <div className="mt-4 pt-4 border-t">
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={() => router.push(`/modules/associations/${params.id}/sections/create`)}
+          >
+            <Building2 className="h-4 w-4" />
+            Ajouter une section
+          </Button>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+      )}
+
+
+
+
+
       {/* Informations principales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -314,67 +382,94 @@ export default function AssociationDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Statut légal</label>
-                <p className="text-gray-900">{assoc.legalStatus}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Numéro RNA</label>
-                <p className="text-gray-900">{assoc.registrationNumber}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Pays</label>
-                <p className="text-gray-900">{assoc.domiciliationCountry}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Devise</label>
-                <p className="text-gray-900 flex items-center gap-1">
-                  <Euro className="h-4 w-4" />
-                  {assoc.primaryCurrency}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Plan</label>
-                <p className="text-gray-900 capitalize">{assoc.subscriptionPlan}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Créée le</label>
-                <p className="text-gray-900">
-                  {new Date(assoc.created_at).toLocaleDateString('fr-FR')}
-                </p>
-              </div>
-            </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Statut légal</label>
+    <p className="text-gray-900">{assoc.legalStatus}</p>
+  </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Numéro RNA</label>
+    <p className="text-gray-900">{assoc.registrationNumber}</p>
+  </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Type structure</label>
+    <p className="text-gray-900 flex items-center gap-2">
+      {assoc.isMultiSection ? (
+        <>
+          <Building2 className="h-4 w-4" />
+          Multi-sections
+        </>
+      ) : (
+        <>
+          <Building2 className="h-4 w-4" />
+          Association simple
+        </>
+      )}
+    </p>
+  </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Pays</label>
+    <p className="text-gray-900">{assoc.domiciliationCountry}</p>
+  </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Devise</label>
+    <p className="text-gray-900 flex items-center gap-1">
+      <Euro className="h-4 w-4" />
+      {assoc.primaryCurrency}
+    </p>
+  </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Plan</label>
+    <p className="text-gray-900 capitalize">{assoc.subscriptionPlan}</p>
+  </div>
+  <div>
+    <label className="text-sm font-medium text-gray-600">Créée le</label>
+    <p className="text-gray-900">
+      {new Date(assoc.created_at).toLocaleDateString('fr-FR')}
+    </p>
+  </div>
+</div>
+
+            
+
           </CardContent>
         </Card>
 
-        {/* Statistiques */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Statistiques
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-gray-900">{assoc.totalMembers}</div>
-              <div className="text-sm text-gray-600">Total membres</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">{assoc.activeMembers}</div>
-              <div className="text-sm text-gray-600">Membres actifs</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{assoc.totalFundsRaised}€</div>
-              <div className="text-sm text-gray-600">Fonds levés</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{assoc.totalAidsGiven}€</div>
-              <div className="text-sm text-gray-600">Aides données</div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Statistiques - Mise à jour */}
+<Card>
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      <Users className="h-5 w-5" />
+      Statistiques
+    </CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    {assoc.isMultiSection && (
+      <div className="text-center">
+        <div className="text-3xl font-bold text-blue-600">{assoc.sectionsCount}</div>
+        <div className="text-sm text-gray-600">Sections actives</div>
+      </div>
+    )}
+    <div className="text-center">
+      <div className="text-3xl font-bold text-gray-900">{assoc.totalMembers}</div>
+      <div className="text-sm text-gray-600">Total membres</div>
+    </div>
+    <div className="text-center">
+      <div className="text-3xl font-bold text-green-600">{assoc.activeMembers}</div>
+      <div className="text-sm text-gray-600">Membres actifs</div>
+    </div>
+    <div className="text-center">
+      <div className="text-2xl font-bold text-blue-600">{assoc.totalFundsRaised}€</div>
+      <div className="text-sm text-gray-600">Fonds levés</div>
+    </div>
+    <div className="text-center">
+      <div className="text-2xl font-bold text-purple-600">{assoc.totalAidsGiven}€</div>
+      <div className="text-sm text-gray-600">Aides données</div>
+    </div>
+  </CardContent>
+</Card>
+
       </div>
 
       {/* Documents et statuts */}
@@ -494,4 +589,4 @@ export default function AssociationDetailPage() {
       </div>
     </div>
   )
-}
+} 

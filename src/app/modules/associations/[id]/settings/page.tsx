@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { Badge } from '@/components/ui/Badge'
+import SectionsTab from '@/components/modules/associations/SectionsTab'
 import { 
   ArrowLeft, 
   Settings,
@@ -22,7 +23,8 @@ import {
   Shield,
   Calendar,
   Eye,
-  EyeOff
+  EyeOff,
+  Building2
 } from 'lucide-react'
 
 interface Association {
@@ -57,6 +59,13 @@ interface Association {
     }
   }
   isMultiSection?: boolean
+  features: {  // ✅ AJOUT OBLIGATOIRE
+    maxMembers: number
+    maxSections: number
+    customTypes: boolean
+    advancedReports: boolean
+    apiAccess: boolean
+  }
 }
 
 interface MemberType {
@@ -65,6 +74,26 @@ interface MemberType {
   permissions: string[]
   description: string
 }
+
+interface SectionCardProps {
+  section: any
+  associationId: string
+  token: string | null  // ✅ ACCEPTER null
+  onUpdate: () => void
+}
+
+interface BureauSectionFormProps {
+  bureau: {
+    responsable?: { name?: string; phoneNumber?: string }
+    secretaire?: { name?: string; phoneNumber?: string }
+    tresorier?: { name?: string; phoneNumber?: string }
+  }
+  setBureau: (updater: (prev: any) => any) => void
+  onSave: () => void
+  onCancel: () => void
+}
+
+
 
 export default function AssociationSettingsPage() {
   const params = useParams()
@@ -80,13 +109,33 @@ export default function AssociationSettingsPage() {
     permissions: ['view_profile']
   })
   const [showAddForm, setShowAddForm] = useState(false)
-  const [activeTab, setActiveTab] = useState<'members' | 'access' | 'cotisations' | 'bureau'>('members')
+  const [activeTab, setActiveTab] = useState<'members' | 'sections' | 'access' | 'cotisations' | 'bureau'>('members')
+
   const [showAddCustomRole, setShowAddCustomRole] = useState(false)
   const [customRoles, setCustomRoles] = useState<Array<{
     name: string
     description: string
     permissions: string[]
   }>>([])
+
+  const [sections, setSections] = useState<Array<{
+  id: number
+  name: string
+  country: string
+  city: string
+  currency: string
+  language: string
+  membersCount: number
+  bureauSection?: {
+    responsable?: { userId: number; name: string; phoneNumber: string }
+    secretaire?: { userId: number; name: string; phoneNumber: string }
+    tresorier?: { userId: number; name: string; phoneNumber: string }
+  }
+}>>([])
+
+
+
+
 
   const associationId = params.id as string
 
@@ -106,30 +155,51 @@ export default function AssociationSettingsPage() {
   ]
 
   useEffect(() => {
-    const fetchAssociation = async () => {
-      if (!associationId || !token) return
-      
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-          {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }
-        )
-        
-        if (response.ok) {
-          const result = await response.json()
-          setAssociation(result.data.association)
-        }
-      } catch (error) {
-        console.error('Erreur chargement association:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const fetchData = async () => {
+    if (!associationId || !token) return
     
-    fetchAssociation()
-  }, [associationId, token])
+    try {
+      // Charger l'association
+      const associationResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      )
+      
+      if (associationResponse.ok) {
+        const result = await associationResponse.json()
+        setAssociation(result.data.association)
+        
+        // Si multi-section, charger les sections
+        if (result.data.association.isMultiSection) {
+          fetchSections()
+        }
+      }
+    } catch (error) {
+      console.error('Erreur chargement association:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  fetchData()
+}, [associationId, token])
+
+ const fetchSections = async () => {
+  if (!token) return
+  
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    )
+    if (response.ok) {
+      const result = await response.json()
+      setSections(result.data.sections || [])
+    }
+  } catch (error) {
+    console.error('Erreur chargement sections:', error)
+  }
+}
 
   const handleAddMemberType = async () => {
     if (!newMemberType.name || !newMemberType.description) return
@@ -337,33 +407,34 @@ export default function AssociationSettingsPage() {
 
       {/* Navigation Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { key: 'members', label: 'Types de membres', icon: Users },
-            { key: 'access', label: 'Droits d\'accès', icon: Shield },
-            { key: 'cotisations', label: 'Cotisations', icon: Euro },
-            { key: 'bureau', label: 'Bureau', icon: Settings }
-          ].map(tab => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`
-                  flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm
-                  ${activeTab === tab.key
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </nav>
-      </div>
+  <nav className="-mb-px flex space-x-8">
+    {[
+      { key: 'members', label: 'Types de membres', icon: Users },
+      ...(association?.isMultiSection ? [{ key: 'sections', label: 'Sections', icon: Building2 }] : []),
+      { key: 'access', label: 'Droits d\'accès', icon: Shield },
+      { key: 'cotisations', label: 'Cotisations', icon: Euro },
+      { key: 'bureau', label: 'Bureau', icon: Settings }
+    ].map(tab => {
+      const Icon = tab.icon
+      return (
+        <button
+          key={tab.key}
+          onClick={() => setActiveTab(tab.key as any)}
+          className={`
+            flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm
+            ${activeTab === tab.key
+              ? 'border-primary-500 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }
+          `}
+        >
+          <Icon className="h-4 w-4" />
+          {tab.label}
+        </button>
+      )
+    })}
+  </nav>
+</div>
 
       {/* Content */}
       {activeTab === 'members' && (
@@ -798,7 +869,27 @@ export default function AssociationSettingsPage() {
           </CardContent>
         </Card>
       )}
+
+       {activeTab === 'sections' && association && (
+  <div className="space-y-6">
+    <SectionsTab 
+      association={{
+        id: association.id,
+        name: association.name,
+        isMultiSection: association.isMultiSection || false,
+        features: association.features
+      }}
+      token={token}
+    />
+  </div>
+)}
+
+
+
     </div>
+
+
+
   )
 }
 
@@ -881,6 +972,157 @@ function EditMemberTypeForm({
         </Button>
         <Button variant="outline" onClick={onCancel}>
           <X className="h-4 w-4 mr-2" />
+          Annuler
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function SectionCard({ section, associationId, token, onUpdate }: SectionCardProps) {
+  const router = useRouter()  // ✅ AJOUT MANQUANT
+  const [isEditingBureau, setIsEditingBureau] = useState(false)
+  const [bureauForm, setBureauForm] = useState(section.bureauSection || {})
+
+  const handleUpdateBureau = async () => {
+    if (!token) return
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections/${section.id}/bureau`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ bureauSection: bureauForm })
+        }
+      )
+      
+      if (response.ok) {
+        setIsEditingBureau(false)
+        onUpdate()
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour bureau section:', error)
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      {/* Header section */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-medium text-gray-900">{section.name}</h3>
+          <p className="text-sm text-gray-600">
+            📍 {section.city}, {section.country} • {section.currency}
+          </p>
+        </div>
+        <Badge variant="secondary" className="text-xs">
+          {section.membersCount} membres
+        </Badge>
+      </div>
+
+      {/* Bureau section */}
+      <div className="border-t pt-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-sm">Bureau section</h4>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsEditingBureau(!isEditingBureau)}
+          >
+            {isEditingBureau ? <X className="h-3 w-3" /> : <Edit className="h-3 w-3" />}
+          </Button>
+        </div>
+
+        {isEditingBureau ? (
+          <BureauSectionForm 
+            bureau={bureauForm}
+            setBureau={setBureauForm}
+            onSave={handleUpdateBureau}
+            onCancel={() => setIsEditingBureau(false)}
+          />
+        ) : (
+          <div className="space-y-2">
+            {['responsable', 'secretaire', 'tresorier'].map(role => {
+              const member = section.bureauSection?.[role]
+              return (
+                <div key={role} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 capitalize">{role}:</span>
+                  <span className="text-gray-900">
+                    {member ? member.name : <em className="text-gray-400">Non assigné</em>}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="border-t pt-4 mt-4">
+        <div className="flex gap-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="flex-1"
+            onClick={() => router.push(`/modules/associations/${associationId}/sections/${section.id}`)}
+          >
+            Gérer
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="flex-1"
+            onClick={() => router.push(`/modules/associations/${associationId}/sections/${section.id}/members`)}
+          >
+            Membres
+          </Button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// 6. Composant formulaire bureau section
+function BureauSectionForm({ bureau, setBureau, onSave, onCancel }: BureauSectionFormProps) {
+  return (
+    <div className="space-y-3">
+      {(['responsable', 'secretaire', 'tresorier'] as const).map(role => (
+        <div key={role}>
+          <label className="block text-xs font-medium text-gray-700 mb-1 capitalize">
+            {role} section
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Nom complet"
+              value={bureau[role]?.name || ''}
+              onChange={(e) => setBureau((prev: any) => ({  // ✅ TYPAGE EXPLICITE
+                ...prev,
+                [role]: { ...prev[role], name: e.target.value }
+              }))}
+              className="text-sm"
+            />
+            <Input
+              placeholder="Téléphone"
+              value={bureau[role]?.phoneNumber || ''}
+              onChange={(e) => setBureau((prev: any) => ({  // ✅ TYPAGE EXPLICITE
+                ...prev,
+                [role]: { ...prev[role], phoneNumber: e.target.value }
+              }))}
+              className="text-sm"
+            />
+          </div>
+        </div>
+      ))}
+      
+      <div className="flex gap-2 pt-2">
+        <Button size="sm" onClick={onSave} className="flex-1">
+          <Save className="h-3 w-3 mr-1" />
+          Sauvegarder
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">
           Annuler
         </Button>
       </div>
