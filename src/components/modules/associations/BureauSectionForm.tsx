@@ -15,8 +15,10 @@ import {
 
 interface BureauMember {
   userId?: number
-  name?: string
+  firstName?: string
+  lastName?: string
   phoneNumber?: string
+  role?: string
 }
 
 interface BureauSection {
@@ -28,7 +30,7 @@ interface BureauSection {
 interface BureauSectionFormProps {
   bureau: BureauSection
   setBureau: (updater: (prev: any) => any) => void
-  onSave: () => void
+  onSave: () => Promise<void>
   onCancel: () => void
   isSaving?: boolean
 }
@@ -42,6 +44,7 @@ export default function BureauSectionForm({
 }: BureauSectionFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [hasChanges, setHasChanges] = useState(false)
+  const [initialBureau] = useState(() => JSON.stringify(bureau))
 
   const roles = [
     { 
@@ -64,12 +67,20 @@ export default function BureauSectionForm({
     }
   ] as const
 
+  const getRoleLabel = (roleKey: string): string => {
+    const roleMap: Record<string, string> = {
+      'responsable': 'Responsable Section',
+      'secretaire': 'Secrétaire Section', 
+      'tresorier': 'Trésorier Section'
+    }
+    return roleMap[roleKey] || roleKey
+  }
+
   useEffect(() => {
     // Détecter les changements pour activer/désactiver le bouton de sauvegarde
-    const initialBureau = JSON.stringify(bureau)
     const currentBureau = JSON.stringify(bureau)
     setHasChanges(initialBureau !== currentBureau)
-  }, [bureau])
+  }, [bureau, initialBureau])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -77,23 +88,33 @@ export default function BureauSectionForm({
     roles.forEach(role => {
       const member = bureau[role.key]
       
-      // Si un nom est fourni, vérifier qu'il est valide
-      if (member?.name) {
-        if (member.name.trim().length < 2) {
-          newErrors[`${role.key}_name`] = 'Le nom doit contenir au moins 2 caractères'
+      // Si un prénom est fourni, vérifier qu'il est valide
+      if (member?.firstName) {
+        if (member.firstName.trim().length < 2) {
+          newErrors[`${role.key}_firstName`] = 'Le prénom doit contenir au moins 2 caractères'
         }
         
-        // Si nom fourni, téléphone recommandé
+        // Si prénom fourni, nom de famille requis
+        if (!member.lastName || member.lastName.trim().length < 2) {
+          newErrors[`${role.key}_lastName`] = 'Le nom de famille est requis'
+        }
+        
+        // Si nom complet fourni, téléphone recommandé
         if (!member.phoneNumber) {
           newErrors[`${role.key}_phone`] = 'Numéro de téléphone recommandé'
         }
       }
       
+      // Si nom de famille fourni, prénom requis
+      if (member?.lastName && (!member.firstName || member.firstName.trim().length < 2)) {
+        newErrors[`${role.key}_firstName`] = 'Le prénom est requis'
+      }
+      
       // Validation du téléphone si fourni
       if (member?.phoneNumber) {
-        const phoneRegex = /^[\+]?[0-9\s\-\(\)\.]{8,}$/
-        if (!phoneRegex.test(member.phoneNumber)) {
-          newErrors[`${role.key}_phone`] = 'Format de téléphone invalide'
+        const phoneRegex = /^[\+]?[1-9]\d{8,14}$/
+        if (!phoneRegex.test(member.phoneNumber.replace(/\s/g, ''))) {
+          newErrors[`${role.key}_phone`] = 'Format de téléphone invalide (ex: +33612345678)'
         }
       }
     })
@@ -102,26 +123,32 @@ export default function BureauSectionForm({
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (validateForm()) {
-      onSave()
+      try {
+        await onSave()
+      } catch (error) {
+        setErrors({ general: 'Erreur lors de la sauvegarde' })
+      }
     }
   }
 
-  const updateMember = (roleKey: string, field: 'name' | 'phoneNumber', value: string) => {
+  const updateMember = (roleKey: string, field: 'firstName' | 'lastName' | 'phoneNumber', value: string) => {
     setBureau((prev: any) => ({
       ...prev,
       [roleKey]: {
         ...prev[roleKey],
-        [field]: value
+        [field]: value,
+        role: getRoleLabel(roleKey)
       }
     }))
     
     // Effacer l'erreur du champ modifié
-    if (errors[`${roleKey}_${field === 'phoneNumber' ? 'phone' : field}`]) {
+    const errorKey = field === 'phoneNumber' ? 'phone' : field
+    if (errors[`${roleKey}_${errorKey}`]) {
       setErrors(prev => {
         const newErrors = { ...prev }
-        delete newErrors[`${roleKey}_${field === 'phoneNumber' ? 'phone' : field}`]
+        delete newErrors[`${roleKey}_${errorKey}`]
         return newErrors
       })
     }
@@ -135,8 +162,8 @@ export default function BureauSectionForm({
   }
 
   const getMemberCompleteness = (member?: BureauMember) => {
-    if (!member?.name) return 0
-    if (member.name && member.phoneNumber) return 100
+    if (!member?.firstName || !member?.lastName) return 0
+    if (member.firstName && member.lastName && member.phoneNumber) return 100
     return 50
   }
 
@@ -148,6 +175,16 @@ export default function BureauSectionForm({
           Remplissez au moins le responsable de section
         </div>
       </div>
+
+      {/* Affichage erreur générale */}
+      {errors.general && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-500" />
+            <p className="text-sm text-red-700">{errors.general}</p>
+          </div>
+        </div>
+      )}
 
       {roles.map(role => {
         const member = bureau[role.key]
@@ -184,19 +221,34 @@ export default function BureauSectionForm({
               )}
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Nom complet *
+                  Prénom *
                 </label>
                 <Input
-                  placeholder="Prénom Nom"
-                  value={member?.name || ''}
-                  onChange={(e) => updateMember(role.key, 'name', e.target.value)}
-                  className={`text-sm ${errors[`${role.key}_name`] ? 'border-red-300' : ''}`}
+                  placeholder="Jean"
+                  value={member?.firstName || ''}
+                  onChange={(e) => updateMember(role.key, 'firstName', e.target.value)}
+                  className={`text-sm ${errors[`${role.key}_firstName`] ? 'border-red-300' : ''}`}
                 />
-                {errors[`${role.key}_name`] && (
-                  <p className="text-xs text-red-600 mt-1">{errors[`${role.key}_name`]}</p>
+                {errors[`${role.key}_firstName`] && (
+                  <p className="text-xs text-red-600 mt-1">{errors[`${role.key}_firstName`]}</p>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Nom de famille *
+                </label>
+                <Input
+                  placeholder="Dupont"
+                  value={member?.lastName || ''}
+                  onChange={(e) => updateMember(role.key, 'lastName', e.target.value)}
+                  className={`text-sm ${errors[`${role.key}_lastName`] ? 'border-red-300' : ''}`}
+                />
+                {errors[`${role.key}_lastName`] && (
+                  <p className="text-xs text-red-600 mt-1">{errors[`${role.key}_lastName`]}</p>
                 )}
               </div>
               
@@ -205,7 +257,7 @@ export default function BureauSectionForm({
                   Téléphone
                 </label>
                 <Input
-                  placeholder="+33 6 XX XX XX XX"
+                  placeholder="+33612345678"
                   value={member?.phoneNumber || ''}
                   onChange={(e) => updateMember(role.key, 'phoneNumber', e.target.value)}
                   className={`text-sm ${errors[`${role.key}_phone`] ? 'border-red-300' : ''}`}
