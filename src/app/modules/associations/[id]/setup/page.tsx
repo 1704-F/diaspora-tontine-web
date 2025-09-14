@@ -41,6 +41,7 @@ interface Association {
 }
 
 interface BureauRole {
+  userId?: number 
   firstName: string
   lastName: string
   phoneNumber: string
@@ -101,6 +102,8 @@ export default function AssociationSetupPage() {
   const [errors, setErrors] = useState<{[key: string]: string}>({})
   const [association, setAssociation] = useState<Association | null>(null)
   const [uploadedDocuments, setUploadedDocuments] = useState<{[key: string]: any}>({})
+  const [members, setMembers] = useState<any[]>([])
+
   
   const [formData, setFormData] = useState<FormData>({
   isMultiSection: false,
@@ -128,31 +131,42 @@ export default function AssociationSetupPage() {
 
   // Charger les données de l'association
   useEffect(() => {
-    const fetchAssociation = async () => {
-      if (!associationId || !token) return
-      
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        
-        if (response.ok) {
-          const result = await response.json()
-          setAssociation(result.data.association)
-        } else {
-          setErrors({ fetch: 'Association introuvable' })
-        }
-      } catch (error) {
-        setErrors({ fetch: 'Erreur de connexion' })
-      } finally {
-        setIsLoadingAssociation(false)
-      }
+  const fetchData = async () => {
+    if (!associationId || !token) {
+      setIsLoadingAssociation(false)
+      return
     }
     
-    fetchAssociation()
-  }, [associationId, token])
+    try {
+      // Charger l'association ET les membres
+      const [associationResponse, membersResponse] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ])
+      
+      if (associationResponse.ok) {
+        const result = await associationResponse.json()
+        setAssociation(result.data.association)
+      }
+      
+      if (membersResponse.ok) {
+        const membersResult = await membersResponse.json()
+        setMembers(membersResult.data.members || [])
+      }
+      
+    } catch (error) {
+      console.error('Erreur chargement données:', error)
+    } finally {
+      setIsLoadingAssociation(false)
+    }
+  }
+  
+  fetchData()
+}, [associationId, token])
 
   // Validation par étape
   const validateEtape = (etape: number): boolean => {
@@ -160,34 +174,12 @@ export default function AssociationSetupPage() {
     
     switch (etape) {
       case 2:
-  // Validation bureau central : au moins président requis
-  if (!formData.bureauCentral.president.firstName.trim()) {
-    newErrors.president_firstName = 'Prénom du président requis'
+  // Validation bureau central : président obligatoire
+  if (!formData.bureauCentral.president.userId) {
+    newErrors.president_firstName = 'Sélection du président requise'
   }
-  if (!formData.bureauCentral.president.lastName.trim()) {
-    newErrors.president_lastName = 'Nom du président requis'
-  }
-  if (!formData.bureauCentral.president.phoneNumber.trim()) {
-    newErrors.president_phoneNumber = 'Numéro du président requis'
-  }
-  
-  // Validation des autres rôles s'ils sont remplis
-  ['secretaire', 'tresorier'].forEach(role => {
-    const roleData = formData.bureauCentral[role as keyof typeof formData.bureauCentral]
-    if (roleData.firstName || roleData.lastName || roleData.phoneNumber) {
-      if (!roleData.firstName.trim()) {
-        newErrors[`${role}_firstName`] = `Prénom du ${role} requis`
-      }
-      if (!roleData.lastName.trim()) {
-        newErrors[`${role}_lastName`] = `Nom du ${role} requis`
-      }
-      if (!roleData.phoneNumber.trim()) {
-        newErrors[`${role}_phoneNumber`] = `Numéro du ${role} requis`
-      }
-    }
-  })
   break
-        
+      
       case 3:
         if (formData.isMultiSection && formData.firstSection) {
           if (!formData.firstSection.name.trim()) {
@@ -388,7 +380,7 @@ const handleDocumentDelete = async (documentType: string, documentId: number) =>
 
   return (
     <ProtectedRoute requiredModule="associations">
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
           <Button 
@@ -537,97 +529,170 @@ const handleDocumentDelete = async (documentType: string, documentId: number) =>
 
             {/* ÉTAPE 2: Bureau Central */}
             {etapeActuelle === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-medium">Bureau Central</h3>
-                  <p className="text-sm text-gray-600">
-                    Définissez les membres du bureau dirigeant de l'association
-                  </p>
-                </div>
+  <div className="space-y-6">
+    <div>
+      <h3 className="text-lg font-medium">Bureau Central</h3>
+      <p className="text-sm text-gray-600">
+        Sélectionnez les membres pour former le bureau dirigeant
+      </p>
+    </div>
 
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-medium">Bureau Central</h3>
-                  <p className="text-sm text-gray-600">
-                    Définissez les membres du bureau dirigeant avec leurs informations complètes
-                  </p>
-                </div>
+    {/* Président */}
+    <div className="space-y-2">
+      <label className="text-sm font-medium flex items-center gap-2">
+        <Crown className="h-4 w-4 text-yellow-500" />
+        Président *
+      </label>
+      <select 
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        value={formData.bureauCentral.president.userId || ''}
+        onChange={(e) => {
+          const selectedMember = members.find(m => m.userId.toString() === e.target.value)
+          if (selectedMember) {
+            setFormData(prev => ({
+              ...prev,
+              bureauCentral: {
+                ...prev.bureauCentral,
+                president: {
+                  userId: selectedMember.userId,
+                  firstName: selectedMember.user.firstName,
+                  lastName: selectedMember.user.lastName,
+                  phoneNumber: selectedMember.user.phoneNumber,
+                  role: 'president'
+                }
+              }
+            }))
+          }
+        }}
+      >
+        <option value="">Sélectionner le président...</option>
+        {members.map((member) => (
+  <option key={member.userId} value={member.userId}>
+    {member.user.firstName} {member.user.lastName} - {member.user.phoneNumber} ({member.memberType})
+  </option>
+))}
+      </select>
+      {errors.president_firstName && (
+        <p className="text-red-500 text-sm">{errors.president_firstName}</p>
+      )}
+    </div>
 
-                <div className="space-y-4">
-                  {Object.entries(formData.bureauCentral).map(([roleKey, roleData]) => (
-                    <Card key={roleKey} className="p-4">
-                      <div className="flex items-center gap-4 mb-3">
-                        <div className="flex items-center gap-2">
-                          {roleKey === 'president' && <Crown className="h-5 w-5 text-yellow-600" />}
-                          {roleKey === 'secretaire' && <UserCheck className="h-5 w-5 text-blue-600" />}
-                          {roleKey === 'tresorier' && <DollarSign className="h-5 w-5 text-green-600" />}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium capitalize">{roleData.role}</h4>
-                          {roleKey === 'president' && (
-                            <p className="text-xs text-gray-500">Créateur de l'association</p>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Prénom *
-                          </label>
-                          <Input
-                            value={roleData.firstName}
-                            onChange={(e) => updateBureauRole(roleKey, 'firstName', e.target.value)}
-                            placeholder="Prénom"
-                            error={errors[`${roleKey}_firstName`]}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Nom *
-                          </label>
-                          <Input
-                            value={roleData.lastName}
-                            onChange={(e) => updateBureauRole(roleKey, 'lastName', e.target.value)}
-                            placeholder="Nom de famille"
-                            error={errors[`${roleKey}_lastName`]}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Numéro de téléphone *
-                          </label>
-                          <Input
-                            value={roleData.phoneNumber}
-                            onChange={(e) => updateBureauRole(roleKey, 'phoneNumber', e.target.value)}
-                            placeholder="+33 6 XX XX XX XX"
-                            error={errors[`${roleKey}_phoneNumber`]}
-                          />
-                        </div>
-                      </div>
-                      
-                      {roleKey !== 'president' && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Si cette personne n'a pas encore de compte, elle recevra une invitation par SMS
-                        </p>
-                      )}
-                    </Card>
-                  ))}
-                </div>
+    {/* Secrétaire */}
+    <div className="space-y-2">
+      <label className="text-sm font-medium flex items-center gap-2">
+        <UserCheck className="h-4 w-4 text-blue-500" />
+        Secrétaire (optionnel)
+      </label>
+      <select 
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        value={formData.bureauCentral.secretaire.userId || ''}
+        onChange={(e) => {
+          const selectedMember = members.find(m => m.userId.toString() === e.target.value)
+          if (selectedMember) {
+            setFormData(prev => ({
+              ...prev,
+              bureauCentral: {
+                ...prev.bureauCentral,
+                secretaire: {
+                  userId: selectedMember.userId,
+                  firstName: selectedMember.user.firstName,
+                  lastName: selectedMember.user.lastName,
+                  phoneNumber: selectedMember.user.phoneNumber,
+                  role: 'secretaire'
+                }
+              }
+            }))
+          } else {
+            // Vider si aucun membre sélectionné
+            setFormData(prev => ({
+              ...prev,
+              bureauCentral: {
+                ...prev.bureauCentral,
+                secretaire: {
+                  firstName: '',
+                  lastName: '',
+                  phoneNumber: '',
+                  role: 'secretaire'
+                }
+              }
+            }))
+          }
+        }}
+      >
+        <option value="">Sélectionner le secrétaire...</option>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                  <div className="text-sm text-blue-700">
-                    <h4 className="font-medium text-blue-800 mb-2">Processus d'invitation</h4>
-                    <ul className="space-y-1">
-                      <li>• Si la personne a déjà un compte : assignation automatique au rôle</li>
-                      <li>• Si pas de compte : création automatique + SMS d'invitation</li>
-                      <li>• Le président (vous) est automatiquement confirmé</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-              </div>
-            )}
+        {members.filter(m => m.userId !== formData.bureauCentral.president.userId).map((member) => (
+  <option key={member.userId} value={member.userId}>
+    {member.user.firstName} {member.user.lastName} - {member.user.phoneNumber} ({member.memberType})
+  </option>
+))}
+
+      </select>
+    </div>
+
+    {/* Trésorier */}
+    <div className="space-y-2">
+      <label className="text-sm font-medium flex items-center gap-2">
+        <DollarSign className="h-4 w-4 text-green-500" />
+        Trésorier (optionnel)
+      </label>
+      <select 
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        value={formData.bureauCentral.tresorier.userId || ''}
+        onChange={(e) => {
+          const selectedMember = members.find(m => m.userId.toString() === e.target.value)
+          if (selectedMember) {
+            setFormData(prev => ({
+              ...prev,
+              bureauCentral: {
+                ...prev.bureauCentral,
+                tresorier: {
+                  userId: selectedMember.userId,
+                  firstName: selectedMember.user.firstName,
+                  lastName: selectedMember.user.lastName,
+                  phoneNumber: selectedMember.user.phoneNumber,
+                  role: 'tresorier'
+                }
+              }
+            }))
+          } else {
+            setFormData(prev => ({
+              ...prev,
+              bureauCentral: {
+                ...prev.bureauCentral,
+                tresorier: {
+                  firstName: '',
+                  lastName: '',
+                  phoneNumber: '',
+                  role: 'tresorier'
+                }
+              }
+            }))
+          }
+        }}
+      >
+        <option value="">Sélectionner le trésorier...</option>
+
+        {members.filter(m => 
+  m.userId !== formData.bureauCentral.president.userId && 
+  m.userId !== formData.bureauCentral.secretaire.userId
+).map((member) => (
+  <option key={member.userId} value={member.userId}>
+    {member.user.firstName} {member.user.lastName} - {member.user.phoneNumber} ({member.memberType})
+  </option>
+))}
+
+      </select>
+    </div>
+
+    <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+      <p className="text-sm text-blue-700">
+        Les rôles seront automatiquement assignés aux membres sélectionnés. 
+        Seul le président est obligatoire pour continuer.
+      </p>
+    </div>
+  </div>
+)}
 
             {/* ÉTAPE 3: Configuration géographique */}
 {etapeActuelle === 3 && (

@@ -1,17 +1,17 @@
 // src/app/modules/associations/[id]/sections/[sectionId]/page.tsx
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { useAuthStore } from '@/stores/authStore'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
-import BureauSectionForm from '@/components/modules/associations/BureauSectionForm'
-import { 
-  ArrowLeft, 
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useAuthStore } from "@/stores/authStore";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import BureauSectionForm from "@/components/modules/associations/BureauSectionForm";
+import {
+  ArrowLeft,
   Building2,
   Users,
   MapPin,
@@ -26,161 +26,213 @@ import {
   Mail,
   Calendar,
   TrendingUp,
-  Trash2
-} from 'lucide-react'
+  Trash2,
+} from "lucide-react";
 
 interface Section {
-  id: number
-  name: string
-  country: string
-  city: string
-  currency: string
-  language: string
-  description?: string
-  membersCount: number
-  contactPhone?: string
-  contactEmail?: string
+  id: number;
+  name: string;
+  country: string;
+  city: string;
+  currency: string;
+  language: string;
+  description?: string;
+  membersCount: number;
+  contactPhone?: string;
+  contactEmail?: string;
   bureauSection?: {
-    responsable?: { userId?: number; name?: string; phoneNumber?: string }
-    secretaire?: { userId?: number; name?: string; phoneNumber?: string }
-    tresorier?: { userId?: number; name?: string; phoneNumber?: string }
-  }
+    responsable?: { 
+      userId?: number; 
+      firstName?: string;   // ✅ Fix: firstName au lieu de name
+      lastName?: string;    // ✅ Fix: ajouter lastName
+      phoneNumber?: string; 
+      role?: string;        // ✅ Fix: ajouter role
+    };
+    secretaire?: { 
+      userId?: number; 
+      firstName?: string;   // ✅ Fix: firstName au lieu de name
+      lastName?: string;    // ✅ Fix: ajouter lastName
+      phoneNumber?: string; 
+      role?: string;        // ✅ Fix: ajouter role
+    };
+    tresorier?: { 
+      userId?: number; 
+      firstName?: string;   // ✅ Fix: firstName au lieu de name
+      lastName?: string;    // ✅ Fix: ajouter lastName
+      phoneNumber?: string; 
+      role?: string;        // ✅ Fix: ajouter role
+    };
+    updatedAt?: string;     // ✅ Fix: ajouter les champs techniques
+    updatedBy?: number;     // ✅ Fix: ajouter les champs techniques
+  };
   stats?: {
-    monthlyRevenue?: number
-    bureauComplete?: boolean
-    activeMembers?: number
-    pendingMembers?: number
-  }
-  created_at: string
+    monthlyRevenue?: number;
+    bureauComplete?: boolean;
+    activeMembers?: number;
+    pendingMembers?: number;
+  };
+  created_at: string;
 }
 
 interface Association {
-  id: number
-  name: string
-  isMultiSection: boolean
+  id: number;
+  name: string;
+  isMultiSection: boolean;
 }
 
 export default function SectionDetailPage() {
-  const params = useParams()
-  const router = useRouter()
-  const { token } = useAuthStore()
-  
-  const [section, setSection] = useState<Section | null>(null)
-  const [association, setAssociation] = useState<Association | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isEditingBureau, setIsEditingBureau] = useState(false)
-  const [bureauForm, setBureauForm] = useState({})
-  const [error, setError] = useState<string | null>(null)
+  const params = useParams();
+  const router = useRouter();
+  const { token } = useAuthStore();
 
-  const associationId = params.id as string
-  const sectionId = params.sectionId as string
+  const [section, setSection] = useState<Section | null>(null);
+  const [association, setAssociation] = useState<Association | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditingBureau, setIsEditingBureau] = useState(false);
+  
+  const [error, setError] = useState<string | null>(null);
+
+  const [bureau, setBureau] = useState<any>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const associationId = params.id as string;
+  const sectionId = params.sectionId as string;
 
   useEffect(() => {
-    fetchSectionData()
-  }, [associationId, sectionId, token])
+    fetchSectionData();
+  }, [associationId, sectionId, token]);
+
+  useEffect(() => {
+    if (section) {
+      setBureau(section.bureauSection || {});
+    }
+  }, [section]);
 
   const fetchSectionData = async () => {
-    if (!associationId || !sectionId || !token) return
-    
-    setIsLoading(true)
+    if (!associationId || !sectionId || !token) return;
+
+    setIsLoading(true);
     try {
       // Charger les données de la section et de l'association
       const [sectionResponse, associationResponse] = await Promise.all([
         fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections/${sectionId}`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
+          { headers: { Authorization: `Bearer ${token}` } }
         ),
         fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        )
-      ])
+          { headers: { Authorization: `Bearer ${token}` } }
+        ),
+      ]);
 
       if (sectionResponse.ok && associationResponse.ok) {
         const [sectionResult, associationResult] = await Promise.all([
           sectionResponse.json(),
-          associationResponse.json()
-        ])
-        
-        setSection(sectionResult.data.section)
-        setAssociation(associationResult.data.association)
-        setBureauForm(sectionResult.data.section.bureauSection || {})
-      } else {
-        setError('Section ou association introuvable')
-      }
-    } catch (error) {
-      console.error('Erreur chargement section:', error)
-      setError('Erreur de connexion')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+          associationResponse.json(),
+        ]);
 
-  const handleUpdateBureau = async () => {
-    if (!token) return
-    
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections/${sectionId}/bureau`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ bureauSection: bureauForm })
-        }
-      )
-      
-      if (response.ok) {
-        setIsEditingBureau(false)
-        fetchSectionData() // Recharger les données
+        setSection(sectionResult.data.section);
+        setAssociation(associationResult.data.association);
+        setBureau(sectionResult.data.section.bureauSection || {});
+
       } else {
-        console.error('Erreur mise à jour bureau section')
+        setError("Section ou association introuvable");
       }
     } catch (error) {
-      console.error('Erreur mise à jour bureau section:', error)
+      console.error("Erreur chargement section:", error);
+      setError("Erreur de connexion");
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleDeleteSection = async () => {
-    if (!token) return
-    
-    const confirmMessage = section?.membersCount && section.membersCount > 0 
-      ? `Attention : Cette section contient ${section.membersCount} membre(s). La suppression déplacera ces membres vers la section principale. Continuer ?`
-      : `Êtes-vous sûr de vouloir supprimer la section "${section?.name}" ?`
-    
-    if (!confirm(confirmMessage)) return
-    
+    if (!token) return;
+
+    const confirmMessage =
+      section?.membersCount && section.membersCount > 0
+        ? `Attention : Cette section contient ${section.membersCount} membre(s). La suppression déplacera ces membres vers la section principale. Continuer ?`
+        : `Êtes-vous sûr de vouloir supprimer la section "${section?.name}" ?`;
+
+    if (!confirm(confirmMessage)) return;
+
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections/${sectionId}`,
         {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
         }
-      )
-      
+      );
+
       if (response.ok) {
-        router.push(`/modules/associations/${associationId}/settings?tab=sections`)
+        router.push(
+          `/modules/associations/${associationId}/settings?tab=sections`
+        );
       } else {
-        const error = await response.json()
-        alert(`Erreur : ${error.message || 'Impossible de supprimer cette section'}`)
+        const error = await response.json();
+        alert(
+          `Erreur : ${error.message || "Impossible de supprimer cette section"}`
+        );
       }
     } catch (error) {
-      console.error('Erreur suppression section:', error)
-      alert('Erreur de connexion lors de la suppression')
+      console.error("Erreur suppression section:", error);
+      alert("Erreur de connexion lors de la suppression");
     }
+  };
+
+  const handleSave = async () => {
+  try {
+    setIsSaving(true);
+
+    console.log('Données bureau à sauvegarder:', bureau); // Debug
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections/${sectionId}/bureau`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ bureauSection: bureau }),
+      }
+    );
+
+    const result = await response.json();
+    console.log('Réponse serveur:', result); // Debug
+
+    if (response.ok) {
+      // Recharger les données de la section
+      await fetchSectionData();
+      // Fermer le formulaire d'édition
+      setIsEditingBureau(false);
+    } else {
+      console.error('Erreur sauvegarde:', result);
+    }
+  } catch (error) {
+    console.error("Erreur sauvegarde bureau:", error);
+  } finally {
+    setIsSaving(false);
   }
+};
+
+  const handleCancel = () => {
+    // Remettre les données d'origine ou fermer le formulaire
+    setBureau(section?.bureauSection || {});
+    // Ou setEditingBureau(false) selon ton système
+  };
 
   const bureauCompleteness = () => {
-    if (!section?.bureauSection) return { filled: 0, total: 3 }
-    
-    const bureau = section.bureauSection
-    const roles = ['responsable', 'secretaire', 'tresorier']
-    const filledRoles = roles.filter(role => bureau[role as keyof typeof bureau]?.name)
-    return { filled: filledRoles.length, total: roles.length }
-  }
+    if (!section?.bureauSection) return { filled: 0, total: 3 };
+
+    const bureau = section.bureauSection;
+    const roles = ["responsable", "secretaire", "tresorier"];
+    const filledRoles = roles.filter(
+      (role) => bureau[role as keyof typeof bureau]?.name
+    );
+    return { filled: filledRoles.length, total: roles.length };
+  };
 
   if (isLoading) {
     return (
@@ -189,7 +241,7 @@ export default function SectionDetailPage() {
           <LoadingSpinner size="lg" />
         </div>
       </ProtectedRoute>
-    )
+    );
   }
 
   if (error || !section || !association) {
@@ -198,16 +250,18 @@ export default function SectionDetailPage() {
         <div className="max-w-4xl mx-auto p-6">
           <div className="text-center">
             <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-red-600 mb-4">{error || 'Section introuvable'}</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">
+              {error || "Section introuvable"}
+            </h1>
             <Button onClick={() => router.back()}>Retour</Button>
           </div>
         </div>
       </ProtectedRoute>
-    )
+    );
   }
 
-  const completeness = bureauCompleteness()
-  const isComplete = completeness.filled === completeness.total
+  const completeness = bureauCompleteness();
+  const isComplete = completeness.filled === completeness.total;
 
   return (
     <ProtectedRoute requiredModule="associations">
@@ -215,8 +269,8 @@ export default function SectionDetailPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => router.back()}
               className="flex items-center gap-2"
             >
@@ -224,11 +278,13 @@ export default function SectionDetailPage() {
               Retour
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{section.name}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {section.name}
+              </h1>
               <p className="text-gray-600">{association.name}</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {isComplete ? (
               <Badge className="bg-green-100 text-green-700">
@@ -241,7 +297,7 @@ export default function SectionDetailPage() {
                 Bureau {completeness.filled}/{completeness.total}
               </Badge>
             )}
-            
+
             <Button
               variant="outline"
               className="text-red-600 hover:text-red-700 border-red-300"
@@ -255,7 +311,6 @@ export default function SectionDetailPage() {
 
         {/* Informations principales */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
           {/* Informations générales */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -267,61 +322,81 @@ export default function SectionDetailPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Localisation</label>
+                  <label className="text-sm font-medium text-gray-600">
+                    Localisation
+                  </label>
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-gray-500" />
-                    <span className="text-gray-900">{section.city}, {section.country}</span>
+                    <span className="text-gray-900">
+                      {section.city}, {section.country}
+                    </span>
                   </div>
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Devise</label>
+                  <label className="text-sm font-medium text-gray-600">
+                    Devise
+                  </label>
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-gray-500" />
                     <span className="text-gray-900">{section.currency}</span>
                   </div>
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Langue</label>
+                  <label className="text-sm font-medium text-gray-600">
+                    Langue
+                  </label>
                   <div className="flex items-center gap-2">
                     <Globe className="h-4 w-4 text-gray-500" />
-                    <span className="text-gray-900">{section.language.toUpperCase()}</span>
+                    <span className="text-gray-900">
+                      {section.language.toUpperCase()}
+                    </span>
                   </div>
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Créée le</label>
+                  <label className="text-sm font-medium text-gray-600">
+                    Créée le
+                  </label>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-500" />
                     <span className="text-gray-900">
-                      {new Date(section.created_at).toLocaleDateString('fr-FR')}
+                      {new Date(section.created_at).toLocaleDateString("fr-FR")}
                     </span>
                   </div>
                 </div>
               </div>
-              
+
               {section.description && (
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Description</label>
+                  <label className="text-sm font-medium text-gray-600">
+                    Description
+                  </label>
                   <p className="text-gray-900">{section.description}</p>
                 </div>
               )}
-              
+
               {(section.contactPhone || section.contactEmail) && (
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Contact</label>
+                  <label className="text-sm font-medium text-gray-600">
+                    Contact
+                  </label>
                   <div className="space-y-1">
                     {section.contactPhone && (
                       <div className="flex items-center gap-2">
                         <Phone className="h-4 w-4 text-gray-500" />
-                        <span className="text-gray-900">{section.contactPhone}</span>
+                        <span className="text-gray-900">
+                          {section.contactPhone}
+                        </span>
                       </div>
                     )}
                     {section.contactEmail && (
                       <div className="flex items-center gap-2">
                         <Mail className="h-4 w-4 text-gray-500" />
-                        <span className="text-gray-900">{section.contactEmail}</span>
+                        <span className="text-gray-900">
+                          {section.contactEmail}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -340,27 +415,36 @@ export default function SectionDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="text-center">
-                <div className="text-3xl font-bold text-gray-900">{section.membersCount}</div>
+                <div className="text-3xl font-bold text-gray-900">
+                  {section.membersCount}
+                </div>
                 <div className="text-sm text-gray-600">Total membres</div>
               </div>
-              
+
               {section.stats?.activeMembers !== undefined && (
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-green-600">{section.stats.activeMembers}</div>
+                  <div className="text-3xl font-bold text-green-600">
+                    {section.stats.activeMembers}
+                  </div>
                   <div className="text-sm text-gray-600">Membres actifs</div>
                 </div>
               )}
-              
-              {section.stats?.pendingMembers !== undefined && section.stats.pendingMembers > 0 && (
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-yellow-600">{section.stats.pendingMembers}</div>
-                  <div className="text-sm text-gray-600">En attente</div>
-                </div>
-              )}
-              
+
+              {section.stats?.pendingMembers !== undefined &&
+                section.stats.pendingMembers > 0 && (
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-yellow-600">
+                      {section.stats.pendingMembers}
+                    </div>
+                    <div className="text-sm text-gray-600">En attente</div>
+                  </div>
+                )}
+
               {section.stats?.monthlyRevenue && (
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{section.stats.monthlyRevenue}€</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {section.stats.monthlyRevenue}€
+                  </div>
                   <div className="text-sm text-gray-600">Revenus/mois</div>
                 </div>
               )}
@@ -396,45 +480,59 @@ export default function SectionDetailPage() {
           </CardHeader>
           <CardContent>
             {isEditingBureau ? (
-              <BureauSectionForm 
-                bureau={bureauForm}
-                setBureau={setBureauForm}
-                onSave={handleUpdateBureau}
-                onCancel={() => setIsEditingBureau(false)}
+              <BureauSectionForm
+                bureau={bureau}
+                setBureau={setBureau}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isSaving={isSaving}
+                associationId={associationId}
+                sectionId={parseInt(sectionId)}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {(['responsable', 'secretaire', 'tresorier'] as const).map(role => {
-                  const member = section.bureauSection?.[role]
-                  return (
-                    <div key={role} className="text-center p-4 bg-gray-50 rounded-lg">
-                      <h4 className="font-medium text-gray-900 capitalize mb-2">
-                        {role} section
-                      </h4>
-                      {member?.name ? (
-                        <div>
-                          <p className="text-gray-900 font-medium">{member.name}</p>
-                          {member.phoneNumber && (
-                            <p className="text-sm text-gray-600 flex items-center justify-center gap-1 mt-1">
-                              <Phone className="h-3 w-3" />
-                              {member.phoneNumber}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-gray-400 italic">Non assigné</p>
-                      )}
-                    </div>
-                  )
-                })}
+
+                
+{(["responsable", "secretaire", "tresorier"] as const).map(
+  (role) => {
+    const member = section.bureauSection?.[role];
+    return (
+      <div
+        key={role}
+        className="text-center p-4 bg-gray-50 rounded-lg"
+      >
+        <h4 className="font-medium text-gray-900 capitalize mb-2">
+          {role} section
+        </h4>
+        {member?.firstName ? ( // ✅ Fix: vérifier firstName au lieu de name
+          <div>
+            <p className="text-gray-900 font-medium">
+              {member.firstName} {member.lastName} 
+            </p>
+            {member.phoneNumber && (
+              <p className="text-sm text-gray-600 flex items-center justify-center gap-1 mt-1">
+                <Phone className="h-3 w-3" />
+                {member.phoneNumber}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-400 italic">Non assigné</p>
+        )}
+      </div>
+    );
+  }
+)}
+
               </div>
             )}
-            
+
             {!isEditingBureau && !isComplete && (
               <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                 <p className="text-sm text-yellow-700">
                   <AlertCircle className="h-4 w-4 inline mr-1" />
-                  Le bureau de section n'est pas complet. Assignez au moins un responsable pour activer toutes les fonctionnalités.
+                  Le bureau de section n'est pas complet. Assignez au moins un
+                  responsable pour activer toutes les fonctionnalités.
                 </p>
               </div>
             )}
@@ -443,26 +541,38 @@ export default function SectionDetailPage() {
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          <Button 
+          <Button
             className="flex items-center gap-2"
-            onClick={() => router.push(`/modules/associations/${associationId}/sections/${sectionId}/members`)}
+            onClick={() =>
+              router.push(
+                `/modules/associations/${associationId}/sections/${sectionId}/members`
+              )
+            }
           >
             <Users className="h-4 w-4" />
             Gérer les membres ({section.membersCount})
           </Button>
-          
-          <Button 
-            variant="outline" 
+
+          <Button
+            variant="outline"
             className="flex items-center gap-2"
-            onClick={() => router.push(`/modules/associations/${associationId}/sections/${sectionId}/settings`)}
+            onClick={() =>
+              router.push(
+                `/modules/associations/${associationId}/sections/${sectionId}/settings`
+              )
+            }
           >
             <Settings className="h-4 w-4" />
             Paramètres section
           </Button>
-          
-          <Button 
+
+          <Button
             variant="outline"
-            onClick={() => router.push(`/modules/associations/${associationId}/settings?tab=sections`)}
+            onClick={() =>
+              router.push(
+                `/modules/associations/${associationId}/settings?tab=sections`
+              )
+            }
           >
             Voir toutes les sections
           </Button>
@@ -476,7 +586,9 @@ export default function SectionDetailPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Responsable Section</h4>
+                <h4 className="font-medium text-gray-900 mb-2">
+                  Responsable Section
+                </h4>
                 <ul className="text-sm text-gray-600 space-y-1">
                   <li>• Coordination locale</li>
                   <li>• Liaison avec bureau central</li>
@@ -484,9 +596,11 @@ export default function SectionDetailPage() {
                   <li>• Suivi activités section</li>
                 </ul>
               </div>
-              
+
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Secrétaire Section</h4>
+                <h4 className="font-medium text-gray-900 mb-2">
+                  Secrétaire Section
+                </h4>
                 <ul className="text-sm text-gray-600 space-y-1">
                   <li>• Gestion des membres</li>
                   <li>• Communications locales</li>
@@ -494,9 +608,11 @@ export default function SectionDetailPage() {
                   <li>• Tenue registres</li>
                 </ul>
               </div>
-              
+
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Trésorier Section</h4>
+                <h4 className="font-medium text-gray-900 mb-2">
+                  Trésorier Section
+                </h4>
                 <ul className="text-sm text-gray-600 space-y-1">
                   <li>• Suivi cotisations locales</li>
                   <li>• Rapports financiers</li>
@@ -509,5 +625,5 @@ export default function SectionDetailPage() {
         </Card>
       </div>
     </ProtectedRoute>
-  )
+  );
 }
