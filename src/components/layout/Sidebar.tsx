@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useParams } from 'next/navigation'
 import { 
   Home, 
   Users, 
@@ -13,7 +13,10 @@ import {
   Building2,
   Wallet,
   UserPlus,
-  Plus
+  Plus,
+  MapPin,
+  FileText,
+  Calendar
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -25,52 +28,102 @@ interface SidebarProps {
 export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const params = useParams()
+  
+  // Récupérer l'ID de l'association courante depuis l'URL
+  const currentAssociationId = params?.id as string
 
   // Navigation items selon le module actif
   const getNavigationItems = () => {
     switch(currentModule) {
       case 'associations':
+        // Si on est dans une association spécifique, afficher le menu détaillé
+        if (currentAssociationId && pathname.includes(`/modules/associations/${currentAssociationId}`)) {
+          return [
+            { 
+              label: 'Vue d\'ensemble', 
+              href: `/modules/associations/${currentAssociationId}`, 
+              icon: Home,
+              active: pathname === `/modules/associations/${currentAssociationId}`
+            },
+            { 
+              label: 'Membres', 
+              href: `/modules/associations/${currentAssociationId}/members`, 
+              icon: Users,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/members`),
+              description: 'Gestion des membres'
+            },
+            { 
+              label: 'Cotisations', 
+              href: `/modules/associations/${currentAssociationId}/cotisations`, 
+              icon: CreditCard,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/cotisations`),
+              description: 'Dashboard et paiements'
+            },
+            { 
+              label: 'Sections', 
+              href: `/modules/associations/${currentAssociationId}/sections`, 
+              icon: MapPin,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/sections`),
+              description: 'Sections géographiques'
+            },
+            { 
+              label: 'Événements', 
+              href: `/modules/associations/${currentAssociationId}/events`, 
+              icon: Calendar,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/events`),
+              disabled: true,
+              description: 'Calendrier et événements'
+            },
+            { 
+              label: 'Documents', 
+              href: `/modules/associations/${currentAssociationId}/documents`, 
+              icon: FileText,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/documents`),
+              disabled: true,
+              description: 'Attestations et rapports'
+            },
+            { 
+              label: 'Finances', 
+              href: `/modules/associations/${currentAssociationId}/finances`, 
+              icon: PieChart,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/finances`),
+              disabled: true,
+              description: 'Vue globale financière'
+            },
+            { 
+              label: 'Paramètres', 
+              href: `/modules/associations/${currentAssociationId}/settings`, 
+              icon: Settings,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/settings`),
+              description: 'Configuration association'
+            }
+          ]
+        }
+        
+        // Menu général des associations (liste)
         return [
           { 
-            label: 'Tableau de bord', 
-            href: '/modules/associations', 
-            icon: Home,
-            active: pathname === '/modules/associations'
-          },
-          { 
             label: 'Mes Associations', 
-            href: '/modules/associations', // ← Même page que tableau de bord pour l'instant
+            href: '/modules/associations', 
             icon: Building2,
-            active: pathname === '/modules/associations'
+            active: pathname === '/modules/associations',
+            description: 'Toutes mes associations'
           },
           { 
             label: 'Créer Association', 
-            href: '#', // ← Désactivé pour l'instant
+            href: '/modules/associations/create', 
             icon: Plus,
-            active: false,
-            disabled: true
+            active: pathname === '/modules/associations/create',
+            description: 'Nouvelle association'
           },
           { 
-            label: 'Membres', 
-            href: '#', // ← Désactivé pour l'instant
-            icon: Users,
-            active: false,
+            label: 'Invitations', 
+            href: '/modules/associations/invitations', 
+            icon: UserPlus,
+            active: pathname === '/modules/associations/invitations',
             disabled: true,
-            badge: '12'
-          },
-          { 
-            label: 'Cotisations', 
-            href: '#', // ← Désactivé pour l'instant
-            icon: CreditCard,
-            active: false,
-            disabled: true
-          },
-          { 
-            label: 'Finances', 
-            href: '#', // ← Désactivé pour l'instant
-            icon: PieChart,
-            active: false,
-            disabled: true
+            description: 'Invitations reçues'
           }
         ]
 
@@ -84,13 +137,13 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
           },
           { 
             label: 'Mes Tontines', 
-            href: '/modules/tontines', // ← Même page que tableau de bord pour l'instant
+            href: '/modules/tontines', 
             icon: Wallet,
             active: pathname === '/modules/tontines'
           },
           { 
             label: 'Créer Tontine', 
-            href: '#', // ← Désactivé pour l'instant
+            href: '#', 
             icon: Plus,
             active: false,
             disabled: true
@@ -138,6 +191,29 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
             </Button>
           </div>
 
+          {/* Association context - Si on est dans une association spécifique */}
+          {currentAssociationId && pathname.includes(`/modules/associations/${currentAssociationId}`) && (
+            <div className="p-4 border-b border-gray-200">
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-2">
+                Association actuelle
+              </div>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-sm p-2 h-auto"
+                onClick={() => {
+                  router.push('/modules/associations')
+                  onClose?.()
+                }}
+              >
+                <Building2 className="h-4 w-4 mr-2 flex-shrink-0" />
+                <div className="text-left">
+                  <div className="font-medium truncate">Association #{currentAssociationId}</div>
+                  <div className="text-xs text-gray-500">Cliquer pour changer</div>
+                </div>
+              </Button>
+            </div>
+          )}
+
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigationItems.map((item) => {
@@ -149,7 +225,7 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
                   key={item.label}
                   variant={item.active ? "default" : "ghost"}
                   className={cn(
-                    "w-full justify-start h-10 text-sm",
+                    "w-full justify-start h-auto p-3 text-sm",
                     isDisabled && "opacity-50 cursor-not-allowed"
                   )}
                   disabled={isDisabled}
@@ -161,7 +237,14 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
                   }}
                 >
                   <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
-                  <span className="flex-1 text-left truncate">{item.label}</span>
+                  <div className="flex-1 text-left">
+                    <div className="font-medium">{item.label}</div>
+                    {item.description && (
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {item.description}
+                      </div>
+                    )}
+                  </div>
                   {item.badge && (
                     <Badge variant="secondary" className="ml-auto text-xs">
                       {item.badge}
@@ -176,6 +259,41 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
               )
             })}
           </nav>
+
+          {/* Quick actions - Si on est dans une association */}
+          {currentAssociationId && pathname.includes(`/modules/associations/${currentAssociationId}`) && (
+            <div className="p-4 border-t border-gray-200">
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-2">
+                Actions rapides
+              </div>
+              <div className="space-y-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-xs"
+                  onClick={() => {
+                    router.push(`/modules/associations/${currentAssociationId}/members/add`)
+                    onClose?.()
+                  }}
+                >
+                  <UserPlus className="h-3 w-3 mr-2" />
+                  Ajouter membre
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-xs"
+                  onClick={() => {
+                    router.push(`/modules/associations/${currentAssociationId}/cotisations`)
+                    onClose?.()
+                  }}
+                >
+                  <CreditCard className="h-3 w-3 mr-2" />
+                  Voir cotisations
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Footer info */}
           <div className="p-4 border-t border-gray-200">
