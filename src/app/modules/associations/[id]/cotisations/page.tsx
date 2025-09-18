@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/stores/authStore";
-import { AddCotisationModal } from '@/components/modules/associations/AddCotisationModal'
+import { AddCotisationModal } from "@/components/modules/associations/AddCotisationModal";
 import {
   ArrowLeft,
   Euro,
@@ -60,6 +60,7 @@ interface CotisationsDashboardData {
     } | null;
     expectedAmount: number;
     paidAmount: number;
+    paymentMethod: string | null;
     cotisationStatus: string;
     paymentDate: string | null;
     daysSinceDeadline: number;
@@ -492,6 +493,9 @@ export default function CotisationsDashboardPage() {
                       Montant
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Mode paiement
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Statut
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -549,6 +553,19 @@ export default function CotisationsDashboardPage() {
                           )}
                         </div>
                       </td>
+
+                      <td className="px-4 py-3">
+  {/* Récupérer la méthode de paiement depuis les données */}
+  <Badge variant="outline" className="text-xs">
+    {member.paymentMethod === 'cash' ? 'Espèces' :
+     member.paymentMethod === 'check' ? 'Chèque' :
+     member.paymentMethod === 'card' ? 'Carte' :
+     member.paymentMethod === 'transfer' ? 'Virement' :
+     'Non défini'}
+  </Badge>
+</td>
+
+
                       <td className="px-4 py-3">
                         {getStatusBadge(member.cotisationStatus)}
                         {member.daysSinceDeadline > 0 &&
@@ -558,6 +575,7 @@ export default function CotisationsDashboardPage() {
                             </p>
                           )}
                       </td>
+
                       <td className="px-4 py-3">
                         {member.paymentDate ? (
                           <span className="text-sm text-gray-900">
@@ -571,6 +589,7 @@ export default function CotisationsDashboardPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
+                          {/*
                           <Button
                             size="sm"
                             variant="outline"
@@ -578,6 +597,7 @@ export default function CotisationsDashboardPage() {
                           >
                             Relancer
                           </Button>
+                          */}
                           <Button
                             size="sm"
                             variant="ghost"
