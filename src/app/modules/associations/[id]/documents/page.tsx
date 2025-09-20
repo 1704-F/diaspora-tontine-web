@@ -265,7 +265,7 @@ export default function AssociationDocumentsPage() {
     }
   };
 
-  const handleViewDocument = async (documentId: number, fileName: string) => {
+ const handleViewDocument = async (documentId: number, fileName: string) => {
   try {
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/documents/${documentId}`,
@@ -276,14 +276,9 @@ export default function AssociationDocumentsPage() {
       const result = await response.json();
       const document = documents.find(d => d.id === documentId);
       
-      // 🔍 DEBUG : Voir ce que renvoie le backend
-      console.log('🔍 Réponse backend:', result);
-      console.log('🔍 downloadUrl:', result.data.downloadUrl);
-      
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      const fileUrl = `${baseUrl}/${result.data.viewUrl}`;
-      
-      console.log('🔍 URL finale construite:', fileUrl);
+      // ✅ UTILISER L'URL DE L'API (sans /api/v1)
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3000';
+      const fileUrl = `${backendUrl}/${result.data.downloadUrl}?token=${token}`;
       
       setDocumentViewer({
         isOpen: true,
