@@ -201,7 +201,7 @@ export default function AssociationDocumentsPage() {
   };
 
   const getDocumentStatus = (documentKey: string) => {
-    const docStatus = association?.documentsStatus?.[documentKey];
+    const docStatus = association?.documentsStatus?.[documentKey as keyof typeof association.documentsStatus];
     const document = documents.find(d => d.type.includes(documentKey) || 
       (documentKey === 'statuts' && d.type === 'association_statuts') ||
       (documentKey === 'receipisse' && d.type === 'association_receipt') ||
@@ -266,38 +266,36 @@ export default function AssociationDocumentsPage() {
   };
 
   const handleViewDocument = async (documentId: number, fileName: string) => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/documents/${documentId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` } 
-        }
-      );
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/documents/${documentId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-      if (response.ok) {
-        const result = await response.json();
-        const document = documents.find(d => d.id === documentId);
-        
-        // Construire l'URL correcte vers le serveur backend
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '');
-        const fileUrl = `${backendUrl}/${result.data.downloadUrl}`;
-        
-        setDocumentViewer({
-          isOpen: true,
-          document: document || null,
-          fileUrl: fileUrl
-        });
-      } else {
-        const error = await response.json();
-        throw new Error(error.message);
-      }
-    } catch (error) {
-      console.error("Erreur visualisation:", error);
-      toast.error("Erreur de visualisation", {
-        description: "Le document n'a pas pu être ouvert",
+    if (response.ok) {
+      const result = await response.json();
+      const document = documents.find(d => d.id === documentId);
+      
+      // 🔍 DEBUG : Voir ce que renvoie le backend
+      console.log('🔍 Réponse backend:', result);
+      console.log('🔍 downloadUrl:', result.data.downloadUrl);
+      
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      const fileUrl = `${baseUrl}/${result.data.viewUrl}`;
+      
+      console.log('🔍 URL finale construite:', fileUrl);
+      
+      setDocumentViewer({
+        isOpen: true,
+        document: document || null,
+        fileUrl: fileUrl
       });
     }
-  };
+  } catch (error) {
+    console.error("Erreur visualisation:", error);
+    toast.error("Erreur de visualisation");
+  }
+};
 
   const handleCloseViewer = () => {
     setDocumentViewer({
@@ -548,11 +546,11 @@ export default function AssociationDocumentsPage() {
               {documentViewer.fileUrl ? (
                 <div className="w-full h-full">
                   {documentViewer.document.fileName.toLowerCase().endsWith('.pdf') ? (
-                    <iframe
-                      src={documentViewer.fileUrl}
-                      className="w-full h-full border-0 rounded"
-                      title={documentViewer.document.fileName}
-                    />
+    <iframe
+  src={`${documentViewer.fileUrl}#toolbar=0`}
+  className="w-full h-full border-0 rounded"
+  title={documentViewer.document.fileName}
+/>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-50 rounded">
                       <img
