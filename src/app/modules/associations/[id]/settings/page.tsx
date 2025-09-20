@@ -45,6 +45,14 @@ interface Association {
     calendar: string;
     expenses: string;
   };
+  permissionsMatrix?: {
+    [actionKey: string]: {
+      allowed_roles: string[];
+      conditions?: string[];
+      requires_both?: boolean;
+      notification_required?: string[];
+    };
+  };
   cotisationSettings: {
     dueDay: number;
     gracePeriodDays: number;
@@ -814,6 +822,49 @@ export default function AssociationSettingsPage() {
     );
   };
 
+  const handleUpdatePermission = async (permissionKey: string, permissionConfig: any) => {
+  try {
+    const updatedPermissionsMatrix = {
+      ...association?.permissionsMatrix,
+      [permissionKey]: permissionConfig
+    };
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
+      {
+        method: "PUT", 
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          permissionsMatrix: updatedPermissionsMatrix
+        }),
+      }
+    );
+
+    if (response.ok) {
+      setAssociation((prev) =>
+        prev
+          ? {
+              ...prev,
+              permissionsMatrix: updatedPermissionsMatrix,
+            }
+          : null
+      );
+      
+      toast.success("Permissions mises à jour", {
+        description: `Les droits d'accès pour "${permissionKey}" ont été modifiés`,
+      });
+    } else {
+      throw new Error('Erreur lors de la mise à jour');
+    }
+  } catch (error) {
+    console.error("Erreur mise à jour permissions:", error);
+    toast.error("Erreur lors de la mise à jour des permissions");
+  }
+};
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1074,62 +1125,167 @@ export default function AssociationSettingsPage() {
       )}
 
       {activeTab === "access" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Droits d'accès
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {[
-              {
-                key: "finances",
-                label: "Finances de l'association",
-                icon: Euro,
-              },
-              { key: "membersList", label: "Liste des membres", icon: Users },
-              { key: "statistics", label: "Statistiques", icon: Eye },
-              {
-                key: "calendar",
-                label: "Calendrier des événements",
-                icon: Calendar,
-              },
-              { key: "expenses", label: "Dépenses détaillées", icon: EyeOff },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.key}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5 text-gray-500" />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                  <select
-                    value={
-                      association.accessRights[
-                        item.key as keyof typeof association.accessRights
-                      ]
-                    }
-                    onChange={(e) =>
-                      handleUpdateAccessRights(item.key, e.target.value)
-                    }
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    {accessOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+  <Card>
+    <CardHeader>
+      <CardTitle>Droits d'accès et autorisations</CardTitle>
+      <p className="text-sm text-gray-600">
+        Configurez qui peut effectuer quelles actions dans votre association
+      </p>
+    </CardHeader>
+    <CardContent className="space-y-6">
+      
+      {/* Actions disponibles */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Permissions par action</h3>
+        
+        {[
+          {
+            key: 'view_finances',
+            label: 'Voir les finances',
+            description: 'Accès aux données financières (cotisations, budget, transactions)'
+          },
+          {
+            key: 'manage_members', 
+            label: 'Gérer les membres',
+            description: 'Ajouter, modifier, suspendre des membres'
+          },
+          {
+            key: 'approve_aids',
+            label: 'Approuver les aides',
+            description: 'Valider et approuver les demandes d\'aide'
+          },
+          {
+            key: 'view_member_list',
+            label: 'Voir la liste des membres', 
+            description: 'Accès à la liste complète des membres'
+          },
+          {
+            key: 'export_data',
+            label: 'Exporter des données',
+            description: 'Télécharger des rapports et données de l\'association'
+          },
+          {
+            key: 'manage_events',
+            label: 'Gérer les événements',
+            description: 'Créer et organiser des événements'
+          }
+          ].map((permission) => {
+  const currentPermission = association?.permissionsMatrix?.[permission.key] || { allowed_roles: [] };
+  
+  // ✅ S'assurer que admin_association est toujours inclus
+  const ensureAdminIncluded = (roles: string[]) => {
+    if (!roles.includes('admin_association')) {
+      return ['admin_association', ...roles];
+    }
+    return roles;
+  };
+  
+  return (
+    <div key={permission.key} className="border rounded-lg p-4">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">{permission.label}</h4>
+          <p className="text-sm text-gray-500 mt-1">{permission.description}</p>
+          
+          {/* Note importante */}
+          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+            📝 L'administrateur a automatiquement tous les droits et ne peut pas être retiré
+          </div>
+          
+          {/* Rôles autorisés */}
+          <div className="mt-3">
+            <p className="text-sm font-medium text-gray-700 mb-2">Rôles autorisés :</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'admin_association', label: 'Administrateur', locked: true },
+                { value: 'president', label: 'Président', locked: false },
+                { value: 'secretaire', label: 'Secrétaire', locked: false },
+                { value: 'tresorier', label: 'Trésorier', locked: false },
+                { value: 'responsable_section', label: 'Responsable section', locked: false },
+                { value: 'secretaire_section', label: 'Secrétaire section', locked: false },
+                { value: 'tresorier_section', label: 'Trésorier section', locked: false }
+              ].map((role) => (
+                <label key={role.value} className={`flex items-center space-x-2 ${role.locked ? 'opacity-75' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={ensureAdminIncluded(currentPermission.allowed_roles).includes(role.value)}
+                    disabled={role.locked} // ✅ Admin ne peut pas être décoché
+                    onChange={(e) => {
+                      if (role.locked) return; // Sécurité supplémentaire
+                      
+                      let updatedRoles = e.target.checked
+                        ? [...currentPermission.allowed_roles, role.value]
+                        : currentPermission.allowed_roles.filter(r => r !== role.value);
+                      
+                      // ✅ Toujours s'assurer que admin est inclus
+                      updatedRoles = ensureAdminIncluded(updatedRoles);
+                      
+                      handleUpdatePermission(permission.key, {
+                        ...currentPermission,
+                        allowed_roles: updatedRoles
+                      });
+                    }}
+                    className={`rounded border-gray-300 ${role.locked ? 'cursor-not-allowed' : ''}`}
+                  />
+                  <span className={`text-sm ${role.locked ? 'text-gray-500 font-medium' : 'text-gray-700'}`}>
+                    {role.label} {role.locked && '(toujours activé)'}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+})}
+        
+      </div>
+
+      {/* Permissions par rôle - Vue alternative */}
+      <div className="border-t pt-6 space-y-4">
+        <h3 className="text-lg font-medium">Vue par rôle</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { key: 'president', label: 'Président', color: 'bg-blue-50 border-blue-200' },
+            { key: 'secretaire', label: 'Secrétaire', color: 'bg-green-50 border-green-200' },
+            { key: 'tresorier', label: 'Trésorier', color: 'bg-purple-50 border-purple-200' },
+            { key: 'admin_association', label: 'Administrateur', color: 'bg-red-50 border-red-200' }
+          ].map((role) => {
+            const rolePermissions = Object.entries(association?.permissionsMatrix || {})
+              .filter(([_, config]) => config.allowed_roles?.includes(role.key))
+              .map(([key, _]) => key);
+
+            return (
+              <div key={role.key} className={`border rounded-lg p-4 ${role.color}`}>
+                <h4 className="font-medium text-gray-900 mb-2">{role.label}</h4>
+                <div className="space-y-1">
+                  {rolePermissions.length > 0 ? (
+                    rolePermissions.map((perm) => (
+                      <div key={perm} className="text-sm text-gray-600">
+                        • {[
+                          { key: 'view_finances', label: 'Voir les finances' },
+                          { key: 'manage_members', label: 'Gérer les membres' },
+                          { key: 'approve_aids', label: 'Approuver les aides' },
+                          { key: 'view_member_list', label: 'Voir la liste des membres' },
+                          { key: 'export_data', label: 'Exporter des données' },
+                          { key: 'manage_events', label: 'Gérer les événements' }
+                        ].find(p => p.key === perm)?.label || perm}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-400">Aucune permission spécifique</p>
+                  )}
                 </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+    </CardContent>
+  </Card>
+)}
 
       {activeTab === "cotisations" && (
         <Card>

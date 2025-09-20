@@ -60,6 +60,7 @@ interface CotisationsDashboardData {
     } | null;
     expectedAmount: number;
     paidAmount: number;
+    hasPendingValidation: number;
     paymentMethod: string | null;
     cotisationStatus: string;
     paymentDate: string | null;
@@ -541,39 +542,45 @@ export default function CotisationsDashboardPage() {
                       <td className="px-4 py-3">
                         <Badge variant="outline">{member.memberType}</Badge>
                       </td>
+
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {formatAmount(member.expectedAmount)}
-                          </p>
-                          {member.paidAmount > 0 && (
-                            <p className="text-xs text-green-600">
-                              Payé: {formatAmount(member.paidAmount)}
-                            </p>
-                          )}
-                        </div>
+                        <span className="font-medium text-gray-900">
+                          {member.cotisationStatus === "paid"
+                            ? formatAmount(member.paidAmount)
+                            : formatAmount(member.expectedAmount)}
+                        </span>
                       </td>
 
                       <td className="px-4 py-3">
-  {/* Récupérer la méthode de paiement depuis les données */}
-  <Badge variant="outline" className="text-xs">
-    {member.paymentMethod === 'cash' ? 'Espèces' :
-     member.paymentMethod === 'check' ? 'Chèque' :
-     member.paymentMethod === 'card' ? 'Carte' :
-     member.paymentMethod === 'transfer' ? 'Virement' :
-     'Non défini'}
-  </Badge>
-</td>
-
+                        {/* Récupérer la méthode de paiement depuis les données */}
+                        <Badge variant="outline" className="text-xs">
+                          {member.paymentMethod === "cash"
+                            ? "Espèces"
+                            : member.paymentMethod === "check"
+                              ? "Chèque"
+                              : member.paymentMethod === "card"
+                                ? "Carte"
+                                : member.paymentMethod === "transfer"
+                                  ? "Virement"
+                                  : "Non défini"}
+                        </Badge>
+                      </td>
 
                       <td className="px-4 py-3">
-                        {getStatusBadge(member.cotisationStatus)}
-                        {member.daysSinceDeadline > 0 &&
-                          member.cotisationStatus !== "paid" && (
-                            <p className="text-xs text-red-500 mt-1">
-                              {member.daysSinceDeadline} jours
-                            </p>
-                          )}
+                        {member.hasPendingValidation ? (
+                          // Transaction en attente de validation trésorier
+                          <div className="space-y-1">
+                            <Badge className="bg-orange-100 text-orange-800">
+                              En validation
+                            </Badge>
+                            <div className="text-xs text-gray-500">
+                              Validation trésorier requise
+                            </div>
+                          </div>
+                        ) : (
+                          // Statut normal basé sur cotisationStatus
+                          getStatusBadge(member.cotisationStatus)
+                        )}
                       </td>
 
                       <td className="px-4 py-3">
