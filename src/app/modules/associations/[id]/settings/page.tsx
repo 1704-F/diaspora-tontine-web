@@ -194,34 +194,35 @@ export default function AssociationSettingsPage() {
   ];
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!associationId || !token) return;
+  const fetchData = async () => {
+    if (!associationId || !token) return;
 
-      try {
-        // Charger l'association
-        const associationResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+    try {
+      const associationResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-        if (associationResponse.ok) {
-          const result = await associationResponse.json();
-          setAssociation(result.data.association);
+      if (associationResponse.ok) {
+        const result = await associationResponse.json();
+        console.log('🏛️ Association reçue du serveur:', result.data.association);
+        console.log('📋 Bureau central reçu:', result.data.association.centralBoard);
+        
+        setAssociation(result.data.association);
 
-          // Si multi-section, charger les sections
-          if (result.data.association.isMultiSection) {
-            fetchSections();
-          }
+        if (result.data.association.isMultiSection) {
+          fetchSections();
         }
-      } catch (error) {
-        console.error("Erreur chargement association:", error);
-      } finally {
-        setIsLoading(false);
       }
-    };
+    } catch (error) {
+      console.error("Erreur chargement association:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    fetchData();
-  }, [associationId, token]);
+  fetchData();
+}, [associationId, token]);
 
   const showConfirmDialog = (
     title: string,
@@ -443,58 +444,84 @@ export default function AssociationSettingsPage() {
   };
 
   const handleDeleteCustomRole = async (roleKey: string) => {
-    const roleToDelete = association?.centralBoard?.[roleKey];
+  const roleToDelete = association?.centralBoard?.[roleKey];
 
-    // ❌ Remplacer : if (!window.confirm(`Êtes-vous sûr de vouloir supprimer le rôle "${roleToDelete?.role}" ?`))
+  // ✅ VÉRIFICATION : Le rôle est-il attribué à quelqu'un ?
+  if (roleToDelete?.userId) {
+    toast.error("Impossible de supprimer ce rôle", {
+      description: `Le rôle "${roleToDelete.role}" est actuellement attribué à ${roleToDelete.name}. Retirez d'abord l'assignation.`,
+      duration: 5000,
+    });
+    return;
+  }
 
-    // ✅ Nouvelle approche avec modal
-    showConfirmDialog(
-      "Supprimer le rôle personnalisé",
-      `Êtes-vous sûr de vouloir supprimer le rôle "${roleToDelete?.role}" ? Cette action est irréversible.`,
-      async () => {
-        try {
-          const updatedCentralBoard = { ...association?.centralBoard };
-          delete updatedCentralBoard[roleKey];
+  setConfirmDialog({
+    isOpen: true,
+    title: "Supprimer le rôle personnalisé",
+    message: `Êtes-vous sûr de vouloir supprimer le rôle "${roleToDelete?.role}" ? Cette action est irréversible.`,
+    onConfirm: async () => {
+      try {
+        // ✅ PROBLÈME 2 : Logs pour debug backend
+        console.log('🗑️ Suppression rôle:', {
+          roleKey,
+          roleData: roleToDelete,
+          associationId,
+          currentBoard: association?.centralBoard
+        });
 
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ centralBoard: updatedCentralBoard }),
-            }
+        const updatedCentralBoard = { ...association?.centralBoard };
+        delete updatedCentralBoard[roleKey];
+
+        console.log('📝 Nouveau bureau après suppression:', updatedCentralBoard);
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ centralBoard: updatedCentralBoard }),
+          }
+        );
+
+        console.log('📡 Réponse serveur:', response.status);
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('✅ Réponse serveur OK:', result);
+
+          // ✅ Mise à jour état local
+          setAssociation((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  centralBoard: updatedCentralBoard,
+                }
+              : null
           );
 
-          if (response.ok) {
-            setAssociation((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    centralBoard: updatedCentralBoard,
-                  }
-                : null
-            );
-
-            toast.success("Rôle supprimé avec succès", {
-              description: `Le rôle "${roleToDelete?.role}" a été retiré du bureau central`,
-            });
-          } else {
-            throw new Error("Erreur serveur");
-          }
-        } catch (error) {
-          console.error("Erreur suppression rôle:", error);
-          toast.error("Erreur lors de la suppression", {
-            description: "Le rôle n'a pas pu être supprimé",
+          toast.success("Rôle supprimé avec succès", {
+            description: `Le rôle "${roleToDelete?.role}" a été retiré du bureau central`,
           });
-        } finally {
-          setConfirmDialog(null);
+        } else {
+          const errorData = await response.text();
+          console.error('❌ Erreur serveur:', response.status, errorData);
+          throw new Error(`Erreur serveur: ${response.status}`);
         }
+      } catch (error) {
+        console.error("❌ Erreur suppression rôle:", error);
+        toast.error("Erreur lors de la suppression", {
+          description: "Le rôle n'a pas pu être supprimé. Vérifiez la console pour plus de détails.",
+        });
+      } finally {
+        setConfirmDialog(null);
       }
-    );
-  };
+    },
+    onCancel: () => setConfirmDialog(null)
+  });
+};
 
   const handleAddCustomRole = async () => {
     if (!newCustomRole.name.trim() || !newCustomRole.description.trim()) {
@@ -1277,9 +1304,7 @@ export default function AssociationSettingsPage() {
           <CardContent className="space-y-6">
             {/* Bureau Central Actuel */}
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Bureau central actuel
-              </h3>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {association.centralBoard &&
                   Object.entries(association.centralBoard).map(
@@ -1461,14 +1486,25 @@ export default function AssociationSettingsPage() {
                               <Users className="h-4 w-4 mr-1" />
                               {role.userId ? "Modifier" : "Attribuer"}
                             </Button>
+
                             <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-600"
-                              onClick={() => handleDeleteCustomRole(roleKey)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+  size="sm"
+  variant="outline"
+  className={`text-red-600 ${role.userId ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-700'}`}
+  onClick={() => role.userId ? 
+    toast.warning("Rôle attribué", {
+      description: `Retirez d'abord l'assignation de ${role.name} avant de supprimer ce rôle.`
+    }) : 
+    handleDeleteCustomRole(roleKey)
+  }
+  disabled={!!role.userId}
+  title={role.userId ? `Rôle attribué à ${role.name}` : "Supprimer ce rôle"}
+>
+  <Trash2 className="h-4 w-4" />
+</Button>
+
+                            
+
                           </div>
                         </div>
                       </Card>
@@ -1633,43 +1669,40 @@ export default function AssociationSettingsPage() {
       )}
 
       {confirmDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-shrink-0">
-                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="h-5 w-5 text-red-600" />
-                </div>
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">
-                  {confirmDialog.title}
-                </h3>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-sm text-gray-600">{confirmDialog.message}</p>
-            </div>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={confirmDialog.onCancel}
-                className="flex-1"
-              >
-                Annuler
-              </Button>
-              <Button
-                onClick={confirmDialog.onConfirm}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-              >
-                Supprimer
-              </Button>
-            </div>
-          </div>
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+          <Trash2 className="h-5 w-5 text-red-600" />
         </div>
-      )}
+        <h3 className="text-lg font-medium text-gray-900">
+          {confirmDialog.title}
+        </h3>
+      </div>
+      
+      <p className="text-sm text-gray-600 mb-6">
+        {confirmDialog.message}
+      </p>
+      
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          onClick={confirmDialog.onCancel}
+          className="flex-1"
+        >
+          Annuler
+        </Button>
+        <Button
+          onClick={confirmDialog.onConfirm}
+          className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+        >
+          Supprimer
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
+      
     </div>
   );
 }

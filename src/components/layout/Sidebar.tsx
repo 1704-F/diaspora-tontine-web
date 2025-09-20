@@ -67,6 +67,13 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
               active: pathname.includes(`/modules/associations/${currentAssociationId}/sections`),
               description: 'Sections géographiques'
             },
+             { 
+              label: 'Documents', 
+              href: `/modules/associations/${currentAssociationId}/documents`, 
+              icon: FileText,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/documents`),
+              description: 'Attestations et rapports'
+            },
             { 
               label: 'Événements', 
               href: `/modules/associations/${currentAssociationId}/events`, 
@@ -74,14 +81,6 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
               active: pathname.includes(`/modules/associations/${currentAssociationId}/events`),
               disabled: true,
               description: 'Calendrier et événements'
-            },
-            { 
-              label: 'Documents', 
-              href: `/modules/associations/${currentAssociationId}/documents`, 
-              icon: FileText,
-              active: pathname.includes(`/modules/associations/${currentAssociationId}/documents`),
-              disabled: true,
-              description: 'Attestations et rapports'
             },
             { 
               label: 'Finances', 
