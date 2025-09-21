@@ -1,5 +1,5 @@
 // ============================================
-// LoginForm SIMPLIFIÉ - Direct connexion
+// LoginForm COMPLET - Layout Horizontal Optimisé
 // src/components/auth/LoginForm.tsx
 // ============================================
 "use client";
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
-import { DataReviewStep } from "./DataReviewStep";
 
 // Schémas de validation
 const phoneSchema = z.object({
@@ -41,6 +40,10 @@ const setupPinSchema = z
   .object({
     firstName: z.string().min(2, "Prénom requis"),
     lastName: z.string().min(2, "Nom requis"),
+    email: z.string().email("Email invalide").or(z.literal("")),
+    dateOfBirth: z.string().optional(),
+    gender: z.string().optional(),
+    address: z.string().optional(),
     pin: z
       .string()
       .length(4, "Le PIN doit contenir 4 chiffres")
@@ -62,12 +65,13 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
-  const [step, setStep] = useState<
-    "phone" | "pin" | "otp" | "review-data" | "setup-pin"
-  >("phone");
+  const [step, setStep] = useState<"phone" | "pin" | "otp" | "setup-profile" | "setup-pin">("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [newUser, setNewUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [existingDataSources, setExistingDataSources] = useState<any[]>([]);
+  const [selectedDataSource, setSelectedDataSource] = useState<any>(null);
+  const [profileData, setProfileData] = useState<any>(null); // Stocker les données du profil
 
   const router = useRouter();
   const { setUser, setToken } = useAuthStore();
@@ -76,11 +80,26 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const phoneForm = useForm<PhoneData>({ resolver: zodResolver(phoneSchema) });
   const otpForm = useForm<OtpData>({ resolver: zodResolver(otpSchema) });
   const pinForm = useForm<PinData>({ resolver: zodResolver(pinSchema) });
+  const profileForm = useForm<{
+    firstName: string;
+    lastName: string;
+    email?: string;
+    dateOfBirth?: string;
+    gender?: string;
+    address?: string;
+  }>({
+    resolver: zodResolver(z.object({
+      firstName: z.string().min(2, "Prénom requis"),
+      lastName: z.string().min(2, "Nom requis"),
+      email: z.string().email("Email invalide").or(z.literal("")),
+      dateOfBirth: z.string().optional(),
+      gender: z.string().optional(),
+      address: z.string().optional(),
+    }))
+  });
   const setupPinForm = useForm<SetupPinData>({
     resolver: zodResolver(setupPinSchema),
   });
-  const [existingDataSources, setExistingDataSources] = useState<any[]>([]);
-  const [selectedDataSource, setSelectedDataSource] = useState<any>(null);
 
   // Fonction utilitaire de redirection après succès
   const handleLoginSuccess = (user: any, token: string) => {
@@ -97,21 +116,66 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     router.push("/dashboard");
   };
 
-  const handleUseExistingData = async (selectedSource: any) => {
-    // Passer directement au setup-pin avec la source sélectionnée
-    setSelectedDataSource(selectedSource); // Nouveau state
-    setStep("setup-pin");
+  // Fonction pour récupérer les valeurs pré-remplies des données existantes
+  const getPrefilledValue = (fieldName: string) => {
+    if (existingDataSources.length === 0) return '';
+    
+    // Prendre la première source (plus prioritaire)
+    const firstSource = existingDataSources[0];
+    
+    switch (fieldName) {
+      case 'firstName':
+        return firstSource.data?.firstName || '';
+      case 'lastName':
+        return firstSource.data?.lastName || '';
+      case 'email':
+        return firstSource.data?.email || '';
+      case 'dateOfBirth':
+        // Formatter la date pour l'input date (YYYY-MM-DD)
+        if (firstSource.data?.dateOfBirth) {
+          const date = new Date(firstSource.data.dateOfBirth);
+          return date.toISOString().split('T')[0];
+        }
+        return '';
+      case 'gender':
+        return firstSource.data?.gender || '';
+      case 'address':
+        // Combiner adresse, ville, pays si disponibles
+        const parts = [
+          firstSource.data?.address,
+          firstSource.data?.city,
+          firstSource.data?.country
+        ].filter(Boolean);
+        return parts.join(', ');
+      default:
+        return '';
+    }
   };
 
-  const handleModifyAndUse = async (selectedSource: any) => {
-    // Même chose mais avec intention de modifier
-    setSelectedDataSource(selectedSource);
-    setStep("setup-pin");
+  // Fonction pour ignorer les données existantes
+  const handleIgnoreExistingData = () => {
+    // Vider les données existantes
+    setExistingDataSources([]);
+    setSelectedDataSource(null);
+    
+    // Reset le formulaire
+    profileForm.reset({
+      firstName: '',
+      lastName: '',
+      email: '',
+      dateOfBirth: '',
+      gender: '',
+      address: ''
+    });
+    
+    toast.info("Données ignorées, vous pouvez repartir à zéro");
   };
 
-  const handleManualEntry = () => {
-    // Ignorer les données existantes
+  // Nouvelle fonction: Sauvegarder le profil et passer au PIN
+  const saveProfile = async (data: any) => {
+    setProfileData(data);
     setStep("setup-pin");
+    toast.success("Profil sauvegardé ! Créez maintenant votre code PIN.");
   };
 
   // Étape 1: Vérifier si utilisateur existe et a un PIN
@@ -225,34 +289,32 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       if (result.success) {
         setNewUser(result.user);
 
-        // NOUVEAU : Vérifier s'il y a des données existantes
-        if (
-          result.nextStep === "review_existing_data" &&
-          result.existingData?.found
-        ) {
-          setExistingDataSources(result.existingData.sources); // Nouveau state nécessaire
-          setStep("review-data"); // Nouveau step
-          toast.success("Données existantes trouvées !");
+        // Vérifier s'il y a des données existantes
+        if (result.existingData?.found && result.existingData?.sources?.length > 0) {
+          setExistingDataSources(result.existingData.sources);
+          setStep("setup-profile");
+          toast.success("Données existantes trouvées et pré-remplies !");
         } else if (result.nextStep === "setup_pin") {
-          setStep("setup-pin");
-          toast.success("Compte créé ! Configurez votre PIN");
-        } else if (result.tokens) {
-          handleLoginSuccess(result.user, result.tokens.accessToken);
+          setStep("setup-profile");
+          toast.success("Compte créé !");
+        } else {
+          // Connexion réussie directe
+          if (result.tokens) {
+            handleLoginSuccess(result.user, result.tokens.accessToken);
+          }
         }
       } else {
-        toast.error(result.error || "Code OTP invalide");
+        toast.error(result.error || "Code OTP incorrect");
       }
     } catch (error) {
-      toast.error("Erreur de vérification");
+      toast.error("Erreur de connexion");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Étape 4: Configuration PIN (nouveaux utilisateurs)
-  const setupPin = async (data: SetupPinData) => {
-    if (!newUser) return;
-
+  // Étape 4: Configuration PIN final
+  const setupPin = async (data: { pin: string; confirmPin: string }) => {
     setIsLoading(true);
     try {
       const response = await fetch(
@@ -261,12 +323,18 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phoneNumber: newUser.phoneNumber,
+            phoneNumber: phoneNumber,
             pin: data.pin,
             confirmPin: data.confirmPin,
-            firstName: data.firstName,
-            lastName: data.lastName,
-            selectedDataSource: selectedDataSource,
+            // Utiliser les données du profil sauvegardées
+            firstName: profileData?.firstName,
+            lastName: profileData?.lastName,
+            email: profileData?.email || null,
+            dateOfBirth: profileData?.dateOfBirth || null,
+            gender: profileData?.gender || null,
+            address: profileData?.address || null,
+            // Indiquer si on utilise des données existantes
+            selectedDataSource: existingDataSources.length > 0 ? existingDataSources[0] : null
           }),
         }
       );
@@ -275,225 +343,331 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       if (result.success && result.tokens) {
         handleLoginSuccess(result.user, result.tokens.accessToken);
+        toast.success("Compte créé avec succès !");
       } else {
-        toast.error(result.error || "Erreur de configuration");
+        toast.error(result.error || "Erreur lors de la création du compte");
       }
     } catch (error) {
-      toast.error("Erreur de configuration");
+      toast.error("Erreur de connexion");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-6">
-      {/* En-tête */}
-      <div className="text-center">
-        <div className="flex items-center justify-center w-12 h-12 bg-primary-500 rounded-full mx-auto mb-4">
-          <span className="text-white font-bold text-xl">DT</span>
+    <div className="w-full min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      {/* Container principal avec largeur plus généreuse */}
+      <div className={`w-full bg-white rounded-lg shadow-sm border p-6 ${
+        step === "setup-profile" || step === "setup-pin" ? "max-w-lg" : "max-w-md"
+      }`}>
+        
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center w-12 h-12 bg-primary-500 rounded-full mx-auto mb-4">
+            <span className="text-white font-bold text-xl">DT</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">DiasporaTontine</h1>
+          <p className="text-gray-600 mt-2">Connectez-vous à votre espace</p>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">DiasporaTontine</h1>
-        <p className="text-gray-600 mt-2">Connectez-vous à votre espace</p>
+
+        {/* Étape 1: Numéro de téléphone */}
+        {step === "phone" && (
+          <form
+            onSubmit={phoneForm.handleSubmit(checkUser)}
+            className="space-y-4"
+          >
+            <div className="text-center">
+              <h3 className="font-medium text-gray-900">Connexion</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Saisissez votre numéro de téléphone
+              </p>
+            </div>
+
+            <Input
+              {...phoneForm.register("phoneNumber")}
+              label="Numéro de téléphone"
+              placeholder="+33 6 12 34 56 78"
+              error={phoneForm.formState.errors.phoneNumber?.message}
+              autoFocus
+            />
+
+            <Button type="submit" loading={isLoading} className="w-full">
+              Continuer
+            </Button>
+          </form>
+        )}
+
+        {/* Étape 2a: Saisie PIN (utilisateurs existants) */}
+        {step === "pin" && (
+          <form
+            onSubmit={pinForm.handleSubmit(loginWithPin)}
+            className="space-y-4"
+          >
+            <div className="text-center">
+              <h3 className="font-medium text-gray-900">Code PIN</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Saisissez votre code PIN à 4 chiffres
+              </p>
+            </div>
+
+            <Input
+              {...pinForm.register("pin")}
+              label="Code PIN"
+              type="password"
+              placeholder="••••"
+              maxLength={4}
+              error={pinForm.formState.errors.pin?.message}
+              autoFocus
+            />
+
+            <div className="flex space-x-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep("phone")}
+                className="flex-1"
+              >
+                Retour
+              </Button>
+              <Button type="submit" loading={isLoading} className="flex-1">
+                Se connecter
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Étape 2b: Vérification OTP */}
+        {step === "otp" && (
+          <form
+            onSubmit={otpForm.handleSubmit(verifyOtp)}
+            className="space-y-4"
+          >
+            <div className="text-center">
+              <h3 className="font-medium text-gray-900">Code de vérification</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Saisissez le code reçu par SMS au {phoneNumber}
+              </p>
+            </div>
+
+            <Input
+              {...otpForm.register("otpCode")}
+              label="Code OTP"
+              placeholder="123456"
+              maxLength={6}
+              error={otpForm.formState.errors.otpCode?.message}
+              autoFocus
+            />
+
+            <div className="flex space-x-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep("phone")}
+                className="flex-1"
+              >
+                Retour
+              </Button>
+              <Button type="submit" loading={isLoading} className="flex-1">
+                Vérifier
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Étape 3: Configuration Profil */}
+        {step === "setup-profile" && (
+          <form
+            onSubmit={profileForm.handleSubmit(saveProfile)}
+            className="space-y-4"
+          >
+            {/* Header du formulaire */}
+            <div className="text-center">
+              <h3 className="text-xl font-semibold text-gray-900">Vos informations</h3>
+              {existingDataSources.length > 0 ? (
+                <div className="space-y-2 mt-3">
+                  <p className="text-sm text-green-600 font-medium">
+                    Nous vous connaissons déjà !
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Nous avons trouvé vos informations dans {existingDataSources.length} source(s).
+                    Vérifiez et complétez si nécessaire.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 mt-2">
+                  Complétez vos informations personnelles
+                </p>
+              )}
+            </div>
+
+            {/* Champs en vertical */}
+            <div className="space-y-4">
+              
+              {/* Prénom */}
+              <Input
+                {...profileForm.register("firstName")}
+                label="Prénom *"
+                placeholder="Votre prénom"
+                defaultValue={getPrefilledValue('firstName')}
+                error={profileForm.formState.errors.firstName?.message}
+              />
+
+              {/* Nom */}
+              <Input
+                {...profileForm.register("lastName")}
+                label="Nom de famille *"
+                placeholder="Votre nom de famille"
+                defaultValue={getPrefilledValue('lastName')}
+                error={profileForm.formState.errors.lastName?.message}
+              />
+
+              {/* Téléphone - Non modifiable */}
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  Téléphone *
+                </label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-600">
+                  {phoneNumber}
+                </div>
+              </div>
+
+              {/* Email */}
+              <Input
+                {...profileForm.register("email")}
+                label="Email (optionnel)"
+                type="email"
+                placeholder="votre@email.com"
+                defaultValue={getPrefilledValue('email')}
+                error={profileForm.formState.errors.email?.message}
+              />
+
+              {/* Date de naissance */}
+              <Input
+                {...profileForm.register("dateOfBirth")}
+                label="Date de naissance (optionnel)"
+                type="date"
+                defaultValue={getPrefilledValue('dateOfBirth')}
+                error={profileForm.formState.errors.dateOfBirth?.message}
+              />
+
+              {/* Genre */}
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  Genre (optionnel)
+                </label>
+                <select
+                  {...profileForm.register("gender")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  defaultValue={getPrefilledValue('gender')}
+                >
+                  <option value="">Sélectionner</option>
+                  <option value="male">Homme</option>
+                  <option value="female">Femme</option>
+                </select>
+              </div>
+
+              {/* Adresse */}
+              <Input
+                {...profileForm.register("address")}
+                label="Adresse complète (optionnel)"
+                placeholder="Numéro, rue, ville, code postal, pays"
+                defaultValue={getPrefilledValue('address')}
+                error={profileForm.formState.errors.address?.message}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-gray-100 space-y-3">
+              <Button type="submit" loading={isLoading} className="w-full">
+                Continuer
+              </Button>
+              
+              {existingDataSources.length > 0 && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={handleIgnoreExistingData}
+                    className="text-sm text-gray-500 hover:text-gray-700 underline"
+                  >
+                    Ignorer les données trouvées et repartir à zéro
+                  </button>
+                </div>
+              )}
+
+              {/* Info sécurité discrète */}
+              {existingDataSources.length > 0 && (
+                <div className="text-xs text-gray-400 text-center">
+                  Vos données sont sécurisées et vous gardez le contrôle total
+                </div>
+              )}
+            </div>
+          </form>
+        )}
+
+        {/* Étape 4: Configuration PIN */}
+        {step === "setup-pin" && (
+          <form
+            onSubmit={setupPinForm.handleSubmit((data) => setupPin({ pin: data.pin, confirmPin: data.confirmPin }))}
+            className="space-y-4"
+          >
+            {/* Header du formulaire */}
+            <div className="text-center">
+              <h3 className="text-xl font-semibold text-gray-900">Sécuriser votre compte</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                Créez un code PIN à 4 chiffres pour sécuriser votre compte
+              </p>
+            </div>
+
+            {/* Récapitulatif du profil */}
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <h4 className="font-medium text-gray-900">Récapitulatif</h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p><span className="font-medium">Nom:</span> {profileData?.firstName} {profileData?.lastName}</p>
+                <p><span className="font-medium">Téléphone:</span> {phoneNumber}</p>
+                {profileData?.email && <p><span className="font-medium">Email:</span> {profileData.email}</p>}
+              </div>
+            </div>
+
+            {/* Section PIN */}
+            <div className="space-y-4">
+              <Input
+                {...setupPinForm.register("pin")}
+                label="Créer votre code PIN *"
+                type="password"
+                placeholder="4 chiffres"
+                maxLength={4}
+                error={setupPinForm.formState.errors.pin?.message}
+              />
+
+              <Input
+                {...setupPinForm.register("confirmPin")}
+                label="Confirmer votre code PIN *"
+                type="password"
+                placeholder="4 chiffres"
+                maxLength={4}
+                error={setupPinForm.formState.errors.confirmPin?.message}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-gray-100 space-y-3">
+              <Button type="submit" loading={isLoading} className="w-full">
+                Créer mon compte
+              </Button>
+              
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => setStep("setup-profile")}
+                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                >
+                  Retour aux informations
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
       </div>
-
-      {/* Étape 1: Numéro de téléphone */}
-      {step === "phone" && (
-        <form
-          onSubmit={phoneForm.handleSubmit(checkUser)}
-          className="space-y-4"
-        >
-          <div className="text-center">
-            <h3 className="font-medium text-gray-900">Connexion</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Saisissez votre numéro de téléphone
-            </p>
-          </div>
-
-          <Input
-            {...phoneForm.register("phoneNumber")}
-            label="Numéro de téléphone"
-            placeholder="+33 6 12 34 56 78"
-            error={phoneForm.formState.errors.phoneNumber?.message}
-            autoFocus
-          />
-
-          <Button type="submit" loading={isLoading} className="w-full">
-            Continuer
-          </Button>
-        </form>
-      )}
-
-      {/* Nouveau step : Révision des données existantes */}
-      {step === "review-data" && (
-        <DataReviewStep
-          phoneNumber={phoneNumber}
-          existingDataSources={existingDataSources}
-          onUseExistingData={handleUseExistingData}
-          onManualEntry={handleManualEntry}
-          onModifyAndUse={handleModifyAndUse}
-        />
-      )}
-
-      {/* Étape 2a: Code PIN (utilisateurs existants) */}
-      {step === "pin" && (
-        <form
-          onSubmit={pinForm.handleSubmit(loginWithPin)}
-          className="space-y-4"
-        >
-          <div className="text-center">
-            <h3 className="font-medium text-gray-900">Code PIN</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Saisissez votre code PIN à 4 chiffres
-            </p>
-          </div>
-
-          <Input
-            {...pinForm.register("pin")}
-            label="Code PIN"
-            type="password"
-            placeholder="1234"
-            maxLength={4}
-            error={pinForm.formState.errors.pin?.message}
-            autoFocus
-          />
-
-          <div className="flex space-x-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStep("phone")}
-              className="flex-1"
-            >
-              Retour
-            </Button>
-            <Button type="submit" loading={isLoading} className="flex-1">
-              Se connecter
-            </Button>
-          </div>
-
-          <div className="text-center">
-            <button
-              type="button"
-              className="text-sm text-primary-600 hover:text-primary-700"
-              onClick={() => {
-                requestOtp(phoneNumber);
-                toast.info("Code OTP envoyé par SMS");
-              }}
-            >
-              PIN oublié ? Utiliser un code SMS
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Étape 2b: Code OTP (nouveaux utilisateurs ou PIN oublié) */}
-      {step === "otp" && (
-        <form onSubmit={otpForm.handleSubmit(verifyOtp)} className="space-y-4">
-          <div className="text-center">
-            <h3 className="font-medium text-gray-900">Code de vérification</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Code envoyé au {phoneNumber}
-            </p>
-          </div>
-
-          <Input
-            {...otpForm.register("otpCode")}
-            label="Code à 6 chiffres"
-            placeholder="123456"
-            error={otpForm.formState.errors.otpCode?.message}
-            autoFocus
-            maxLength={6}
-          />
-
-          <div className="flex space-x-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStep("phone")}
-              className="flex-1"
-            >
-              Retour
-            </Button>
-            <Button type="submit" loading={isLoading} className="flex-1">
-              Vérifier
-            </Button>
-          </div>
-
-          <div className="text-center">
-            <button
-              type="button"
-              className="text-sm text-primary-600 hover:text-primary-700"
-              onClick={() => requestOtp(phoneNumber)}
-            >
-              Renvoyer le code
-            </button>
-          </div>
-        </form>
-      )}
-
-
-      {/* Étape 3: Configuration PIN (nouveaux utilisateurs) */}
-      {step === "setup-pin" && (
-        <form
-          onSubmit={setupPinForm.handleSubmit(setupPin)}
-          className="space-y-4"
-        >
-          <div className="text-center">
-            <h3 className="font-medium text-gray-900">
-              Configuration du compte
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Finalisez votre inscription
-            </p>
-          </div>
-
-          <Input
-            {...setupPinForm.register("firstName")}
-            label="Prénom"
-            placeholder="John"
-            error={setupPinForm.formState.errors.firstName?.message}
-          />
-
-          <Input
-            {...setupPinForm.register("lastName")}
-            label="Nom"
-            placeholder="Doe"
-            error={setupPinForm.formState.errors.lastName?.message}
-          />
-
-          <Input
-            {...setupPinForm.register("pin")}
-            label="Code PIN (4 chiffres)"
-            type="password"
-            placeholder="1234"
-            maxLength={4}
-            error={setupPinForm.formState.errors.pin?.message}
-          />
-
-          <Input
-            {...setupPinForm.register("confirmPin")}
-            label="Confirmer le code PIN"
-            type="password"
-            placeholder="1234"
-            maxLength={4}
-            error={setupPinForm.formState.errors.confirmPin?.message}
-          />
-
-          <div className="flex space-x-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStep("otp")}
-              className="flex-1"
-            >
-              Retour
-            </Button>
-            <Button type="submit" loading={isLoading} className="flex-1">
-              Finaliser
-            </Button>
-          </div>
-        </form>
-      )}
     </div>
   );
 }
