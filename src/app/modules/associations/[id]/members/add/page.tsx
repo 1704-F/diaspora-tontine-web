@@ -47,6 +47,9 @@ interface FormData {
   dateOfBirth: string
   gender: string
   address: string
+  city: string        // AJOUTÉ
+  country: string     // AJOUTÉ  
+  postalCode: string  // AJOUTÉ
   memberType: string
   sectionId: string
 }
@@ -61,17 +64,21 @@ export default function AddMemberPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [formData, setFormData] = useState<FormData>({
-    firstName: '',
-    lastName: '',
-    phoneNumber: '',
-    email: '',
-    dateOfBirth: '',
-    gender: '',
-    address: '',
-    memberType: '',
-    sectionId: ''
-  })
+ const [formData, setFormData] = useState<FormData>({
+  firstName: '',
+  lastName: '',
+  phoneNumber: '',
+  email: '',
+  dateOfBirth: '',
+  gender: '',
+  address: '',
+  city: '',           // AJOUTÉ
+  country: 'FR',      // AJOUTÉ avec défaut
+  postalCode: '',     // AJOUTÉ
+  memberType: '',
+  sectionId: ''
+})
+
 
   const associationId = params.id as string
 
@@ -150,54 +157,62 @@ export default function AddMemberPage() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    console.log('État du formulaire avant validation:', formData)
-    
-    if (!validateForm()) {
-      console.log('Validation échouée, erreurs:', errors)
-      return
-    }
-
-    setIsSubmitting(true)
-    try {
-      const addMemberData = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phoneNumber: formData.phoneNumber,
-        email: formData.email || null,
-        memberType: formData.memberType,
-        ...(association?.isMultiSection && { sectionId: parseInt(formData.sectionId) })
-      }
-
-      console.log('Données envoyées au backend:', addMemberData)
-
-      const addMemberResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(addMemberData)
-        }
-      )
-
-      if (addMemberResponse.ok) {
-        router.push(`/modules/associations/${associationId}/members`)
-      } else {
-        const errorResult = await addMemberResponse.json()
-        setErrors({ general: errorResult.error || 'Erreur lors de l\'ajout du membre' })
-      }
-
-    } catch (error) {
-      console.error('Erreur ajout membre:', error)
-      setErrors({ general: 'Erreur de connexion' })
-    } finally {
-      setIsSubmitting(false)
-    }
+  e.preventDefault()
+  
+  console.log('État du formulaire COMPLET:', formData)
+  
+  if (!validateForm()) {
+    console.log('Validation échouée, erreurs:', errors)
+    return
   }
+
+  setIsSubmitting(true)
+  try {
+    const addMemberData = {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      phoneNumber: formData.phoneNumber,
+      // CHAMPS OPTIONNELS dans l'ordre spécifié :
+      email: formData.email || null,
+      dateOfBirth: formData.dateOfBirth || null,
+      gender: formData.gender || null,
+      address: formData.address || null,
+      city: formData.city || null,
+      country: formData.country || "FR",
+      postalCode: formData.postalCode || null,
+      // CHAMPS ASSOCIATION :
+      memberType: formData.memberType,
+      ...(association?.isMultiSection && { sectionId: parseInt(formData.sectionId) })
+    }
+
+    console.log('Données COMPLÈTES envoyées au backend:', addMemberData)
+
+    const addMemberResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(addMemberData)
+      }
+    )
+
+    if (addMemberResponse.ok) {
+      router.push(`/modules/associations/${associationId}/members`)
+    } else {
+      const errorResult = await addMemberResponse.json()
+      setErrors({ general: errorResult.error || 'Erreur lors de l\'ajout du membre' })
+    }
+
+  } catch (error) {
+    console.error('Erreur ajout membre:', error)
+    setErrors({ general: 'Erreur de connexion' })
+  } finally {
+    setIsSubmitting(false)
+  }
+}
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     console.log(`Changement ${field}:`, value)
@@ -369,26 +384,81 @@ export default function AddMemberPage() {
                   <option value="">Sélectionner</option>
                   <option value="male">Homme</option>
                   <option value="female">Femme</option>
-                  <option value="other">Autre</option>
-                  <option value="prefer_not_to_say">Préfère ne pas dire</option>
                 </select>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Adresse (optionnel)
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="123 Rue de la Paix, 75000 Paris"
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
+            <div className="space-y-4">
+  <h3 className="text-lg font-medium text-gray-900">Adresse (optionnel)</h3>
+  
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      Adresse
+    </label>
+    <div className="relative">
+      <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+      <Input
+        placeholder="123 Rue de la Paix"
+        value={formData.address}
+        onChange={(e) => handleInputChange('address', e.target.value)}
+        className="pl-10"
+      />
+    </div>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Ville
+      </label>
+      <Input
+        placeholder="Paris"
+        value={formData.city}
+        onChange={(e) => handleInputChange('city', e.target.value)}
+      />
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Code postal
+      </label>
+      <Input
+        placeholder="75000"
+        value={formData.postalCode}
+        onChange={(e) => handleInputChange('postalCode', e.target.value)}
+      />
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Pays
+      </label>
+      <select
+        value={formData.country}
+        onChange={(e) => handleInputChange('country', e.target.value)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+      >
+        <option value="FR">France</option>
+        <option value="BE">Belgique</option>
+        <option value="IT">Italie</option>
+        <option value="ES">Espagne</option>
+        <option value="DE">Allemagne</option>
+        <option value="UK">Royaume-Uni</option>
+        <option value="US">États-Unis</option>
+        <option value="CA">Canada</option>
+        <option value="SN">Sénégal</option>
+        <option value="ML">Mali</option>
+        <option value="CI">Côte d'Ivoire</option>
+        <option value="BF">Burkina Faso</option>
+        <option value="TG">Togo</option>
+        <option value="BJ">Bénin</option>
+        <option value="GA">Gabon</option>
+        <option value="GN">Guinée</option>
+        <option value="Other">Autre</option>
+      </select>
+    </div>
+  </div>
+</div>
 
             <div className="border-t pt-4">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Configuration association</h3>

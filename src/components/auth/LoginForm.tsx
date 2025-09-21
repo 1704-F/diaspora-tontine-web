@@ -1,10 +1,10 @@
 // ============================================
-// LoginForm COMPLET - Layout Horizontal Optimisé
+// LoginForm COMPLET - Layout Horizontal Optimisé + DÉBOGAGE
 // src/components/auth/LoginForm.tsx
 // ============================================
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -87,6 +87,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     dateOfBirth?: string;
     gender?: string;
     address?: string;
+    postalCode?: string;
+city?: string;
+country?: string;
   }>({
     resolver: zodResolver(z.object({
       firstName: z.string().min(2, "Prénom requis"),
@@ -95,11 +98,51 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       dateOfBirth: z.string().optional(),
       gender: z.string().optional(),
       address: z.string().optional(),
+      postalCode: z.string().optional(),
+      city: z.string().optional(),
+      country: z.string().optional(),
     }))
   });
-  const setupPinForm = useForm<SetupPinData>({
-    resolver: zodResolver(setupPinSchema),
-  });
+  const pinOnlyForm = useForm<{pin: string; confirmPin: string}>({
+  resolver: zodResolver(z.object({
+    pin: z.string().length(4, "Le PIN doit contenir 4 chiffres").regex(/^\d{4}$/, "Le PIN ne doit contenir que des chiffres"),
+    confirmPin: z.string(),
+  }).refine((data) => data.pin === data.confirmPin, {
+    message: "Les codes PIN ne correspondent pas",
+    path: ["confirmPin"],
+  }))
+});
+
+  // 🔍 CORRECTION: Pré-remplir le formulaire quand les données existantes arrivent
+  useEffect(() => {
+    if (existingDataSources.length > 0) {
+      console.log('🔄 useEffect - Pré-remplissage avec données existantes');
+      console.log('🔄 existingDataSources:', existingDataSources);
+      
+      const firstSource = existingDataSources[0];
+      console.log('🔄 firstSource.data:', firstSource.data);
+      
+      const prefilledData = {
+        firstName: firstSource.data?.firstName || '',
+        lastName: firstSource.data?.lastName || '',
+        email: firstSource.data?.email || '',
+        dateOfBirth: firstSource.data?.dateOfBirth ? 
+          new Date(firstSource.data.dateOfBirth).toISOString().split('T')[0] : '',
+        gender: firstSource.data?.gender || '',
+        address: firstSource.data?.address || '',
+        postalCode: firstSource.data?.postalCode || '',
+city: firstSource.data?.city || '',
+country: firstSource.data?.country || ''
+        
+      };
+      
+      console.log('🔄 prefilledData calculé:', prefilledData);
+      
+      // Réinitialiser le formulaire avec les nouvelles valeurs
+      profileForm.reset(prefilledData);
+      console.log('🔄 Formulaire reset avec prefilledData');
+    }
+  }, [existingDataSources, profileForm]);
 
   // Fonction utilitaire de redirection après succès
   const handleLoginSuccess = (user: any, token: string) => {
@@ -116,38 +159,70 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     router.push("/dashboard");
   };
 
-  // Fonction pour récupérer les valeurs pré-remplies des données existantes
+  // 🔍 Fonction pour récupérer les valeurs pré-remplies des données existantes (avec débogage)
   const getPrefilledValue = (fieldName: string) => {
-    if (existingDataSources.length === 0) return '';
+    if (existingDataSources.length === 0) {
+      console.log('🔍 getPrefilledValue: Aucune source de données');
+      return '';
+    }
     
     // Prendre la première source (plus prioritaire)
     const firstSource = existingDataSources[0];
+    console.log(`🔍 getPrefilledValue(${fieldName}):`, {
+      sourceData: firstSource.data,
+      requestedField: fieldName,
+      fieldValue: firstSource.data?.[fieldName]
+    });
     
     switch (fieldName) {
       case 'firstName':
-        return firstSource.data?.firstName || '';
+        const firstName = firstSource.data?.firstName || '';
+        console.log('🔍 firstName résultat:', firstName);
+        return firstName;
+        
       case 'lastName':
-        return firstSource.data?.lastName || '';
+        const lastName = firstSource.data?.lastName || '';
+        console.log('🔍 lastName résultat:', lastName);
+        return lastName;
+        
       case 'email':
-        return firstSource.data?.email || '';
+        const email = firstSource.data?.email || '';
+        console.log('🔍 email résultat:', email);
+        return email;
+        
       case 'dateOfBirth':
-        // Formatter la date pour l'input date (YYYY-MM-DD)
+        console.log('🔍 dateOfBirth brut:', firstSource.data?.dateOfBirth);
         if (firstSource.data?.dateOfBirth) {
           const date = new Date(firstSource.data.dateOfBirth);
-          return date.toISOString().split('T')[0];
+          const formattedDate = date.toISOString().split('T')[0];
+          console.log('🔍 dateOfBirth formatté:', formattedDate);
+          return formattedDate;
         }
+        console.log('🔍 dateOfBirth: vide');
         return '';
+        
       case 'gender':
-        return firstSource.data?.gender || '';
+        const gender = firstSource.data?.gender || '';
+        console.log('🔍 gender résultat:', gender);
+        return gender;
+        
       case 'address':
-        // Combiner adresse, ville, pays si disponibles
+        console.log('🔍 address brut:', firstSource.data?.address);
+        console.log('🔍 city brut:', firstSource.data?.city);
+        console.log('🔍 country brut:', firstSource.data?.country);
+        
         const parts = [
           firstSource.data?.address,
           firstSource.data?.city,
           firstSource.data?.country
         ].filter(Boolean);
-        return parts.join(', ');
+        
+        const finalAddress = parts.join(', ');
+        console.log('🔍 address finale:', finalAddress);
+        return finalAddress;
+        
       default:
+        console.log(`🔍 Champ non géré: ${fieldName}`);
         return '';
     }
   };
@@ -165,7 +240,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       email: '',
       dateOfBirth: '',
       gender: '',
-      address: ''
+      address: '',
+      postalCode: '',
+      city: '',
+      country: ''
     });
     
     toast.info("Données ignorées, vous pouvez repartir à zéro");
@@ -268,7 +346,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     }
   };
 
-  // Étape 3: Vérification OTP
+  // 🔍 Étape 3: Vérification OTP (avec débogage complet)
   const verifyOtp = async (data: OtpData) => {
     setIsLoading(true);
     try {
@@ -286,8 +364,28 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       const result = await response.json();
 
+      // 🚨 DÉBOGAGE : Afficher toute la structure reçue
+      console.log('🔍 DÉBOGAGE - Réponse complète verify-otp:', JSON.stringify(result, null, 2));
+
       if (result.success) {
         setNewUser(result.user);
+
+        // 🚨 DÉBOGAGE : Vérifier existingData
+        console.log('🔍 existingData trouvé:', result.existingData?.found);
+        console.log('🔍 Nombre de sources:', result.existingData?.sources?.length || 0);
+        
+        if (result.existingData?.sources?.length > 0) {
+          console.log('🔍 Première source complète:', JSON.stringify(result.existingData.sources[0], null, 2));
+          console.log('🔍 Données de la première source:', result.existingData.sources[0].data);
+          
+          // Vérifier spécifiquement les champs problématiques
+          const firstSource = result.existingData.sources[0];
+          console.log('🔍 dateOfBirth:', firstSource.data?.dateOfBirth);
+          console.log('🔍 gender:', firstSource.data?.gender);
+          console.log('🔍 address:', firstSource.data?.address);
+          console.log('🔍 city:', firstSource.data?.city);
+          console.log('🔍 country:', firstSource.data?.country);
+        }
 
         // Vérifier s'il y a des données existantes
         if (result.existingData?.found && result.existingData?.sources?.length > 0) {
@@ -307,6 +405,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         toast.error(result.error || "Code OTP incorrect");
       }
     } catch (error) {
+      console.error('🔍 Erreur dans verifyOtp:', error);
       toast.error("Erreur de connexion");
     } finally {
       setIsLoading(false);
@@ -314,45 +413,69 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   };
 
   // Étape 4: Configuration PIN final
-  const setupPin = async (data: { pin: string; confirmPin: string }) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/setup-pin`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phoneNumber: phoneNumber,
-            pin: data.pin,
-            confirmPin: data.confirmPin,
-            // Utiliser les données du profil sauvegardées
-            firstName: profileData?.firstName,
-            lastName: profileData?.lastName,
-            email: profileData?.email || null,
-            dateOfBirth: profileData?.dateOfBirth || null,
-            gender: profileData?.gender || null,
-            address: profileData?.address || null,
-            // Indiquer si on utilise des données existantes
-            selectedDataSource: existingDataSources.length > 0 ? existingDataSources[0] : null
-          }),
-        }
-      );
+ // Étape 4: Configuration PIN final
+const setupPin = async (data: { pin: string; confirmPin: string }) => {
+  console.log('🔍 setupPin appelé avec:', data);
+  console.log('🔍 profileData:', profileData);
+  console.log('🔍 existingDataSources:', existingDataSources);
+  
+  setIsLoading(true);
+  try {
+    const requestBody = {
+      phoneNumber: phoneNumber,
+      pin: data.pin,
+      confirmPin: data.confirmPin,
+      // Utiliser les données du profil sauvegardées directement
+      firstName: profileData?.firstName,
+      lastName: profileData?.lastName,
+      email: profileData?.email || null,
+      dateOfBirth: profileData?.dateOfBirth || null,
+      gender: profileData?.gender || null,
+      // Champs d'adresse séparés
+      address: profileData?.address || null,
+      city: profileData?.city || null,
+      country: profileData?.country || null,
+      postalCode: profileData?.postalCode || null,
+      // Structure corrigée pour selectedDataSource
+      selectedDataSource: existingDataSources.length > 0 ? {
+        userId: existingDataSources[0].metadata.userId,
+        module: existingDataSources[0].module.name
+      } : null
+    };
 
-      const result = await response.json();
+    console.log('🔍 Corps de la requête setup-pin:', requestBody);
 
-      if (result.success && result.tokens) {
-        handleLoginSuccess(result.user, result.tokens.accessToken);
-        toast.success("Compte créé avec succès !");
-      } else {
-        toast.error(result.error || "Erreur lors de la création du compte");
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/auth/setup-pin`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
       }
-    } catch (error) {
-      toast.error("Erreur de connexion");
-    } finally {
-      setIsLoading(false);
+    );
+
+    const result = await response.json();
+    console.log('🔍 Réponse setup-pin:', result);
+
+    if (result.success && result.tokens) {
+      handleLoginSuccess(result.user, result.tokens.accessToken);
+      toast.success("Compte créé avec succès !");
+    } else {
+      console.error('🔍 Erreur setup-pin:', result);
+      toast.error(result.error || "Erreur lors de la création du compte");
+      
+      // Afficher les détails de validation si disponibles
+      if (result.details) {
+        console.error('🔍 Détails erreurs validation:', result.details);
+      }
     }
-  };
+  } catch (error) {
+    console.error('🔍 Erreur réseau setup-pin:', error);
+    toast.error("Erreur de connexion");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="w-full min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -372,30 +495,30 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
         {/* Étape 1: Numéro de téléphone */}
         {step === "phone" && (
-          <form
-            onSubmit={phoneForm.handleSubmit(checkUser)}
-            className="space-y-4"
-          >
-            <div className="text-center">
-              <h3 className="font-medium text-gray-900">Connexion</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Saisissez votre numéro de téléphone
-              </p>
-            </div>
+  <form
+    onSubmit={phoneForm.handleSubmit(checkUser)}  // ✅ CORRECT
+    className="space-y-4"
+  >
+    <div className="text-center">
+      <h3 className="font-medium text-gray-900">Connexion</h3>
+      <p className="text-sm text-gray-600 mt-1">
+        Saisissez votre numéro de téléphone
+      </p>
+    </div>
 
-            <Input
-              {...phoneForm.register("phoneNumber")}
-              label="Numéro de téléphone"
-              placeholder="+33 6 12 34 56 78"
-              error={phoneForm.formState.errors.phoneNumber?.message}
-              autoFocus
-            />
+    <Input
+      {...phoneForm.register("phoneNumber")}
+      label="Numéro de téléphone"
+      placeholder="+33 6 12 34 56 78"
+      error={phoneForm.formState.errors.phoneNumber?.message}
+      autoFocus
+    />
 
-            <Button type="submit" loading={isLoading} className="w-full">
-              Continuer
-            </Button>
-          </form>
-        )}
+    <Button type="submit" loading={isLoading} className="w-full">
+      Continuer
+    </Button>
+  </form>
+)}
 
         {/* Étape 2a: Saisie PIN (utilisateurs existants) */}
         {step === "pin" && (
@@ -500,7 +623,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               )}
             </div>
 
-            {/* Champs en vertical */}
+            {/* Champs en vertical - SANS defaultValue car useEffect s'en charge */}
             <div className="space-y-4">
               
               {/* Prénom */}
@@ -508,7 +631,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 {...profileForm.register("firstName")}
                 label="Prénom *"
                 placeholder="Votre prénom"
-                defaultValue={getPrefilledValue('firstName')}
                 error={profileForm.formState.errors.firstName?.message}
               />
 
@@ -517,7 +639,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 {...profileForm.register("lastName")}
                 label="Nom de famille *"
                 placeholder="Votre nom de famille"
-                defaultValue={getPrefilledValue('lastName')}
                 error={profileForm.formState.errors.lastName?.message}
               />
 
@@ -537,7 +658,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 label="Email (optionnel)"
                 type="email"
                 placeholder="votre@email.com"
-                defaultValue={getPrefilledValue('email')}
                 error={profileForm.formState.errors.email?.message}
               />
 
@@ -546,7 +666,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 {...profileForm.register("dateOfBirth")}
                 label="Date de naissance (optionnel)"
                 type="date"
-                defaultValue={getPrefilledValue('dateOfBirth')}
                 error={profileForm.formState.errors.dateOfBirth?.message}
               />
 
@@ -558,7 +677,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 <select
                   {...profileForm.register("gender")}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  defaultValue={getPrefilledValue('gender')}
                 >
                   <option value="">Sélectionner</option>
                   <option value="male">Homme</option>
@@ -567,13 +685,41 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               </div>
 
               {/* Adresse */}
-              <Input
-                {...profileForm.register("address")}
-                label="Adresse complète (optionnel)"
-                placeholder="Numéro, rue, ville, code postal, pays"
-                defaultValue={getPrefilledValue('address')}
-                error={profileForm.formState.errors.address?.message}
-              />
+<Input
+  {...profileForm.register("address")}
+  label="Adresse (optionnel)"
+  placeholder="123 rue de la paix"
+  error={profileForm.formState.errors.address?.message}
+/>
+
+{/* Ville */}
+<Input
+  {...profileForm.register("city")}
+  label="Ville (optionnel)"
+  placeholder="Paris"
+  error={profileForm.formState.errors.city?.message}
+/>
+
+{/* Code postal */}
+<Input
+  {...profileForm.register("postalCode")}
+  label="Code postal (optionnel)"
+  placeholder="75001"
+  error={profileForm.formState.errors.postalCode?.message}
+/>
+
+
+
+{/* Pays */}
+<Input
+  {...profileForm.register("country")}
+  label="Pays (optionnel)"
+  placeholder="France"
+  error={profileForm.formState.errors.country?.message}
+/>
+
+
+
             </div>
 
             {/* Actions */}
@@ -607,7 +753,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         {/* Étape 4: Configuration PIN */}
         {step === "setup-pin" && (
           <form
-            onSubmit={setupPinForm.handleSubmit((data) => setupPin({ pin: data.pin, confirmPin: data.confirmPin }))}
+            onSubmit={pinOnlyForm.handleSubmit((data) => setupPin({ pin: data.pin, confirmPin: data.confirmPin }))}
             className="space-y-4"
           >
             {/* Header du formulaire */}
@@ -631,21 +777,21 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             {/* Section PIN */}
             <div className="space-y-4">
               <Input
-                {...setupPinForm.register("pin")}
+                {...pinOnlyForm.register("pin")}
                 label="Créer votre code PIN *"
                 type="password"
                 placeholder="4 chiffres"
                 maxLength={4}
-                error={setupPinForm.formState.errors.pin?.message}
+                error={pinOnlyForm.formState.errors.pin?.message}
               />
 
               <Input
-                {...setupPinForm.register("confirmPin")}
+                {...pinOnlyForm.register("confirmPin")}
                 label="Confirmer votre code PIN *"
                 type="password"
                 placeholder="4 chiffres"
                 maxLength={4}
-                error={setupPinForm.formState.errors.confirmPin?.message}
+                error={pinOnlyForm.formState.errors.confirmPin?.message}
               />
             </div>
 
