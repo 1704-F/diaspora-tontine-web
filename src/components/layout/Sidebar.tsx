@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useRouter, usePathname, useParams } from 'next/navigation'
+import { useAuthStore } from '@/stores/authStore'
+import { useState, useEffect } from 'react'
 import { 
   Home, 
   Users, 
@@ -16,7 +18,15 @@ import {
   Plus,
   MapPin,
   FileText,
-  Calendar
+  Calendar,
+  TrendingUp,
+  CheckCircle,
+  Banknote,
+  BarChart3,
+  ChevronDown,
+  ChevronRight,
+  AlertCircle,
+  Clock
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -25,16 +35,66 @@ interface SidebarProps {
   onClose?: () => void
 }
 
+interface NavigationItem {
+  label: string
+  href: string
+  icon: any
+  active: boolean
+  description?: string
+  badge?: number | string
+  disabled?: boolean
+  roles?: string[]
+  submenu?: NavigationItem[]
+}
+
 export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
+  const { user } = useAuthStore()
+  
+  // État pour gérer l'ouverture des sous-menus
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['finances'])
   
   // Récupérer l'ID de l'association courante depuis l'URL
   const currentAssociationId = params?.id as string
 
+  // État pour les notifications (à remplacer par de vraies données API)
+  const [notifications, setNotifications] = useState({
+    pendingValidations: 0,
+    pendingPayments: 0,
+    newMembers: 0
+  })
+
+  // Simuler le chargement des notifications
+  useEffect(() => {
+    if (currentAssociationId) {
+      // TODO: Remplacer par de vrais appels API
+      setNotifications({
+        pendingValidations: 3, // Exemple
+        pendingPayments: 2,    // Exemple
+        newMembers: 1          // Exemple
+      })
+    }
+  }, [currentAssociationId])
+
+  // Vérifier si l'utilisateur a certains rôles
+  const hasRole = (roles: string[]) => {
+    if (!user?.roles || !roles) return true
+    return roles.some(role => user.roles.includes(role))
+  }
+
+  // Gérer l'expansion des sous-menus
+  const toggleSubmenu = (menuKey: string) => {
+    setExpandedMenus(prev => 
+      prev.includes(menuKey) 
+        ? prev.filter(key => key !== menuKey)
+        : [...prev, menuKey]
+    )
+  }
+
   // Navigation items selon le module actif
-  const getNavigationItems = () => {
+  const getNavigationItems = (): NavigationItem[] => {
     switch(currentModule) {
       case 'associations':
         // Si on est dans une association spécifique, afficher le menu détaillé
@@ -44,21 +104,76 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
               label: 'Vue d\'ensemble', 
               href: `/modules/associations/${currentAssociationId}`, 
               icon: Home,
-              active: pathname === `/modules/associations/${currentAssociationId}`
+              active: pathname === `/modules/associations/${currentAssociationId}`,
+              description: 'Tableau de bord'
             },
             { 
               label: 'Membres', 
               href: `/modules/associations/${currentAssociationId}/members`, 
               icon: Users,
               active: pathname.includes(`/modules/associations/${currentAssociationId}/members`),
-              description: 'Gestion des membres'
+              description: 'Gestion des membres',
+              badge: notifications.newMembers > 0 ? notifications.newMembers : undefined
             },
             { 
               label: 'Cotisations', 
               href: `/modules/associations/${currentAssociationId}/cotisations`, 
               icon: CreditCard,
               active: pathname.includes(`/modules/associations/${currentAssociationId}/cotisations`),
-              description: 'Dashboard et paiements'
+              description: 'Paiements mensuels'
+            },
+            { 
+              label: 'Finances', 
+              href: `/modules/associations/${currentAssociationId}/finances`, 
+              icon: Wallet,
+              active: pathname.includes(`/modules/associations/${currentAssociationId}/finances`),
+              description: 'Gestion financière',
+              badge: (notifications.pendingValidations + notifications.pendingPayments) > 0 ? 
+                     (notifications.pendingValidations + notifications.pendingPayments) : undefined,
+              submenu: [
+                {
+                  label: 'Tableau de bord',
+                  href: `/modules/associations/${currentAssociationId}/finances`,
+                  icon: BarChart3,
+                  active: pathname === `/modules/associations/${currentAssociationId}/finances`,
+                  description: 'Vue d\'ensemble'
+                },
+                {
+                  label: 'Validation demandes',
+                  href: `/modules/associations/${currentAssociationId}/finances/validations`,
+                  icon: CheckCircle,
+                  active: pathname.includes('/validations'),
+                  description: 'Approuver les dépenses',
+                  roles: ['president', 'tresorier', 'secretaire'],
+                  badge: notifications.pendingValidations > 0 ? notifications.pendingValidations : undefined
+                },
+                {
+                  label: 'Paiements',
+                  href: `/modules/associations/${currentAssociationId}/finances/payments`,
+                  icon: Banknote,
+                  active: pathname.includes('/payments'),
+                  description: 'Confirmer les paiements',
+                  roles: ['tresorier'],
+                  badge: notifications.pendingPayments > 0 ? notifications.pendingPayments : undefined
+                },
+                {
+                  label: 'Revenus',
+                  href: `/modules/associations/${currentAssociationId}/finances/income`,
+                  icon: TrendingUp,
+                  active: pathname.includes('/income'),
+                  description: 'Dons et subventions',
+                  roles: ['president', 'tresorier', 'secretaire']
+                },
+                {
+                  label: 'Prêts',
+                  href: `/modules/associations/${currentAssociationId}/finances/loans`,
+                  icon: Clock,
+                  active: pathname.includes('/loans'),
+                  description: 'Suivi remboursements',
+                  roles: ['president', 'tresorier', 'secretaire'],
+                  disabled: true
+                }
+              ]
             },
             { 
               label: 'Sections', 
@@ -67,7 +182,7 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
               active: pathname.includes(`/modules/associations/${currentAssociationId}/sections`),
               description: 'Sections géographiques'
             },
-             { 
+            { 
               label: 'Documents', 
               href: `/modules/associations/${currentAssociationId}/documents`, 
               icon: FileText,
@@ -75,27 +190,11 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
               description: 'Attestations et rapports'
             },
             { 
-              label: 'Événements', 
-              href: `/modules/associations/${currentAssociationId}/events`, 
-              icon: Calendar,
-              active: pathname.includes(`/modules/associations/${currentAssociationId}/events`),
-              disabled: true,
-              description: 'Calendrier et événements'
-            },
-            { 
-              label: 'Finances', 
-              href: `/modules/associations/${currentAssociationId}/finances`, 
-              icon: PieChart,
-              active: pathname.includes(`/modules/associations/${currentAssociationId}/finances`),
-              disabled: true,
-              description: 'Vue globale financière'
-            },
-            { 
               label: 'Paramètres', 
               href: `/modules/associations/${currentAssociationId}/settings`, 
               icon: Settings,
               active: pathname.includes(`/modules/associations/${currentAssociationId}/settings`),
-              description: 'Configuration association'
+              description: 'Configuration'
             }
           ]
         }
@@ -154,7 +253,101 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
     }
   }
 
-  const navigationItems = getNavigationItems()
+  // Filtrer les items selon les rôles
+  const filterByRole = (items: NavigationItem[]): NavigationItem[] => {
+    return items.filter(item => {
+      if (item.roles && !hasRole(item.roles)) {
+        return false
+      }
+      if (item.submenu) {
+        item.submenu = filterByRole(item.submenu)
+      }
+      return true
+    })
+  }
+
+  const navigationItems = filterByRole(getNavigationItems())
+
+  // Composant pour rendre un item de navigation
+  const NavigationItemComponent = ({ item, isSubmenu = false }: { item: NavigationItem, isSubmenu?: boolean }) => {
+    const Icon = item.icon
+    const isDisabled = item.disabled || item.href === '#'
+    const hasSubmenu = item.submenu && item.submenu.length > 0
+    const isExpanded = expandedMenus.includes(item.label.toLowerCase())
+    
+    return (
+      <div>
+        <Button
+          variant={item.active ? "default" : "ghost"}
+          className={cn(
+            "w-full justify-start h-auto p-3 text-sm",
+            isSubmenu && "ml-4 pl-6",
+            isDisabled && "opacity-50 cursor-not-allowed"
+          )}
+          disabled={isDisabled}
+          onClick={() => {
+            if (hasSubmenu) {
+              toggleSubmenu(item.label.toLowerCase())
+            } else if (!isDisabled && item.href !== '#') {
+              router.push(item.href)
+              onClose?.()
+            }
+          }}
+        >
+          <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
+          <div className="flex-1 text-left">
+            <div className="font-medium">{item.label}</div>
+            {item.description && (
+              <div className="text-xs text-gray-500 mt-0.5">
+                {item.description}
+              </div>
+            )}
+          </div>
+          
+          {/* Badge */}
+          {item.badge && (
+            <Badge 
+              variant={typeof item.badge === 'number' && item.badge > 0 ? "destructive" : "secondary"} 
+              className="ml-auto text-xs"
+            >
+              {item.badge}
+            </Badge>
+          )}
+          
+          {/* Indicateur "Bientôt" */}
+          {isDisabled && (
+            <Badge variant="secondary" className="ml-auto text-xs bg-gray-200 text-gray-500">
+              Bientôt
+            </Badge>
+          )}
+          
+          {/* Chevron pour sous-menu */}
+          {hasSubmenu && (
+            <div className="ml-2">
+              {isExpanded ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </div>
+          )}
+        </Button>
+
+        {/* Sous-menu */}
+        {hasSubmenu && isExpanded && (
+          <div className="mt-1 space-y-1">
+            {item.submenu!.map((subItem) => (
+              <NavigationItemComponent 
+                key={subItem.label} 
+                item={subItem} 
+                isSubmenu={true} 
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -215,48 +408,9 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigationItems.map((item) => {
-              const Icon = item.icon
-              const isDisabled = item.disabled || item.href === '#'
-              
-              return (
-                <Button
-                  key={item.label}
-                  variant={item.active ? "default" : "ghost"}
-                  className={cn(
-                    "w-full justify-start h-auto p-3 text-sm",
-                    isDisabled && "opacity-50 cursor-not-allowed"
-                  )}
-                  disabled={isDisabled}
-                  onClick={() => {
-                    if (!isDisabled && item.href !== '#') {
-                      router.push(item.href)
-                      onClose?.()
-                    }
-                  }}
-                >
-                  <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
-                  <div className="flex-1 text-left">
-                    <div className="font-medium">{item.label}</div>
-                    {item.description && (
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {item.description}
-                      </div>
-                    )}
-                  </div>
-                  {item.badge && (
-                    <Badge variant="secondary" className="ml-auto text-xs">
-                      {item.badge}
-                    </Badge>
-                  )}
-                  {isDisabled && (
-                    <Badge variant="secondary" className="ml-auto text-xs bg-gray-200 text-gray-500">
-                      Bientôt
-                    </Badge>
-                  )}
-                </Button>
-              )
-            })}
+            {navigationItems.map((item) => (
+              <NavigationItemComponent key={item.label} item={item} />
+            ))}
           </nav>
 
           {/* Quick actions - Si on est dans une association */}
@@ -271,6 +425,32 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
                   size="sm"
                   className="w-full justify-start text-xs"
                   onClick={() => {
+                    router.push(`/modules/associations/${currentAssociationId}/finances/create`)
+                    onClose?.()
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-2" />
+                  Nouvelle demande
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-xs"
+                  onClick={() => {
+                    router.push(`/modules/associations/${currentAssociationId}/finances/income`)
+                    onClose?.()
+                  }}
+                >
+                  <TrendingUp className="h-3 w-3 mr-2" />
+                  Ajouter revenu
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-xs"
+                  onClick={() => {
                     router.push(`/modules/associations/${currentAssociationId}/members/add`)
                     onClose?.()
                   }}
@@ -278,6 +458,7 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
                   <UserPlus className="h-3 w-3 mr-2" />
                   Ajouter membre
                 </Button>
+                
                 <Button
                   variant="ghost"
                   size="sm"
@@ -294,11 +475,33 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
             </div>
           )}
 
+          {/* Notifications summary */}
+          {currentAssociationId && (notifications.pendingValidations > 0 || notifications.pendingPayments > 0) && (
+            <div className="p-4 border-t border-gray-200 bg-yellow-50">
+              <div className="flex items-center text-xs text-yellow-800">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                <span className="font-medium">
+                  {notifications.pendingValidations + notifications.pendingPayments} action(s) requise(s)
+                </span>
+              </div>
+              <div className="text-xs text-yellow-700 mt-1">
+                {notifications.pendingValidations > 0 && `${notifications.pendingValidations} validation(s)`}
+                {notifications.pendingValidations > 0 && notifications.pendingPayments > 0 && " • "}
+                {notifications.pendingPayments > 0 && `${notifications.pendingPayments} paiement(s)`}
+              </div>
+            </div>
+          )}
+
           {/* Footer info */}
           <div className="p-4 border-t border-gray-200">
             <div className="text-xs text-gray-500">
               <div className="font-medium">DiasporaTontine v1.0</div>
               <div className="capitalize">Module: {currentModule}</div>
+              {user?.roles && (
+                <div className="text-xs mt-1">
+                  Rôle: {user.roles.join(', ')}
+                </div>
+              )}
             </div>
           </div>
         </div>
