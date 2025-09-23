@@ -915,7 +915,7 @@ export default function IncomePage() {
                 <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900">Notifications revenus importants</p>
-                    <p className="text-sm text-gray-600">Alerter le bureau pour les revenus > 500€</p>
+                    <p className="text-sm text-gray-600">Alerter le bureau pour les revenus {'>'}500€</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" defaultChecked className="sr-only peer" />
@@ -926,7 +926,7 @@ export default function IncomePage() {
                 <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900">Validation bureau pour montants élevés</p>
-                    <p className="text-sm text-gray-600">Validation obligatoire du bureau pour revenus > 1000€</p>
+                    <p className="text-sm text-gray-600">Validation obligatoire du bureau pour revenus {'>'}1000€</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" />

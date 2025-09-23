@@ -171,7 +171,6 @@ export function Sidebar({ currentModule, isOpen = true, onClose }: SidebarProps)
                   active: pathname.includes('/loans'),
                   description: 'Suivi remboursements',
                   roles: ['president', 'tresorier', 'secretaire'],
-                  disabled: true
                 }
               ]
             },
