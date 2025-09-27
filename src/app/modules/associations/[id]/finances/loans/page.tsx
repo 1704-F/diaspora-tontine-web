@@ -129,7 +129,7 @@ export default function LoansPage() {
   useEffect(() => {
     if (associationId && token && user) {
       if (!canUserManageLoans()) {
-        setError("Vous n'avez pas les droits pour gérer les prêts");
+        setError("Vous n'avez pas les droits pour gérer les prêts"); 
         return;
       }
       fetchData();

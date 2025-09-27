@@ -17,8 +17,6 @@ import {
   TrendingUp,
   AlertTriangle,
   Clock,
-  CheckCircle,
-  XCircle,
   Euro,
   FileText,
   Users,
@@ -96,26 +94,30 @@ export default function FinancesPage() {
   };
 
   const fetchExpenseRequests = async () => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests?limit=10&sortBy=createdAt&sortOrder=DESC`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+  try {
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests?limit=10&sortBy=created_at&sortOrder=DESC`;
+    console.log('🔍 Fetching from URL:', url);
+    
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-      if (response.ok) {
-        const result: ExpenseRequestsResponse = await response.json();
-        setExpenseRequests(result.expenseRequests || []);
-      } else {
-        console.warn("Aucune demande trouvée");
-        setExpenseRequests([]);
-      }
-    } catch (error) {
-      console.error("Erreur chargement demandes:", error);
+    console.log('📡 Response status:', response.status);
+
+    if (response.ok) {
+      const result: ExpenseRequestsResponse = await response.json();
+      console.log('📋 Résultat reçu:', result);
+      console.log('📊 Nombre de demandes:', result.expenseRequests?.length);
+      setExpenseRequests(result.expenseRequests || []);
+    } else {
+      console.warn("❌ Erreur réponse:", response.status);
       setExpenseRequests([]);
     }
-  };
+  } catch (error) {
+    console.error("❌ Erreur fetch:", error);
+    setExpenseRequests([]);
+  }
+};
 
   const fetchFinancialSummary = async () => {
     try {
@@ -148,34 +150,8 @@ export default function FinancesPage() {
     } catch (error) {
       console.error("Erreur chargement résumé financier:", error);
       toast.error("Impossible de charger le résumé financier");
-      // En cas d'erreur API, utiliser des données par défaut
       setFinancialSummary(null);
     }
-  };
-
-  // Fonctions utilitaires avec gestion des rôles
-  const canCreateExpense = (expenseType: string): boolean => {
-    if (!user?.roles) return false;
-    
-    // Les membres peuvent uniquement créer des aides aux membres
-    if (expenseType === 'aide_membre') {
-      return true; // Tous les membres peuvent demander une aide
-    }
-    
-    // Les autres types nécessitent des rôles spéciaux
-    const bureauRoles = ['president', 'tresorier', 'secretaire'];
-    return user.roles.some(role => bureauRoles.includes(role));
-  };
-
-  const canValidateExpenses = (): boolean => {
-    if (!user?.roles) return false;
-    const validatorRoles = ['president', 'tresorier', 'secretaire', 'admin_association'];
-    return user.roles.some(role => validatorRoles.includes(role));
-  };
-
-  const canProcessPayments = (): boolean => {
-    if (!user?.roles) return false;
-    return user.roles.includes('tresorier') || user.roles.includes('admin_association');
   };
 
   const getExpenseTypeIcon = (type: string) => {
@@ -234,23 +210,6 @@ export default function FinancesPage() {
     }
   };
 
-  // Filtrer les demandes en attente de validation pour l'utilisateur actuel
-  const getPendingValidations = (): ExpenseRequest[] => {
-    if (!canValidateExpenses()) return [];
-    
-    return expenseRequests.filter(request => {
-      // Seules les demandes en attente ou en cours de review
-      if (!['pending', 'under_review'].includes(request.status)) return false;
-      
-      // Vérifier si l'utilisateur peut valider ce type de demande
-      const workflowRules = association?.workflowRules;
-      if (!workflowRules || !workflowRules[request.expenseType]) return true;
-      
-      const requiredValidators = workflowRules[request.expenseType].validators || [];
-      return user?.roles?.some(role => requiredValidators.includes(role));
-    });
-  };
-
   if (isLoading) {
     return (
       <ProtectedRoute requiredModule="associations">
@@ -278,8 +237,6 @@ export default function FinancesPage() {
     );
   }
 
-  const pendingValidations = getPendingValidations();
-
   return (
     <ProtectedRoute requiredModule="associations">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -299,16 +256,14 @@ export default function FinancesPage() {
             </div>
           </div>
           
-          {/* Bouton conditionnel selon les droits */}
-          {canCreateExpense('aide_membre') && (
-            <Button
-              onClick={() => router.push(`/modules/associations/${associationId}/finances/create`)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nouvelle demande
-            </Button>
-          )}
+          {/* Bouton "Nouvelle demande" - Le backend gérera les permissions */}
+          <Button
+            onClick={() => router.push(`/modules/associations/${associationId}/finances/create`)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nouvelle demande
+          </Button>
         </div>
 
         {/* Navigation tabs */}
@@ -325,6 +280,7 @@ export default function FinancesPage() {
               <Wallet className="h-4 w-4 inline mr-2" />
               Tableau de bord
             </button>
+            
             <button
               onClick={() => setActiveTab('requests')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -337,25 +293,17 @@ export default function FinancesPage() {
               Toutes les demandes
             </button>
             
-            {/* Tab validation seulement pour les validateurs */}
-            {canValidateExpenses() && (
-              <button
-                onClick={() => setActiveTab('pending')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm relative ${
-                  activeTab === 'pending'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Clock className="h-4 w-4 inline mr-2" />
-                En attente de validation
-                {pendingValidations.length > 0 && (
-                  <Badge variant="danger" className="ml-2 text-xs">
-                    {pendingValidations.length}
-                  </Badge>
-                )}
-              </button>
-            )}
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm relative ${
+                activeTab === 'pending'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Clock className="h-4 w-4 inline mr-2" />
+              En attente de validation
+            </button>
           </nav>
         </div>
 
@@ -522,7 +470,7 @@ export default function FinancesPage() {
                   </div>
                 </CardContent>
               </Card>
-        )}
+            )}
           </div>
         )}
 
@@ -544,15 +492,13 @@ export default function FinancesPage() {
                   <div className="text-center py-8">
                     <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-500">Aucune demande financière pour le moment</p>
-                    {canCreateExpense('aide_membre') && (
-                      <Button
-                        className="mt-4"
-                        onClick={() => router.push(`/modules/associations/${associationId}/finances/create`)}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Créer la première demande
-                      </Button>
-                    )}
+                    <Button
+                      className="mt-4"
+                      onClick={() => router.push(`/modules/associations/${associationId}/finances/create`)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Créer la première demande
+                    </Button>
                   </div>
                 ) : (
                   expenseRequests.map((request) => {
@@ -589,7 +535,7 @@ export default function FinancesPage() {
                           </div>
                           <div className="text-right ml-4">
                             <p className="font-semibold text-lg text-gray-900">
-                              {request.amountRequested.toFixed(2)} {request.currency}
+                             {parseFloat(request.amountRequested).toFixed(2)} {request.currency}
                             </p>
                             <div className="flex items-center mt-1">
                               {getStatusBadge(request.status)}
@@ -620,86 +566,19 @@ export default function FinancesPage() {
         )}
 
         {/* Pending validations tab */}
-        {activeTab === 'pending' && canValidateExpenses() && (
+        {activeTab === 'pending' && (
           <Card>
             <CardHeader>
-              <CardTitle>
-                Demandes en attente de validation
-                {pendingValidations.length > 0 && (
-                  <Badge variant="danger" className="ml-2">
-                    {pendingValidations.length}
-                  </Badge>
-                )}
-              </CardTitle>
+              <CardTitle>En attente de validation</CardTitle>
             </CardHeader>
             <CardContent>
-              {pendingValidations.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Aucune demande en attente de validation</p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    Toutes les demandes ont été traitées
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {pendingValidations.map((request) => {
-                    const Icon = getExpenseTypeIcon(request.expenseType);
-                    return (
-                      <div
-                        key={request.id}
-                        className="border border-yellow-200 bg-yellow-50 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => router.push(`/modules/associations/${associationId}/finances/${request.id}`)}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-2">
-                              <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                                <Icon className="h-4 w-4 text-yellow-600" />
-                              </div>
-                              <div>
-                                <h3 className="font-medium text-gray-900">{request.title}</h3>
-                                <p className="text-sm text-gray-600">{getExpenseTypeLabel(request.expenseType)}</p>
-                              </div>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-3">{request.description}</p>
-                            <div className="flex items-center space-x-4 text-sm text-gray-500">
-                              <span>Par {request.requester.firstName} {request.requester.lastName}</span>
-                              <span>•</span>
-                              <span>{new Date(request.createdAt).toLocaleDateString()}</span>
-                              {request.urgencyLevel === 'critical' && (
-                                <>
-                                  <span>•</span>
-                                  <Badge variant="danger" className="text-xs">URGENT</Badge>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right ml-4">
-                            <p className="font-semibold text-lg text-gray-900">
-                              {request.amountRequested.toFixed(2)} {request.currency}
-                            </p>
-                            <div className="flex items-center mt-1">
-                              {getStatusBadge(request.status)}
-                              {getUrgencyBadge(request.urgencyLevel)}
-                            </div>
-                            <Button
-                              size="sm"
-                              className="mt-2 bg-yellow-600 hover:bg-yellow-700 text-white"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/modules/associations/${associationId}/finances/${request.id}/validate`);
-                              }}
-                            >
-                              Valider
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="text-center py-8">
+                <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500">Fonctionnalité en cours de développement</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  Les demandes nécessitant votre validation apparaîtront ici
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}

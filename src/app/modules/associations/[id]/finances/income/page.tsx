@@ -11,7 +11,13 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/stores/authStore";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/Select";
 import {
   ArrowLeft,
   Plus,
@@ -37,22 +43,24 @@ import {
   AlertTriangle
 } from "lucide-react";
 
+// 🔧 INTERFACES CORRIGÉES SELON BACKEND
 interface IncomeEntry {
   id: number;
   incomeType: string;
   amount: number;
   currency: string;
-  source: string;
+  title: string;                    // ✅ Correspond au backend
+  sourceName: string;               // ✅ Correspond au backend
   description: string;
   receivedDate: string;
-  receivedMethod: string;
-  reference?: string;
+  paymentMethod: string;            // ✅ Correspond au backend
+  manualReference?: string;         // ✅ Correspond au backend
   documents?: Array<{
     type: string;
     url: string;
     name: string;
   }>;
-  validatedBy?: {
+  validatedByUser?: {               // ✅ Relation backend
     id: number;
     firstName: string;
     lastName: string;
@@ -60,18 +68,19 @@ interface IncomeEntry {
   validatedAt?: string;
   status: string;
   createdAt: string;
-  createdBy: {
+  registeredByUser: {               // ✅ Relation backend
     firstName: string;
     lastName: string;
   };
-  fiscalReceipt: boolean;
+  receiptGenerated: boolean;        // ✅ Correspond au backend
+  receiptNumber?: string;           // ✅ Correspond au backend
 }
 
 interface IncomeType {
   key: string;
   label: string;
   description: string;
-  fiscalReceipt: boolean;
+  requiresReceipt: boolean;         // ✅ Correspond au backend
   validationRequired: boolean;
   maxAmount?: number;
 }
@@ -79,12 +88,13 @@ interface IncomeType {
 interface NewIncomeData {
   incomeType: string;
   amount: number;
-  source: string;
+  title: string;                    // ✅ Correspond au backend
+  sourceName: string;               // ✅ Correspond au backend
   description: string;
   receivedDate: string;
-  receivedMethod: string;
-  reference: string;
-  fiscalReceipt: boolean;
+  paymentMethod: string;            // ✅ Correspond au backend
+  manualReference: string;          // ✅ Correspond au backend
+  receiptGenerated: boolean;        // ✅ Correspond au backend
   justificatifFile?: File;
 }
 
@@ -108,17 +118,18 @@ export default function IncomePage() {
   const [filterPeriod, setFilterPeriod] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Modal nouveau revenu
+  // Modal nouveau revenu - ✅ ÉTAT CORRIGÉ
   const [showNewIncomeModal, setShowNewIncomeModal] = useState(false);
   const [newIncomeData, setNewIncomeData] = useState<NewIncomeData>({
     incomeType: '',
     amount: 0,
-    source: '',
+    title: '',                      // ✅ Nouveau champ
+    sourceName: '',                 // ✅ Nouveau champ
     description: '',
     receivedDate: new Date().toISOString().split('T')[0],
-    receivedMethod: 'bank_transfer',
-    reference: '',
-    fiscalReceipt: false,
+    paymentMethod: 'bank_transfer', // ✅ Corrigé
+    manualReference: '',            // ✅ Corrigé
+    receiptGenerated: false,        // ✅ Corrigé
     justificatifFile: undefined
   });
 
@@ -137,10 +148,8 @@ export default function IncomePage() {
   }, [associationId, token, user]);
 
   const canUserManageIncome = () => {
-    return user?.roles?.some((role: string) => 
-      ['president', 'tresorier', 'secretaire'].includes(role)
-    );
-  };
+  return user?.role && ['president', 'tresorier', 'secretaire', 'admin_association'].includes(user.role);
+};
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -151,16 +160,17 @@ export default function IncomePage() {
         fetchIncomeTypes()
       ]);
     } catch (error) {
-      console.error("Erreur chargement données:", error);
+      console.error("Erreur chargement données:", error); 
       setError("Erreur de chargement des données");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ✅ URL CORRIGÉE AVEC /api/v1
   const fetchAssociation = async () => {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+      `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -172,9 +182,10 @@ export default function IncomePage() {
     }
   };
 
+  // ✅ URL ET STRUCTURE RÉPONSE CORRIGÉES
   const fetchIncomeEntries = async () => {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-entries?sortBy=receivedDate&sortOrder=DESC`,
+      `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}/income-entries?sortBy=receivedDate&sortOrder=DESC`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -182,7 +193,7 @@ export default function IncomePage() {
 
     if (response.ok) {
       const result = await response.json();
-      setIncomeEntries(result.incomeEntries || []);
+      setIncomeEntries(result.data.incomeEntries || []); // ✅ Structure corrigée
     }
   };
 
@@ -194,7 +205,7 @@ export default function IncomePage() {
         key: 'don_prive',
         label: 'Don privé',
         description: 'Don de particuliers ou familles',
-        fiscalReceipt: true,
+        requiresReceipt: true,        // ✅ Corrigé
         validationRequired: false,
         maxAmount: 10000
       },
@@ -202,7 +213,7 @@ export default function IncomePage() {
         key: 'subvention_publique',
         label: 'Subvention publique',
         description: 'Subventions mairie, région, état',
-        fiscalReceipt: false,
+        requiresReceipt: false,       // ✅ Corrigé
         validationRequired: true,
         maxAmount: 50000
       },
@@ -210,7 +221,7 @@ export default function IncomePage() {
         key: 'vente_evenement',
         label: 'Vente événement',
         description: 'Billets, tombola, ventes diverses',
-        fiscalReceipt: false,
+        requiresReceipt: false,       // ✅ Corrigé
         validationRequired: false,
         maxAmount: 5000
       },
@@ -218,7 +229,7 @@ export default function IncomePage() {
         key: 'partenariat_commercial',
         label: 'Partenariat commercial',
         description: 'Sponsoring, partenariats entreprises',
-        fiscalReceipt: false,
+        requiresReceipt: false,       // ✅ Corrigé
         validationRequired: true,
         maxAmount: 20000
       }
@@ -240,7 +251,8 @@ export default function IncomePage() {
     return incomeType?.label || type;
   };
 
-  const getReceivedMethodLabel = (method: string) => {
+  // ✅ FONCTION RENOMMÉE
+  const getPaymentMethodLabel = (method: string) => {
     switch (method) {
       case 'bank_transfer': return 'Virement bancaire';
       case 'cash': return 'Espèces';
@@ -274,8 +286,9 @@ export default function IncomePage() {
     }
   };
 
+  // ✅ FONCTION CORRIGÉE AVEC NOUVEAUX CHAMPS
   const createIncomeEntry = async () => {
-    if (!newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.source.trim() || !newIncomeData.description.trim()) {
+    if (!newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.title.trim() || !newIncomeData.sourceName.trim() || !newIncomeData.description.trim()) {
       setError("Tous les champs obligatoires doivent être remplis");
       return;
     }
@@ -285,19 +298,25 @@ export default function IncomePage() {
       const formData = new FormData();
       formData.append('incomeType', newIncomeData.incomeType);
       formData.append('amount', newIncomeData.amount.toString());
-      formData.append('source', newIncomeData.source);
+      formData.append('title', newIncomeData.title);                    // ✅ Corrigé
+      formData.append('sourceName', newIncomeData.sourceName);          // ✅ Corrigé
       formData.append('description', newIncomeData.description);
       formData.append('receivedDate', newIncomeData.receivedDate);
-      formData.append('receivedMethod', newIncomeData.receivedMethod);
-      formData.append('reference', newIncomeData.reference);
-      formData.append('fiscalReceipt', newIncomeData.fiscalReceipt.toString());
+      formData.append('paymentMethod', newIncomeData.paymentMethod);    // ✅ Corrigé
+      formData.append('manualReference', newIncomeData.manualReference); // ✅ Corrigé
+      formData.append('receiptGenerated', newIncomeData.receiptGenerated.toString()); // ✅ Corrigé
+      
+      // Champs backend requis
+      formData.append('sourceType', 'individual'); // ✅ Requis par backend
+      formData.append('currency', 'EUR');          // ✅ Requis par backend
       
       if (newIncomeData.justificatifFile) {
         formData.append('justificatif', newIncomeData.justificatifFile);
       }
 
+      // ✅ URL CORRIGÉE
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-entries`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}/income-entries`,
         {
           method: 'POST',
           headers: {
@@ -309,15 +328,17 @@ export default function IncomePage() {
 
       if (response.ok) {
         setShowNewIncomeModal(false);
+        // ✅ RESET AVEC NOUVEAUX CHAMPS
         setNewIncomeData({
           incomeType: '',
           amount: 0,
-          source: '',
+          title: '',
+          sourceName: '',
           description: '',
           receivedDate: new Date().toISOString().split('T')[0],
-          receivedMethod: 'bank_transfer',
-          reference: '',
-          fiscalReceipt: false,
+          paymentMethod: 'bank_transfer',
+          manualReference: '',
+          receiptGenerated: false,
           justificatifFile: undefined
         });
         await fetchIncomeEntries();
@@ -333,12 +354,13 @@ export default function IncomePage() {
     }
   };
 
+  // ✅ URL CORRIGÉE
   const deleteIncomeEntry = async (entryId: number) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce revenu ?")) return;
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-entries/${entryId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}/income-entries/${entryId}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
@@ -388,7 +410,7 @@ export default function IncomePage() {
     };
   };
 
-  // Filtrer les entrées
+  // Filtrer les entrées - ✅ CHAMPS CORRIGÉS
   const filteredEntries = incomeEntries.filter(entry => {
     if (filterType !== 'all' && entry.incomeType !== filterType) return false;
     if (filterStatus !== 'all' && entry.status !== filterStatus) return false;
@@ -412,9 +434,10 @@ export default function IncomePage() {
     }
     
     if (searchTerm && 
-        !entry.source.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !entry.title.toLowerCase().includes(searchTerm.toLowerCase()) &&          // ✅ Corrigé
         !entry.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !entry.reference?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        !entry.sourceName.toLowerCase().includes(searchTerm.toLowerCase()) &&    // ✅ Corrigé
+        !entry.manualReference?.toLowerCase().includes(searchTerm.toLowerCase())) return false; // ✅ Corrigé
     
     return true;
   });
@@ -637,7 +660,12 @@ export default function IncomePage() {
                     />
                   </div>
                   
-                  <Select value={filterType} onValueChange={setFilterType}>
+                  <Select 
+                    value={filterType} 
+                    onValueChange={setFilterType}
+                    defaultValue="all"
+                    name="filterType"
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
@@ -649,7 +677,12 @@ export default function IncomePage() {
                     </SelectContent>
                   </Select>
 
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <Select 
+                    value={filterStatus} 
+                    onValueChange={setFilterStatus}
+                    defaultValue="all"
+                    name="filterStatus"
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Statut" />
                     </SelectTrigger>
@@ -661,7 +694,12 @@ export default function IncomePage() {
                     </SelectContent>
                   </Select>
 
-                  <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                  <Select 
+                    value={filterPeriod} 
+                    onValueChange={setFilterPeriod}
+                    defaultValue="all"
+                    name="filterPeriod"
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Période" />
                     </SelectTrigger>
@@ -713,17 +751,18 @@ export default function IncomePage() {
                     <Card key={entry.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
-                          <div className="flex-1">
+                           <div className="flex-1">
                             <div className="flex items-center space-x-3 mb-3">
                               <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
                                 <Icon className="h-5 w-5 text-green-600" />
                               </div>
                               <div>
-                                <h3 className="text-lg font-semibold text-gray-900">{entry.source}</h3>
+                                <h3 className="text-lg font-semibold text-gray-900">{entry.title}</h3>
                                 <p className="text-sm text-gray-600">{getIncomeTypeLabel(entry.incomeType)}</p>
+                                <p className="text-sm text-gray-500">Source: {entry.sourceName}</p>
                               </div>
                               {getStatusBadge(entry.status)}
-                              {entry.fiscalReceipt && (
+                              {entry.receiptGenerated && (
                                 <Badge className="bg-blue-100 text-blue-700">📄 Reçu fiscal</Badge>
                               )}
                             </div>
@@ -737,22 +776,22 @@ export default function IncomePage() {
                               </div>
                               <div>
                                 <p className="text-gray-500">Méthode</p>
-                                <p className="font-medium">{getReceivedMethodLabel(entry.receivedMethod)}</p>
+                                <p className="font-medium">{getPaymentMethodLabel(entry.paymentMethod)}</p>
                               </div>
                               <div>
                                 <p className="text-gray-500">Référence</p>
-                                <p className="font-medium">{entry.reference || 'Non renseignée'}</p>
+                                <p className="font-medium">{entry.manualReference || 'Non renseignée'}</p>
                               </div>
                               <div>
                                 <p className="text-gray-500">Enregistré par</p>
-                                <p className="font-medium">{entry.createdBy.firstName} {entry.createdBy.lastName}</p>
+                                <p className="font-medium">{entry.registeredByUser.firstName} {entry.registeredByUser.lastName}</p>
                               </div>
                             </div>
 
-                            {entry.validatedBy && entry.validatedAt && (
+                            {entry.validatedByUser && entry.validatedAt && (
                               <div className="mt-3 p-3 bg-green-50 rounded-lg">
                                 <p className="text-sm text-green-700">
-                                  ✅ Validé par {entry.validatedBy.firstName} {entry.validatedBy.lastName} le {new Date(entry.validatedAt).toLocaleDateString('fr-FR')}
+                                  ✅ Validé par {entry.validatedByUser.firstName} {entry.validatedByUser.lastName} le {new Date(entry.validatedAt).toLocaleDateString('fr-FR')}
                                 </p>
                               </div>
                             )}
@@ -839,7 +878,7 @@ export default function IncomePage() {
                             <p className="font-medium text-gray-900">{type.label}</p>
                             <p className="text-sm text-gray-600">{type.description}</p>
                             <div className="flex items-center space-x-4 mt-1">
-                              {type.fiscalReceipt && (
+                              {type.requiresReceipt && (
                                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Reçu fiscal</span>
                               )}
                               {type.validationRequired && (
@@ -947,9 +986,12 @@ export default function IncomePage() {
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="incomeType" required>Type de revenu</Label>
-                  <Select value={newIncomeData.incomeType} onValueChange={(value) => 
-                    setNewIncomeData({ ...newIncomeData, incomeType: value })
-                  }>
+                  <Select 
+                    value={newIncomeData.incomeType} 
+                    onValueChange={(value) => setNewIncomeData({ ...newIncomeData, incomeType: value })}
+                    defaultValue=""
+                    name="incomeType"
+                  >
                     <SelectTrigger id="incomeType" className="mt-1">
                       <SelectValue placeholder="Sélectionner un type" />
                     </SelectTrigger>
@@ -996,14 +1038,27 @@ export default function IncomePage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="source" required>Source/Origine</Label>
+                  <Label htmlFor="title" required>Titre/Objet</Label>
                   <input
-                    id="source"
+                    id="title"
                     type="text"
-                    value={newIncomeData.source}
-                    onChange={(e) => setNewIncomeData({ ...newIncomeData, source: e.target.value })}
+                    value={newIncomeData.title}
+                    onChange={(e) => setNewIncomeData({ ...newIncomeData, title: e.target.value })}
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
-                    placeholder="Ex: Don Famille Diallo, Subvention Mairie..."
+                    placeholder="Ex: Don pour construction école, Subvention mairie..."
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="sourceName" required>Source/Donateur</Label>
+                  <input
+                    id="sourceName"
+                    type="text"
+                    value={newIncomeData.sourceName}
+                    onChange={(e) => setNewIncomeData({ ...newIncomeData, sourceName: e.target.value })}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                    placeholder="Ex: Famille Diallo, Mairie 19ème, Entreprise X..."
                     required
                   />
                 </div>
@@ -1023,11 +1078,14 @@ export default function IncomePage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="receivedMethod" required>Méthode de réception</Label>
-                    <Select value={newIncomeData.receivedMethod} onValueChange={(value) => 
-                      setNewIncomeData({ ...newIncomeData, receivedMethod: value })
-                    }>
-                      <SelectTrigger id="receivedMethod" className="mt-1">
+                    <Label htmlFor="paymentMethod" required>Méthode de réception</Label>
+                    <Select 
+                      value={newIncomeData.paymentMethod} 
+                      onValueChange={(value) => setNewIncomeData({ ...newIncomeData, paymentMethod: value })}
+                      defaultValue=""
+                      name="paymentMethod"
+                    >
+                      <SelectTrigger id="paymentMethod" className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1041,12 +1099,12 @@ export default function IncomePage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="reference">Référence</Label>
+                    <Label htmlFor="manualReference">Référence</Label>
                     <input
-                      id="reference"
+                      id="manualReference"
                       type="text"
-                      value={newIncomeData.reference}
-                      onChange={(e) => setNewIncomeData({ ...newIncomeData, reference: e.target.value })}
+                      value={newIncomeData.manualReference}
+                      onChange={(e) => setNewIncomeData({ ...newIncomeData, manualReference: e.target.value })}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
                       placeholder="Ex: DON-DIALLO-2024-001, VIR-MAIRIE-001..."
                     />
@@ -1074,13 +1132,13 @@ export default function IncomePage() {
 
                 <div className="flex items-center space-x-2">
                   <input
-                    id="fiscalReceipt"
+                    id="receiptGenerated"
                     type="checkbox"
-                    checked={newIncomeData.fiscalReceipt}
-                    onChange={(e) => setNewIncomeData({ ...newIncomeData, fiscalReceipt: e.target.checked })}
+                    checked={newIncomeData.receiptGenerated}
+                    onChange={(e) => setNewIncomeData({ ...newIncomeData, receiptGenerated: e.target.checked })}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                   />
-                  <Label htmlFor="fiscalReceipt">Générer un reçu fiscal</Label>
+                  <Label htmlFor="receiptGenerated">Générer un reçu fiscal</Label>
                 </div>
               </div>
 
@@ -1092,12 +1150,13 @@ export default function IncomePage() {
                     setNewIncomeData({
                       incomeType: '',
                       amount: 0,
-                      source: '',
+                      title: '',
+                      sourceName: '',
                       description: '',
                       receivedDate: new Date().toISOString().split('T')[0],
-                      receivedMethod: 'bank_transfer',
-                      reference: '',
-                      fiscalReceipt: false,
+                      paymentMethod: 'bank_transfer',
+                      manualReference: '',
+                      receiptGenerated: false,
                       justificatifFile: undefined
                     });
                   }}
@@ -1107,7 +1166,7 @@ export default function IncomePage() {
                 </Button>
                 <Button
                   onClick={createIncomeEntry}
-                  disabled={isSubmitting || !newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.source.trim() || !newIncomeData.description.trim()}
+                  disabled={isSubmitting || !newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.title.trim() || !newIncomeData.sourceName.trim() || !newIncomeData.description.trim()}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {isSubmitting ? (

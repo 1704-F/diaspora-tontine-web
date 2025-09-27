@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { Label } from "@/components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/stores/authStore";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Save,
@@ -27,6 +26,39 @@ import {
   Upload,
   X
 } from "lucide-react";
+
+// Composants temporaires pour éviter les erreurs TypeScript
+const FormLabel = ({ htmlFor, required = false, children, className = "" }: {
+  htmlFor?: string;
+  required?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <label 
+    htmlFor={htmlFor} 
+    className={`text-sm font-medium text-gray-700 ${className}`}
+  >
+    {children}
+    {required && <span className="text-red-500 ml-1">*</span>}
+  </label>
+);
+
+const FormSelect = ({ value, onChange, children, className = "", placeholder = "Sélectionner..." }: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  className?: string;
+  placeholder?: string;
+}) => (
+  <select 
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    className={`w-full h-10 px-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${className}`}
+  >
+    {!value && <option value="">{placeholder}</option>}
+    {children}
+  </select>
+);
 
 interface CreateExpenseRequestForm {
   expenseType: string;
@@ -97,6 +129,17 @@ export default function CreateExpenseRequestPage() {
     { value: 'critical', label: 'Critique', color: 'red' }
   ];
 
+  // ✅ AJOUT: Devises supportées selon le backend
+  const supportedCurrencies = [
+    { value: 'EUR', label: 'EUR (€)' },
+    { value: 'USD', label: 'USD ($)' },
+    { value: 'GBP', label: 'GBP (£)' },
+    { value: 'CAD', label: 'CAD ($)' },
+    { value: 'CHF', label: 'CHF' },
+    { value: 'XOF', label: 'XOF (FCFA)' },
+    { value: 'XAF', label: 'XAF (FCFA)' }
+  ];
+
   useEffect(() => {
     if (associationId && token) {
       fetchData();
@@ -113,6 +156,7 @@ export default function CreateExpenseRequestPage() {
     } catch (error) {
       console.error("Erreur chargement données:", error);
       setError("Erreur de chargement des données");
+      toast.error("Erreur de chargement des données");
     } finally {
       setIsLoading(false);
     }
@@ -133,16 +177,21 @@ export default function CreateExpenseRequestPage() {
   };
 
   const fetchMembers = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-    if (response.ok) {
-      const result = await response.json();
-      setMembers(result.data.members || []);
+      if (response.ok) {
+        const result = await response.json();
+        setMembers(result.data?.members || []);
+      }
+    } catch (error) {
+      console.error("Erreur chargement membres:", error);
+      setMembers([]);
     }
   };
 
@@ -193,8 +242,31 @@ export default function CreateExpenseRequestPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // ✅ CORRECTION: Validation plus stricte selon le backend
     if (!form.expenseType || !form.title || !form.description || !form.amountRequested) {
       setError("Veuillez remplir tous les champs obligatoires");
+      toast.error("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+
+    // ✅ CORRECTION: Validation du montant
+    const amount = parseFloat(form.amountRequested);
+    if (isNaN(amount) || amount < 0.01 || amount > 1000000) {
+      setError("Le montant doit être entre 0.01 et 1,000,000");
+      toast.error("Le montant doit être entre 0.01 et 1,000,000");
+      return;
+    }
+
+    // ✅ CORRECTION: Validation du titre et description selon les critères backend
+    if (form.title.length < 5 || form.title.length > 255) {
+      setError("Le titre doit contenir entre 5 et 255 caractères");
+      toast.error("Le titre doit contenir entre 5 et 255 caractères");
+      return;
+    }
+
+    if (form.description.length < 20 || form.description.length > 2000) {
+      setError("La description doit contenir entre 20 et 2000 caractères");
+      toast.error("La description doit contenir entre 20 et 2000 caractères");
       return;
     }
 
@@ -202,58 +274,71 @@ export default function CreateExpenseRequestPage() {
     setError("");
 
     try {
-      const formData = new FormData();
-      
-      // Données de base
-      formData.append('expenseType', form.expenseType);
-      formData.append('title', form.title);
-      formData.append('description', form.description);
-      formData.append('amountRequested', form.amountRequested);
-      formData.append('currency', form.currency);
-      formData.append('urgencyLevel', form.urgencyLevel);
-      formData.append('isLoan', form.isLoan.toString());
+      // ✅ CORRECTION: Utiliser Content-Type application/json au lieu de FormData pour plus de compatibilité
+      const payload = {
+        expenseType: form.expenseType,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        amountRequested: parseFloat(form.amountRequested), // ✅ CORRECTION: Envoyer comme number
+        currency: form.currency,
+        urgencyLevel: form.urgencyLevel,
+        isLoan: form.isLoan,
+        
+        // ✅ CORRECTION: Inclure seulement si rempli
+        ...(form.expenseSubtype && { expenseSubtype: form.expenseSubtype.trim() }),
+        ...(form.beneficiaryId && { beneficiaryId: parseInt(form.beneficiaryId) }), // ✅ CORRECTION: Envoyer comme number
+        ...(form.expectedImpact && { expectedImpact: form.expectedImpact.trim() }),
+        
+        // ✅ CORRECTION: Bénéficiaire externe - envoyer seulement si complet
+        ...(form.beneficiaryExternal?.name && {
+          beneficiaryExternal: form.beneficiaryExternal
+        }),
+        
+        // ✅ CORRECTION: Conditions de prêt - envoyer seulement si prêt
+        ...(form.isLoan && form.loanTerms && {
+          loanTerms: {
+            durationMonths: parseInt(form.loanTerms.durationMonths || '0'),
+            interestRate: parseFloat(form.loanTerms.interestRate || '0'),
+            monthlyPayment: parseFloat(form.loanTerms.monthlyPayment || '0')
+          }
+        })
+        
+        // TODO: Gérer les documents avec une route séparée si nécessaire
+      };
 
-      // Données optionnelles
-      if (form.expenseSubtype) formData.append('expenseSubtype', form.expenseSubtype);
-      if (form.beneficiaryId) formData.append('beneficiaryId', form.beneficiaryId);
-      if (form.expectedImpact) formData.append('expectedImpact', form.expectedImpact);
-      
-      // Bénéficiaire externe
-      if (form.beneficiaryExternal) {
-        formData.append('beneficiaryExternal', JSON.stringify(form.beneficiaryExternal));
-      }
-
-      // Conditions de prêt
-      if (form.isLoan && form.loanTerms) {
-        formData.append('loanTerms', JSON.stringify(form.loanTerms));
-      }
-
-      // Documents
-      form.documents.forEach((file, index) => {
-        formData.append(`documents[${index}]`, file);
-      });
+      console.log('Payload envoyé:', payload); // Debug
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests`,
         {
           method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: formData
+          body: JSON.stringify(payload)
         }
       );
 
+      const result = await response.json();
+
       if (response.ok) {
-        const result = await response.json();
-        router.push(`/modules/associations/${associationId}/finances/${result.expenseRequest.id}`);
+        toast.success("Demande créée avec succès");
+        router.push(`/modules/associations/${associationId}/finances/${result.data?.expenseRequest?.id || result.expenseRequest?.id}`);
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || "Erreur lors de la création de la demande");
+        console.error('Erreur API:', result); // Debug
+        setError(result.error || result.message || "Erreur lors de la création de la demande");
+        toast.error(result.error || result.message || "Erreur lors de la création de la demande");
+        
+        // ✅ CORRECTION: Afficher les détails de validation si disponibles
+        if (result.details) {
+          console.error('Détails de validation:', result.details);
+        }
       }
     } catch (error) {
       console.error("Erreur création demande:", error);
       setError("Erreur de connexion");
+      toast.error("Erreur de connexion");
     } finally {
       setIsSubmitting(false);
     }
@@ -271,7 +356,7 @@ export default function CreateExpenseRequestPage() {
 
   return (
     <ProtectedRoute requiredModule="associations">
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center space-x-4">
           <Button
@@ -339,7 +424,7 @@ export default function CreateExpenseRequestPage() {
 
               {form.expenseType && (
                 <div className="mt-4">
-                  <Label htmlFor="expenseSubtype">Sous-catégorie (optionnel)</Label>
+                  <FormLabel htmlFor="expenseSubtype">Sous-catégorie (optionnel)</FormLabel>
                   <Input
                     id="expenseSubtype"
                     placeholder="Ex: aide_mariage_traditionnel, location_salle_ag..."
@@ -358,75 +443,85 @@ export default function CreateExpenseRequestPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="title">Titre de la demande *</Label>
+                <FormLabel htmlFor="title" required>Titre de la demande</FormLabel>
                 <Input
                   id="title"
-                  placeholder="Ex: Aide retour urgence, Achat matériel bureau..."
+                  placeholder="Ex: Aide retour urgence, Achat matériel bureau... (5-255 caractères)"
                   value={form.title}
                   onChange={(e) => handleInputChange('title', e.target.value)}
                   required
+                  minLength={5}
+                  maxLength={255}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {form.title.length}/255 caractères (minimum 5)
+                </p>
               </div>
 
               <div>
-                <Label htmlFor="description">Description détaillée *</Label>
+                <FormLabel htmlFor="description" required>Description détaillée</FormLabel>
                 <Textarea
                   id="description"
-                  placeholder="Expliquez en détail la raison de cette demande, son importance et son impact attendu..."
+                  placeholder="Expliquez en détail la raison de cette demande, son importance et son impact attendu... (20-2000 caractères)"
                   value={form.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   rows={4}
                   required
+                  minLength={20}
+                  maxLength={2000}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {form.description.length}/2000 caractères (minimum 20)
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="amountRequested">Montant demandé *</Label>
+                  <FormLabel htmlFor="amountRequested" required>Montant demandé</FormLabel>
                   <Input
                     id="amountRequested"
                     type="number"
                     step="0.01"
                     min="0.01"
+                    max="1000000"
                     placeholder="0.00"
                     value={form.amountRequested}
                     onChange={(e) => handleInputChange('amountRequested', e.target.value)}
                     required
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Entre 0.01 et 1,000,000
+                  </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="currency">Devise</Label>
-                  <Select value={form.currency} onValueChange={(value) => handleInputChange('currency', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="GBP">GBP (£)</SelectItem>
-                      <SelectItem value="XOF">XOF (FCFA)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel htmlFor="currency">Devise</FormLabel>
+                  <FormSelect 
+                    value={form.currency} 
+                    onChange={(value) => handleInputChange('currency', value)}
+                    placeholder="Choisir une devise"
+                  >
+                    {supportedCurrencies.map((currency) => (
+                      <option key={currency.value} value={currency.value}>
+                        {currency.label}
+                      </option>
+                    ))}
+                  </FormSelect>
                 </div>
 
                 <div>
-                  <Label htmlFor="urgencyLevel">Niveau d'urgence</Label>
-                  <Select value={form.urgencyLevel} onValueChange={(value) => handleInputChange('urgencyLevel', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {urgencyLevels.map((level) => (
-                        <SelectItem key={level.value} value={level.value}>
-                          <div className="flex items-center space-x-2">
-                            <div className={`h-2 w-2 rounded-full bg-${level.color}-500`}></div>
-                            <span>{level.label}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel htmlFor="urgencyLevel">Niveau d'urgence</FormLabel>
+                  <FormSelect 
+                    value={form.urgencyLevel} 
+                    onChange={(value) => handleInputChange('urgencyLevel', value)}
+                    placeholder="Choisir l'urgence"
+                  >
+                    {urgencyLevels.map((level) => (
+                      <option key={level.value} value={level.value}>
+                        {level.label}
+                      </option>
+                    ))}
+                  </FormSelect>
                 </div>
               </div>
             </CardContent>
@@ -440,19 +535,20 @@ export default function CreateExpenseRequestPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="beneficiaryId">Membre bénéficiaire</Label>
-                  <Select value={form.beneficiaryId} onValueChange={(value) => handleInputChange('beneficiaryId', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un membre" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {members.map((member) => (
-                        <SelectItem key={member.id} value={member.id.toString()}>
-                          {member.firstName} {member.lastName} - {member.memberType}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel htmlFor="beneficiaryId">Membre bénéficiaire</FormLabel>
+
+                  <FormSelect 
+  value={form.beneficiaryId} 
+  onChange={(value) => handleInputChange('beneficiaryId', value)}
+  placeholder="Sélectionner un membre"
+>
+  {members.map((member) => (
+    <option key={member.id} value={member.user?.id?.toString() || member.userId?.toString()}>
+      {member.user?.firstName} {member.user?.lastName} - {member.memberType}
+    </option>
+  ))}
+</FormSelect>
+
                 </div>
               </CardContent>
             </Card>
@@ -484,7 +580,7 @@ export default function CreateExpenseRequestPage() {
                 {form.beneficiaryExternal && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="beneficiaryName">Nom</Label>
+                      <FormLabel htmlFor="beneficiaryName">Nom</FormLabel>
                       <Input
                         id="beneficiaryName"
                         placeholder="Nom de l'organisation"
@@ -494,25 +590,21 @@ export default function CreateExpenseRequestPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="beneficiaryType">Type</Label>
-                      <Select 
+                      <FormLabel htmlFor="beneficiaryType">Type</FormLabel>
+                      <FormSelect 
                         value={form.beneficiaryExternal.type} 
-                        onValueChange={(value) => handleBeneficiaryExternalChange('type', value)}
+                        onChange={(value) => handleBeneficiaryExternalChange('type', value)}
+                        placeholder="Choisir un type"
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="association">Association</SelectItem>
-                          <SelectItem value="entreprise">Entreprise</SelectItem>
-                          <SelectItem value="particulier">Particulier</SelectItem>
-                          <SelectItem value="institution">Institution</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <option value="association">Association</option>
+                        <option value="entreprise">Entreprise</option>
+                        <option value="particulier">Particulier</option>
+                        <option value="institution">Institution</option>
+                      </FormSelect>
                     </div>
 
                     <div>
-                      <Label htmlFor="beneficiaryContact">Contact</Label>
+                      <FormLabel htmlFor="beneficiaryContact">Contact</FormLabel>
                       <Input
                         id="beneficiaryContact"
                         placeholder="Email ou téléphone"
@@ -522,7 +614,7 @@ export default function CreateExpenseRequestPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="beneficiaryIban">IBAN (optionnel)</Label>
+                      <FormLabel htmlFor="beneficiaryIban">IBAN (optionnel)</FormLabel>
                       <Input
                         id="beneficiaryIban"
                         placeholder="FR76 1234 5678 9012 3456 789"
@@ -562,13 +654,13 @@ export default function CreateExpenseRequestPage() {
                   }}
                   className="rounded border-gray-300"
                 />
-                <Label htmlFor="isLoan">Il s'agit d'un prêt à rembourser</Label>
+                <FormLabel htmlFor="isLoan">Il s'agit d'un prêt à rembourser</FormLabel>
               </div>
 
               {form.isLoan && form.loanTerms && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-purple-50 rounded-lg">
                   <div>
-                    <Label htmlFor="durationMonths">Durée (mois)</Label>
+                    <FormLabel htmlFor="durationMonths">Durée (mois)</FormLabel>
                     <Input
                       id="durationMonths"
                       type="number"
@@ -580,7 +672,7 @@ export default function CreateExpenseRequestPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="interestRate">Taux d'intérêt (%)</Label>
+                    <FormLabel htmlFor="interestRate">Taux d'intérêt (%)</FormLabel>
                     <Input
                       id="interestRate"
                       type="number"
@@ -593,7 +685,7 @@ export default function CreateExpenseRequestPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="monthlyPayment">Remboursement mensuel</Label>
+                    <FormLabel htmlFor="monthlyPayment">Remboursement mensuel</FormLabel>
                     <Input
                       id="monthlyPayment"
                       type="number"
@@ -608,7 +700,7 @@ export default function CreateExpenseRequestPage() {
               )}
 
               <div>
-                <Label htmlFor="expectedImpact">Impact attendu</Label>
+                <FormLabel htmlFor="expectedImpact">Impact attendu</FormLabel>
                 <Textarea
                   id="expectedImpact"
                   placeholder="Décrivez l'impact positif attendu de cette dépense sur l'association ou la communauté..."
@@ -620,52 +712,18 @@ export default function CreateExpenseRequestPage() {
             </CardContent>
           </Card>
 
-          {/* Documents justificatifs */}
+          {/* Documents justificatifs - Simplifié pour l'instant */}
           <Card>
             <CardHeader>
               <CardTitle>Documents justificatifs</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-600 mb-2">Glissez vos fichiers ici ou cliquez pour parcourir</p>
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <Button type="button" variant="outline" onClick={() => document.getElementById('file-upload')?.click()}>
-                  Choisir des fichiers
-                </Button>
-                <p className="text-xs text-gray-500 mt-2">PDF, images, documents Word (max 10MB par fichier)</p>
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  📎 La gestion des documents sera disponible prochainement. 
+                  Vous pourrez les ajouter après création de la demande.
+                </p>
               </div>
-
-              {form.documents.length > 0 && (
-                <div className="space-y-2">
-                  {form.documents.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div className="flex items-center space-x-2">
-                        <FileText className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm">{file.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {(file.size / 1024 / 1024).toFixed(1)} MB
-                        </Badge>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
 
