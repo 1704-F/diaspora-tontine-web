@@ -11,6 +11,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/stores/authStore";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
+import { toast } from "sonner";
 import { 
   Select, 
   SelectContent, 
@@ -30,11 +31,9 @@ import {
   Calendar,
   Euro,
   FileText,
-  Upload,
   Download,
   Edit,
   Trash2,
-  Eye,
   Filter,
   Search,
   BarChart3,
@@ -49,18 +48,19 @@ interface IncomeEntry {
   incomeType: string;
   amount: number;
   currency: string;
-  title: string;                    // ✅ Correspond au backend
-  sourceName: string;               // ✅ Correspond au backend
+  title: string;
+  sourceName: string;
+  sourceDetails?: string;
   description: string;
   receivedDate: string;
-  paymentMethod: string;            // ✅ Correspond au backend
-  manualReference?: string;         // ✅ Correspond au backend
+  paymentMethod: string;
+  manualReference?: string;
   documents?: Array<{
     type: string;
     url: string;
     name: string;
   }>;
-  validatedByUser?: {               // ✅ Relation backend
+  validatedByUser?: {
     id: number;
     firstName: string;
     lastName: string;
@@ -68,33 +68,38 @@ interface IncomeEntry {
   validatedAt?: string;
   status: string;
   createdAt: string;
-  registeredByUser: {               // ✅ Relation backend
+  registeredByUser: {
     firstName: string;
     lastName: string;
   };
-  receiptGenerated: boolean;        // ✅ Correspond au backend
-  receiptNumber?: string;           // ✅ Correspond au backend
+  receiptGenerated: boolean;
+  receiptNumber?: string;
 }
 
 interface IncomeType {
   key: string;
   label: string;
   description: string;
-  requiresReceipt: boolean;         // ✅ Correspond au backend
+  requiresReceipt: boolean;
   validationRequired: boolean;
   maxAmount?: number;
+  statistics?: {
+    count: number;
+    totalAmount: number;
+  };
 }
 
 interface NewIncomeData {
   incomeType: string;
-  amount: number;
-  title: string;                    // ✅ Correspond au backend
-  sourceName: string;               // ✅ Correspond au backend
+  amount: string;
+  title: string;
+  sourceName: string;
+  sourceDetails?: string;
   description: string;
   receivedDate: string;
-  paymentMethod: string;            // ✅ Correspond au backend
-  manualReference: string;          // ✅ Correspond au backend
-  receiptGenerated: boolean;        // ✅ Correspond au backend
+  paymentMethod: string;
+  manualReference: string;
+  receiptGenerated: boolean;
   justificatifFile?: File;
 }
 
@@ -109,7 +114,6 @@ export default function IncomePage() {
   const [incomeTypes, setIncomeTypes] = useState<IncomeType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string>("");
   const [activeTab, setActiveTab] = useState<'overview' | 'entries' | 'settings'>('overview');
 
   // Filtres
@@ -118,38 +122,42 @@ export default function IncomePage() {
   const [filterPeriod, setFilterPeriod] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Modal nouveau revenu - ✅ ÉTAT CORRIGÉ
+  // Modal nouveau revenu
   const [showNewIncomeModal, setShowNewIncomeModal] = useState(false);
   const [newIncomeData, setNewIncomeData] = useState<NewIncomeData>({
     incomeType: '',
-    amount: 0,
-    title: '',                      // ✅ Nouveau champ
-    sourceName: '',                 // ✅ Nouveau champ
+    amount: '',
+    title: '',
+    sourceName: '',
+    sourceDetails: '',
     description: '',
     receivedDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'bank_transfer', // ✅ Corrigé
-    manualReference: '',            // ✅ Corrigé
-    receiptGenerated: false,        // ✅ Corrigé
+    paymentMethod: 'bank_transfer',
+    manualReference: '',
+    receiptGenerated: false,
     justificatifFile: undefined
   });
+
+  const [newTypeData, setNewTypeData] = useState({
+  typeName: '',
+  typeLabel: '',
+  description: '',
+  defaultSourceType: 'individual',
+  requiresReceipt: false,
+  validationRequired: false,
+  maxAmount: '',
+  allowAnonymous: true
+});
 
   // Modal configuration types
   const [showTypesModal, setShowTypesModal] = useState(false);
   const [editingType, setEditingType] = useState<IncomeType | null>(null);
 
   useEffect(() => {
-    if (associationId && token && user) {
-      if (!canUserManageIncome()) {
-        setError("Vous n'avez pas les droits pour gérer les revenus");
-        return;
-      }
+    if (associationId && token) {
       fetchData();
     }
-  }, [associationId, token, user]);
-
-  const canUserManageIncome = () => {
-  return user?.role && ['president', 'tresorier', 'secretaire', 'admin_association'].includes(user.role);
-};
+  }, [associationId, token]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -161,79 +169,74 @@ export default function IncomePage() {
       ]);
     } catch (error) {
       console.error("Erreur chargement données:", error); 
-      setError("Erreur de chargement des données");
+      toast.error("Erreur de chargement des données");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ✅ URL CORRIGÉE AVEC /api/v1
   const fetchAssociation = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-    if (response.ok) {
-      const result = await response.json();
-      setAssociation(result.data.association);
+      if (response.ok) {
+        const result = await response.json();
+        setAssociation(result.data.association);
+      }
+    } catch (error) {
+      console.error("Erreur chargement association:", error);
     }
   };
 
-  // ✅ URL ET STRUCTURE RÉPONSE CORRIGÉES
   const fetchIncomeEntries = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}/income-entries?sortBy=receivedDate&sortOrder=DESC`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-entries?status=all&sortBy=receivedDate&sortOrder=DESC`;
+      console.log('🔍 Fetching income entries from:', url);
 
-    if (response.ok) {
-      const result = await response.json();
-      setIncomeEntries(result.data.incomeEntries || []); // ✅ Structure corrigée
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('📊 Income entries received:', result);
+        setIncomeEntries(result.data.incomeEntries || []);
+      } else {
+        setIncomeEntries([]);
+      }
+    } catch (error) {
+      console.error("Erreur chargement entrées:", error);
+      setIncomeEntries([]);
     }
   };
 
-  const fetchIncomeTypes = async () => {
-    // TODO: Implémenter l'endpoint income-types
-    // Pour l'instant, types par défaut
-    setIncomeTypes([
-      {
-        key: 'don_prive',
-        label: 'Don privé',
-        description: 'Don de particuliers ou familles',
-        requiresReceipt: true,        // ✅ Corrigé
-        validationRequired: false,
-        maxAmount: 10000
-      },
-      {
-        key: 'subvention_publique',
-        label: 'Subvention publique',
-        description: 'Subventions mairie, région, état',
-        requiresReceipt: false,       // ✅ Corrigé
-        validationRequired: true,
-        maxAmount: 50000
-      },
-      {
-        key: 'vente_evenement',
-        label: 'Vente événement',
-        description: 'Billets, tombola, ventes diverses',
-        requiresReceipt: false,       // ✅ Corrigé
-        validationRequired: false,
-        maxAmount: 5000
-      },
-      {
-        key: 'partenariat_commercial',
-        label: 'Partenariat commercial',
-        description: 'Sponsoring, partenariats entreprises',
-        requiresReceipt: false,       // ✅ Corrigé
-        validationRequired: true,
-        maxAmount: 20000
+  const fetchIncomeTypes = async () => { 
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-types`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        setIncomeTypes(result.data.incomeTypes || []);
+      } else {
+        console.error('Erreur chargement types d\'entrées');
+        setIncomeTypes([]);
       }
-    ]);
+    } catch (error) {
+      console.error('Erreur chargement income types:', error);
+      setIncomeTypes([]);
+    }
   };
 
   const getIncomeTypeIcon = (type: string) => {
@@ -251,7 +254,6 @@ export default function IncomePage() {
     return incomeType?.label || type;
   };
 
-  // ✅ FONCTION RENOMMÉE
   const getPaymentMethodLabel = (method: string) => {
     switch (method) {
       case 'bank_transfer': return 'Virement bancaire';
@@ -286,81 +288,105 @@ export default function IncomePage() {
     }
   };
 
-  // ✅ FONCTION CORRIGÉE AVEC NOUVEAUX CHAMPS
   const createIncomeEntry = async () => {
-    if (!newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.title.trim() || !newIncomeData.sourceName.trim() || !newIncomeData.description.trim()) {
-      setError("Tous les champs obligatoires doivent être remplis");
-      return;
-    }
+  // Validation frontend
+  if (!newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.title.trim() || !newIncomeData.sourceName.trim() || !newIncomeData.description.trim()) {
+    toast.error("Tous les champs obligatoires doivent être remplis");
+    return;
+  }
 
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      formData.append('incomeType', newIncomeData.incomeType);
-      formData.append('amount', newIncomeData.amount.toString());
-      formData.append('title', newIncomeData.title);                    // ✅ Corrigé
-      formData.append('sourceName', newIncomeData.sourceName);          // ✅ Corrigé
-      formData.append('description', newIncomeData.description);
-      formData.append('receivedDate', newIncomeData.receivedDate);
-      formData.append('paymentMethod', newIncomeData.paymentMethod);    // ✅ Corrigé
-      formData.append('manualReference', newIncomeData.manualReference); // ✅ Corrigé
-      formData.append('receiptGenerated', newIncomeData.receiptGenerated.toString()); // ✅ Corrigé
+  // Validation longueur titre
+  if (newIncomeData.title.trim().length < 5) {
+    toast.error("Le titre doit contenir au moins 5 caractères");
+    return;
+  }
+
+  setIsSubmitting(true);
+  try {
+    const payload = {
+      incomeType: newIncomeData.incomeType,
+      amount: parseFloat(newIncomeData.amount),
+      title: newIncomeData.title.trim(),
+      sourceName: newIncomeData.sourceName.trim(),
+      sourceType: 'individual',
+      description: newIncomeData.description.trim(),
+      receivedDate: newIncomeData.receivedDate,
+      paymentMethod: newIncomeData.paymentMethod,
+      currency: 'EUR',
+      incomeSubtype: '',
+      fees: 0,
+      grossAmount: parseFloat(newIncomeData.amount),
+      manualReference: newIncomeData.manualReference || '',
+      isAnonymous: false,
+      restrictedUse: false,
+      publiclyVisible: false,
+      thanksRequired: false,
+      purpose: null,
+      sourceDetails: null,
+      bankDetails: null,
+      designatedFor: null,
+      usageRestrictions: null,
+      tags: null
       
-      // Champs backend requis
-      formData.append('sourceType', 'individual'); // ✅ Requis par backend
-      formData.append('currency', 'EUR');          // ✅ Requis par backend
-      
-      if (newIncomeData.justificatifFile) {
-        formData.append('justificatif', newIncomeData.justificatifFile);
+    };
+
+    console.log("📤 Payload AVANT envoi:", JSON.stringify(payload, null, 2));
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-entries`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       }
+    );
 
-      // ✅ URL CORRIGÉE
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}/income-entries`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
+    const result = await response.json();
+    console.log("📥 Réponse complète:", JSON.stringify(result, null, 2));
 
-      if (response.ok) {
-        setShowNewIncomeModal(false);
-        // ✅ RESET AVEC NOUVEAUX CHAMPS
-        setNewIncomeData({
-          incomeType: '',
-          amount: 0,
-          title: '',
-          sourceName: '',
-          description: '',
-          receivedDate: new Date().toISOString().split('T')[0],
-          paymentMethod: 'bank_transfer',
-          manualReference: '',
-          receiptGenerated: false,
-          justificatifFile: undefined
-        });
-        await fetchIncomeEntries();
+    if (response.ok) {
+      toast.success('Revenu enregistré avec succès');
+      setShowNewIncomeModal(false);
+      setNewIncomeData({
+        incomeType: '',
+        amount: '',
+        title: '',
+        sourceName: '',
+        description: '',
+        receivedDate: new Date().toISOString().split('T')[0],
+        paymentMethod: 'bank_transfer',
+        manualReference: '',
+        receiptGenerated: false,
+        justificatifFile: undefined
+      });
+      await fetchIncomeEntries();
+    } else {
+      console.error("❌ Détails de l'erreur:", result);
+      // Afficher les détails de validation si disponibles
+      if (result.details) {
+        console.error("❌ Erreurs de validation:", result.details);
+        toast.error(`Validation échouée: ${result.details.map((d: any) => d.msg).join(', ')}`);
       } else {
-        const error = await response.json();
-        setError(error.message || "Erreur lors de la création du revenu");
+        toast.error(result.error || "Erreur lors de la création du revenu");
       }
-    } catch (error) {
-      console.error("Erreur création revenu:", error);
-      setError("Erreur lors de la création du revenu");
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  } catch (error) {
+    console.error("💥 Erreur complète:", error);
+    toast.error("Erreur de connexion au serveur");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
-  // ✅ URL CORRIGÉE
   const deleteIncomeEntry = async (entryId: number) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce revenu ?")) return;
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/associations/${associationId}/income-entries/${entryId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-entries/${entryId}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
@@ -368,14 +394,79 @@ export default function IncomePage() {
       );
 
       if (response.ok) {
+        toast.success("Revenu supprimé");
         await fetchIncomeEntries();
       } else {
-        setError("Erreur lors de la suppression");
+        toast.error("Erreur lors de la suppression");
       }
     } catch (error) {
-      setError("Erreur lors de la suppression");
+      toast.error("Erreur lors de la suppression");
     }
   };
+
+  const createIncomeType = async () => {
+  if (!newTypeData.typeName.trim() || !newTypeData.typeLabel.trim()) {
+    toast.error("Le nom technique et le libellé sont obligatoires");
+    return;
+  }
+
+  // Validation du nom technique (sans espaces ni caractères spéciaux)
+  if (!/^[a-z0-9_]+$/.test(newTypeData.typeName)) {
+    toast.error("Le nom technique ne doit contenir que des lettres minuscules, chiffres et underscores");
+    return;
+  }
+
+  setIsSubmitting(true);
+  try {
+    const payload = {
+      typeName: newTypeData.typeName.trim(),
+      typeLabel: newTypeData.typeLabel.trim(),
+      description: newTypeData.description.trim(),
+      defaultSourceType: newTypeData.defaultSourceType,
+      requiresReceipt: newTypeData.requiresReceipt,
+      maxAmount: newTypeData.maxAmount ? parseFloat(newTypeData.maxAmount) : null,
+      allowAnonymous: newTypeData.allowAnonymous
+    };
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/income-types`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (response.ok) {
+      const result = await response.json();
+      toast.success(`Type "${result.data.typeConfig.label}" créé avec succès`);
+      setShowTypesModal(false);
+      setEditingType(null);
+      setNewTypeData({
+        typeName: '',
+        typeLabel: '',
+        description: '',
+        defaultSourceType: 'individual',
+        requiresReceipt: false,
+        validationRequired: false,
+        maxAmount: '',
+        allowAnonymous: true
+      });
+      await fetchIncomeTypes(); // Recharger la liste
+    } else {
+      const error = await response.json();
+      toast.error(error.error || "Erreur lors de la création du type");
+    }
+  } catch (error) {
+    console.error("Erreur création type:", error);
+    toast.error("Erreur lors de la création du type");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // Calculs statistiques
   const calculateStats = () => {
@@ -410,7 +501,7 @@ export default function IncomePage() {
     };
   };
 
-  // Filtrer les entrées - ✅ CHAMPS CORRIGÉS
+  // Filtrer les entrées
   const filteredEntries = incomeEntries.filter(entry => {
     if (filterType !== 'all' && entry.incomeType !== filterType) return false;
     if (filterStatus !== 'all' && entry.status !== filterStatus) return false;
@@ -434,10 +525,10 @@ export default function IncomePage() {
     }
     
     if (searchTerm && 
-        !entry.title.toLowerCase().includes(searchTerm.toLowerCase()) &&          // ✅ Corrigé
+        !entry.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
         !entry.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !entry.sourceName.toLowerCase().includes(searchTerm.toLowerCase()) &&    // ✅ Corrigé
-        !entry.manualReference?.toLowerCase().includes(searchTerm.toLowerCase())) return false; // ✅ Corrigé
+        !entry.sourceName.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !entry.manualReference?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     
     return true;
   });
@@ -454,25 +545,10 @@ export default function IncomePage() {
     );
   }
 
-  if (error && !canUserManageIncome()) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-6xl mx-auto p-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Accès refusé</h1>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
-            </Button>
-          </div>
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
   return (
+    
     <ProtectedRoute requiredModule="associations">
+    
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -751,7 +827,7 @@ export default function IncomePage() {
                     <Card key={entry.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
-                           <div className="flex-1">
+                          <div className="flex-1">
                             <div className="flex items-center space-x-3 mb-3">
                               <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
                                 <Icon className="h-5 w-5 text-green-600" />
@@ -763,7 +839,7 @@ export default function IncomePage() {
                               </div>
                               {getStatusBadge(entry.status)}
                               {entry.receiptGenerated && (
-                                <Badge className="bg-blue-100 text-blue-700">📄 Reçu fiscal</Badge>
+                                <Badge className="bg-blue-100 text-blue-700">Reçu fiscal</Badge>
                               )}
                             </div>
 
@@ -791,8 +867,8 @@ export default function IncomePage() {
                             {entry.validatedByUser && entry.validatedAt && (
                               <div className="mt-3 p-3 bg-green-50 rounded-lg">
                                 <p className="text-sm text-green-700">
-                                  ✅ Validé par {entry.validatedByUser.firstName} {entry.validatedByUser.lastName} le {new Date(entry.validatedAt).toLocaleDateString('fr-FR')}
-                                </p>
+                                  Validé par {entry.validatedByUser.firstName} {entry.validatedByUser.lastName} le {new Date(entry.validatedAt).toLocaleDateString('fr-FR')}
+                                  </p>
                               </div>
                             )}
 
@@ -826,7 +902,6 @@ export default function IncomePage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
-                                  // TODO: Implémenter modification
                                   console.log('Modifier revenu', entry.id);
                                 }}
                                 className="w-full"
@@ -864,74 +939,102 @@ export default function IncomePage() {
                 <CardTitle>Types de revenus configurés</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {incomeTypes.map((type) => {
-                    const Icon = getIncomeTypeIcon(type.key);
-                    
-                    return (
-                      <div key={type.key} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <Icon className="h-4 w-4 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{type.label}</p>
-                            <p className="text-sm text-gray-600">{type.description}</p>
-                            <div className="flex items-center space-x-4 mt-1">
-                              {type.requiresReceipt && (
-                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Reçu fiscal</span>
-                              )}
-                              {type.validationRequired && (
-                                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">Validation requise</span>
-                              )}
-                              {type.maxAmount && (
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">Max: {type.maxAmount}€</span>
-                              )}
+                {incomeTypes.length === 0 ? (
+                  <div className="text-center py-8">
+                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      Aucun type d'entrée configuré
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      Créez vos premiers types d'entrées d'argent personnalisés
+                    </p>
+                    <Button
+                      onClick={() => {
+                        setEditingType(null);
+                        setShowTypesModal(true);
+                      }}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Créer le premier type
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {incomeTypes.map((type) => {
+                      const Icon = getIncomeTypeIcon(type.key);
+                      
+                      return (
+                        <div key={type.key} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <Icon className="h-4 w-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{type.label}</p>
+                              <p className="text-sm text-gray-600">{type.description}</p>
+                              <div className="flex items-center space-x-4 mt-1">
+                                {type.requiresReceipt && (
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Reçu fiscal</span>
+                                )}
+                                {type.validationRequired && (
+                                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">Validation requise</span>
+                                )}
+                                {type.maxAmount && (
+                                  <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">Max: {type.maxAmount}€</span>
+                                )}
+                                {type.statistics && type.statistics.count > 0 && (
+                                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                    {type.statistics.count} utilisations
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingType(type);
+                                setShowTypesModal(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (confirm(`Supprimer le type "${type.label}" ?`)) {
+                                  console.log('Supprimer type', type.key);
+                                }
+                              }}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingType(type);
-                              setShowTypesModal(true);
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (confirm(`Supprimer le type "${type.label}" ?`)) {
-                                // TODO: Implémenter suppression
-                                console.log('Supprimer type', type.key);
-                              }
-                            }}
-                            className="border-red-300 text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
                 
-                <div className="mt-4">
-                  <Button
-                    onClick={() => {
-                      setEditingType(null);
-                      setShowTypesModal(true);
-                    }}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Créer nouveau type
-                  </Button>
-                </div>
+                {incomeTypes.length > 0 && (
+                  <div className="mt-4">
+                    <Button
+                      onClick={() => {
+                        setEditingType(null);
+                        setShowTypesModal(true);
+                      }}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Créer nouveau type
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -954,7 +1057,7 @@ export default function IncomePage() {
                 <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900">Notifications revenus importants</p>
-                    <p className="text-sm text-gray-600">Alerter le bureau pour les revenus {'>'}500€</p>
+                    <p className="text-sm text-gray-600">Alerter le bureau pour les revenus supérieurs à 500€</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" defaultChecked className="sr-only peer" />
@@ -965,7 +1068,7 @@ export default function IncomePage() {
                 <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900">Validation bureau pour montants élevés</p>
-                    <p className="text-sm text-gray-600">Validation obligatoire du bureau pour revenus {'>'}1000€</p>
+                    <p className="text-sm text-gray-600">Validation obligatoire du bureau pour revenus supérieurs à 1000€</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" />
@@ -981,166 +1084,202 @@ export default function IncomePage() {
         {showNewIncomeModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4">💰 Nouveau Revenu</h2>
+              <h2 className="text-xl font-bold mb-4">Nouveau Revenu</h2>
 
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="incomeType" required>Type de revenu</Label>
-                  <Select 
-                    value={newIncomeData.incomeType} 
-                    onValueChange={(value) => setNewIncomeData({ ...newIncomeData, incomeType: value })}
-                    defaultValue=""
-                    name="incomeType"
+              {incomeTypes.length === 0 ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">Types d'entrées non configurés</p>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        Veuillez d'abord configurer les types d'entrées dans l'onglet Configuration.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="mt-3 w-full"
+                    onClick={() => {
+                      setShowNewIncomeModal(false);
+                      setActiveTab('settings');
+                    }}
                   >
-                    <SelectTrigger id="incomeType" className="mt-1">
-                      <SelectValue placeholder="Sélectionner un type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {incomeTypes.map(type => (
-                        <SelectItem key={type.key} value={type.key}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    Aller à la configuration
+                  </Button>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              ) : (
+                <div className="space-y-4">
                   <div>
-                    <Label htmlFor="amount" required>Montant (€)</Label>
-                    <input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={newIncomeData.amount || ''}
-                      onChange={(e) => setNewIncomeData({
-                        ...newIncomeData,
-                        amount: parseFloat(e.target.value) || 0
-                      })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="receivedDate" required>Date de réception</Label>
-                    <input
-                      id="receivedDate"
-                      type="date"
-                      value={newIncomeData.receivedDate}
-                      onChange={(e) => setNewIncomeData({ ...newIncomeData, receivedDate: e.target.value })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="title" required>Titre/Objet</Label>
-                  <input
-                    id="title"
-                    type="text"
-                    value={newIncomeData.title}
-                    onChange={(e) => setNewIncomeData({ ...newIncomeData, title: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
-                    placeholder="Ex: Don pour construction école, Subvention mairie..."
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="sourceName" required>Source/Donateur</Label>
-                  <input
-                    id="sourceName"
-                    type="text"
-                    value={newIncomeData.sourceName}
-                    onChange={(e) => setNewIncomeData({ ...newIncomeData, sourceName: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
-                    placeholder="Ex: Famille Diallo, Mairie 19ème, Entreprise X..."
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="description" required>Description</Label>
-                  <Textarea
-                    id="description"
-                    value={newIncomeData.description}
-                    onChange={(e) => setNewIncomeData({ ...newIncomeData, description: e.target.value })}
-                    placeholder="Description du revenu, contexte, utilisation prévue..."
-                    className="mt-1"
-                    rows={3}
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="paymentMethod" required>Méthode de réception</Label>
+                    <Label htmlFor="incomeType" required>Type de revenu</Label>
                     <Select 
-                      value={newIncomeData.paymentMethod} 
-                      onValueChange={(value) => setNewIncomeData({ ...newIncomeData, paymentMethod: value })}
+                      value={newIncomeData.incomeType} 
+                      onValueChange={(value) => setNewIncomeData({ ...newIncomeData, incomeType: value })}
                       defaultValue=""
-                      name="paymentMethod"
+                      name="incomeType"
                     >
-                      <SelectTrigger id="paymentMethod" className="mt-1">
-                        <SelectValue />
+                      <SelectTrigger id="incomeType" className="mt-1">
+                        <SelectValue placeholder="Sélectionner un type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="bank_transfer">🏦 Virement bancaire</SelectItem>
-                        <SelectItem value="cash">💵 Espèces</SelectItem>
-                        <SelectItem value="check">📝 Chèque</SelectItem>
-                        <SelectItem value="card_payment">💳 Carte bancaire</SelectItem>
-                        <SelectItem value="mobile_money">📱 Mobile Money</SelectItem>
+                        {incomeTypes.map(type => (
+                          <SelectItem key={type.key} value={type.key}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="amount" required>Montant (€)</Label>
+                      <input
+                        id="amount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newIncomeData.amount || ''}
+                        onChange={(e) => setNewIncomeData({
+                          ...newIncomeData,
+                          amount: parseFloat(e.target.value) || 0
+                        })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="receivedDate" required>Date de réception</Label>
+                      <input
+                        id="receivedDate"
+                        type="date"
+                        value={newIncomeData.receivedDate}
+                        onChange={(e) => setNewIncomeData({ ...newIncomeData, receivedDate: e.target.value })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <Label htmlFor="manualReference">Référence</Label>
+                    <Label htmlFor="title" required>Titre/Objet</Label>
                     <input
-                      id="manualReference"
+                      id="title"
                       type="text"
-                      value={newIncomeData.manualReference}
-                      onChange={(e) => setNewIncomeData({ ...newIncomeData, manualReference: e.target.value })}
+                      value={newIncomeData.title}
+                      onChange={(e) => setNewIncomeData({ ...newIncomeData, title: e.target.value })}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
-                      placeholder="Ex: DON-DIALLO-2024-001, VIR-MAIRIE-001..."
+                      placeholder="Ex: Don pour construction école, Subvention mairie..."
+                      required
                     />
                   </div>
-                </div>
 
-                <div>
-                  <Label htmlFor="justificatif">Justificatif (optionnel)</Label>
-                  <div className="mt-1 flex items-center space-x-3">
+                  <div>
+                    <Label htmlFor="sourceName" required>Source/Donateur</Label>
                     <input
-                      id="justificatif"
-                      type="file"
-                      onChange={handleFileUpload}
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                      id="sourceName"
+                      type="text"
+                      value={newIncomeData.sourceName}
+                      onChange={(e) => setNewIncomeData({ ...newIncomeData, sourceName: e.target.value })}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                      placeholder="Ex: Famille Diallo, Mairie 19ème, Entreprise X..."
+                      required
                     />
-                    {newIncomeData.justificatifFile && (
-                      <span className="text-sm text-green-600">✓ {newIncomeData.justificatifFile.name}</span>
-                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    PDF, JPG, PNG - Max 5MB (reçu, capture virement, etc.)
-                  </p>
-                </div>
 
-                <div className="flex items-center space-x-2">
-                  <input
-                    id="receiptGenerated"
-                    type="checkbox"
-                    checked={newIncomeData.receiptGenerated}
-                    onChange={(e) => setNewIncomeData({ ...newIncomeData, receiptGenerated: e.target.checked })}
-                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                  />
-                  <Label htmlFor="receiptGenerated">Générer un reçu fiscal</Label>
+                  <div>
+                    <Label htmlFor="sourceDetails">Détails complémentaires (optionnel)</Label>
+                    <Textarea
+                      id="sourceDetails"
+                      value={newIncomeData.sourceDetails || ''}
+                      onChange={(e) => setNewIncomeData({ ...newIncomeData, sourceDetails: e.target.value })}
+                      placeholder="Ex: Contact, adresse, informations supplémentaires..."
+                      className="mt-1"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="description" required>Description</Label>
+                    <Textarea
+                      id="description"
+                      value={newIncomeData.description}
+                      onChange={(e) => setNewIncomeData({ ...newIncomeData, description: e.target.value })}
+                      placeholder="Description du revenu, contexte, utilisation prévue..."
+                      className="mt-1"
+                      rows={3}
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="paymentMethod" required>Méthode de réception</Label>
+                      <Select 
+                        value={newIncomeData.paymentMethod} 
+                        onValueChange={(value) => setNewIncomeData({ ...newIncomeData, paymentMethod: value })}
+                        defaultValue="bank_transfer"
+                        name="paymentMethod"
+                      >
+                        <SelectTrigger id="paymentMethod" className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bank_transfer">Virement bancaire</SelectItem>
+                          <SelectItem value="cash">Espèces</SelectItem>
+                          <SelectItem value="check">Chèque</SelectItem>
+                          <SelectItem value="card_payment">Carte bancaire</SelectItem>
+                          <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="manualReference">Référence</Label>
+                      <input
+                        id="manualReference"
+                        type="text"
+                        value={newIncomeData.manualReference}
+                        onChange={(e) => setNewIncomeData({ ...newIncomeData, manualReference: e.target.value })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                        placeholder="Ex: DON-DIALLO-2024-001, VIR-MAIRIE-001..."
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="justificatif">Justificatif (optionnel)</Label>
+                    <div className="mt-1 flex items-center space-x-3">
+                      <input
+                        id="justificatif"
+                        type="file"
+                        onChange={handleFileUpload}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                      />
+                      {newIncomeData.justificatifFile && (
+                        <span className="text-sm text-green-600">{newIncomeData.justificatifFile.name}</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      PDF, JPG, PNG - Max 5MB (reçu, capture virement, etc.)
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <input
+                      id="receiptGenerated"
+                      type="checkbox"
+                      checked={newIncomeData.receiptGenerated}
+                      onChange={(e) => setNewIncomeData({ ...newIncomeData, receiptGenerated: e.target.checked })}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                    />
+                    <Label htmlFor="receiptGenerated">Générer un reçu fiscal</Label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex justify-end space-x-3 mt-6">
                 <Button
@@ -1152,6 +1291,7 @@ export default function IncomePage() {
                       amount: 0,
                       title: '',
                       sourceName: '',
+                      sourceDetails: '',
                       description: '',
                       receivedDate: new Date().toISOString().split('T')[0],
                       paymentMethod: 'bank_transfer',
@@ -1166,7 +1306,7 @@ export default function IncomePage() {
                 </Button>
                 <Button
                   onClick={createIncomeEntry}
-                  disabled={isSubmitting || !newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.title.trim() || !newIncomeData.sourceName.trim() || !newIncomeData.description.trim()}
+                  disabled={isSubmitting || incomeTypes.length === 0 || !newIncomeData.incomeType || !newIncomeData.amount || !newIncomeData.title.trim() || !newIncomeData.sourceName.trim() || !newIncomeData.description.trim()}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {isSubmitting ? (
@@ -1181,20 +1321,192 @@ export default function IncomePage() {
           </div>
         )}
 
-        {error && (
-          <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
-            <div className="flex items-center">
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              <span>{error}</span>
-              <button
-                onClick={() => setError("")}
-                className="ml-4 text-red-500 hover:text-red-700"
-              >
-                ×
-              </button>
+        {/* Modal configuration type */}
+        {showTypesModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-xl font-bold mb-4">
+                {editingType ? 'Modifier le type' : 'Créer un nouveau type'}
+              </h2>
+
+              {editingType && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-5 w-5 text-blue-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-800">Modification désactivée</p>
+                      <p className="text-sm text-blue-700 mt-1">
+                        La modification des types existants sera disponible prochainement.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="typeName" required>Nom technique (clé unique)</Label>
+                  <input
+                    id="typeName"
+                    type="text"
+                    value={newTypeData.typeName}
+                    onChange={(e) => setNewTypeData({ ...newTypeData, typeName: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                    placeholder="Ex: subvention_mairie"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                    disabled={editingType !== null}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Utilisé en interne, uniquement lettres minuscules, chiffres et underscores
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="typeLabel" required>Libellé (affiché)</Label>
+                  <input
+                    id="typeLabel"
+                    type="text"
+                    value={newTypeData.typeLabel}
+                    onChange={(e) => setNewTypeData({ ...newTypeData, typeLabel: e.target.value })}
+                    placeholder="Ex: Subvention Mairie"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                    disabled={editingType !== null}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="typeDescription">Description</Label>
+                  <Textarea
+                    id="typeDescription"
+                    value={newTypeData.description}
+                    onChange={(e) => setNewTypeData({ ...newTypeData, description: e.target.value })}
+                    placeholder="Description détaillée du type d'entrée..."
+                    className="mt-1"
+                    rows={3}
+                    disabled={editingType !== null}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="defaultSourceType">Type de source par défaut</Label>
+                    <Select 
+                      value={newTypeData.defaultSourceType}
+                      onValueChange={(value) => setNewTypeData({ ...newTypeData, defaultSourceType: value })}
+                      disabled={editingType !== null}
+                      name="defaultSourceType"
+                    >
+                      <SelectTrigger id="defaultSourceType" className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="individual">Particulier</SelectItem>
+                        <SelectItem value="company">Entreprise</SelectItem>
+                        <SelectItem value="government">Organisme public</SelectItem>
+                        <SelectItem value="ngo">ONG</SelectItem>
+                        <SelectItem value="foundation">Fondation</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="maxAmount">Montant maximum (€)</Label>
+                    <input
+                      id="maxAmount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={newTypeData.maxAmount}
+                      onChange={(e) => setNewTypeData({ ...newTypeData, maxAmount: e.target.value })}
+                      placeholder="Ex: 50000"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-green-500 focus:ring-green-500"
+                      disabled={editingType !== null}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      id="requiresReceipt"
+                      type="checkbox"
+                      checked={newTypeData.requiresReceipt}
+                      onChange={(e) => setNewTypeData({ ...newTypeData, requiresReceipt: e.target.checked })}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      disabled={editingType !== null}
+                    />
+                    <Label htmlFor="requiresReceipt">Génération reçu fiscal requise</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <input
+                      id="validationRequired"
+                      type="checkbox"
+                      checked={newTypeData.validationRequired}
+                      onChange={(e) => setNewTypeData({ ...newTypeData, validationRequired: e.target.checked })}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      disabled={editingType !== null}
+                    />
+                    <Label htmlFor="validationRequired">Validation bureau obligatoire</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <input
+                      id="allowAnonymous"
+                      type="checkbox"
+                      checked={newTypeData.allowAnonymous}
+                      onChange={(e) => setNewTypeData({ ...newTypeData, allowAnonymous: e.target.checked })}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      disabled={editingType !== null}
+                    />
+                    <Label htmlFor="allowAnonymous">Autoriser dons anonymes</Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowTypesModal(false);
+                    setEditingType(null);
+                    setNewTypeData({
+                      typeName: '',
+                      typeLabel: '',
+                      description: '',
+                      defaultSourceType: 'individual',
+                      requiresReceipt: false,
+                      validationRequired: false,
+                      maxAmount: '',
+                      allowAnonymous: true
+                    });
+                  }}
+                  disabled={isSubmitting}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  onClick={createIncomeType}
+                  disabled={isSubmitting || editingType !== null || !newTypeData.typeName.trim() || !newTypeData.typeLabel.trim()}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isSubmitting ? (
+                    <LoadingSpinner size="sm" className="mr-2" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                  )}
+                  {editingType ? 'Mettre à jour' : 'Créer le type'}
+                </Button>
+              </div>
             </div>
           </div>
         )}
+
+        
+
+
+
       </div>
     </ProtectedRoute>
   );
