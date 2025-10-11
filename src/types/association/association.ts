@@ -23,6 +23,7 @@ export interface Association {
   city: string;
   address?: string;
   logo?: string;
+  status?: 'active' | 'pending_validation' | 'suspended'; // Statut de l'association
   
   // 📊 Statistiques
   totalMembers: number;

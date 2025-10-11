@@ -1,34 +1,36 @@
 {
-  "nav": {
-    "dashboard": "Pannello di controllo",
-    "associations": "Associazioni", 
-    "tontines": "Tontine",
-    "profile": "Profilo",
-    "logout": "Disconnetti"
+  "title": "Le Mie Associazioni",
+  "create": "Crea Associazione",
+  "members": "Membri",
+  "finances": "Finanze",
+  "settings": "Impostazioni",
+  "notFound": "Associazione non trovata",
+  
+  "status": {
+    "active": "Attivo",
+    "pending": "In attesa di convalida",
+    "suspended": "Sospeso"
   },
-  "auth": {
-    "login": "Accedi",
-    "register": "Registrati",
-    "email": "Email", 
-    "password": "Password",
-    "phone": "Numero di telefono",
-    "loginFor": "Accedi per",
-    "selectContext": "Seleziona il tuo contesto"
+  
+  "role": {
+    "admin": "Amministratore",
+    "member": "Membro"
   },
-  "associations": {
-    "title": "Le Mie Associazioni",
-    "create": "Crea Associazione",
-    "members": "Membri",
-    "finances": "Finanze",
-    "settings": "Impostazioni"
-  },
-  "common": {
-    "loading": "Caricamento...",
-    "error": "Errore",
-    "success": "Successo", 
-    "save": "Salva",
-    "cancel": "Annulla",
-    "delete": "Elimina",
-    "edit": "Modifica"
-  }
+  
+  "configuredRoles": "Ruoli Configurati",
+  "permissions": "permessi",
+  "generalInfo": "Informazioni generali",
+  "country": "Paese",
+  "city": "Città",
+  "currency": "Valuta",
+  "createdAt": "Creata il",
+  "statistics": "Statistiche",
+  "totalMembers": "Totale membri",
+  "activeMembers": "Membri attivi",
+  "balance": "Bilancio",
+  "memberTypes": "Tipi di membri",
+  "defaultRoles": "ruoli predefiniti",
+  
+  "viewMembers": "Visualizza membri",
+  "manageRoles": "Gestisci ruoli"
 }

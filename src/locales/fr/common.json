@@ -1,34 +1,36 @@
 {
-  "nav": {
-    "dashboard": "Tableau de bord",
-    "associations": "Associations",
-    "tontines": "Tontines",
-    "profile": "Profil",
-    "logout": "Déconnexion"
+  "title": "Mes Associations",
+  "create": "Créer une Association",
+  "members": "Membres",
+  "finances": "Finances",
+  "settings": "Paramètres",
+  "notFound": "Association introuvable",
+  
+  "status": {
+    "active": "Actif",
+    "pending": "En attente validation",
+    "suspended": "Suspendu"
   },
-  "auth": {
-    "login": "Se connecter",
-    "register": "S'inscrire", 
-    "email": "Email",
-    "password": "Mot de passe",
-    "phone": "Numéro de téléphone",
-    "loginFor": "Me connecter pour",
-    "selectContext": "Sélectionnez votre contexte"
+  
+  "role": {
+    "admin": "Administrateur",
+    "member": "Membre"
   },
-  "associations": {
-    "title": "Mes Associations",
-    "create": "Créer une Association",
-    "members": "Membres",
-    "finances": "Finances",
-    "settings": "Paramètres"
-  },
-  "common": {
-    "loading": "Chargement...",
-    "error": "Erreur",
-    "success": "Succès",
-    "save": "Enregistrer",
-    "cancel": "Annuler",
-    "delete": "Supprimer",
-    "edit": "Modifier"
-  }
+  
+  "configuredRoles": "Rôles Configurés",
+  "permissions": "permissions",
+  "generalInfo": "Informations générales",
+  "country": "Pays",
+  "city": "Ville",
+  "currency": "Devise",
+  "createdAt": "Créée le",
+  "statistics": "Statistiques",
+  "totalMembers": "Total membres",
+  "activeMembers": "Membres actifs",
+  "balance": "Balance",
+  "memberTypes": "Types de membres",
+  "defaultRoles": "rôles par défaut",
+  
+  "viewMembers": "Voir les membres",
+  "manageRoles": "Gérer les rôles"
 }
