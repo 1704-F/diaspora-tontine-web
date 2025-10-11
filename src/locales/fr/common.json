@@ -1,36 +1,8 @@
 {
-  "title": "Mes Associations",
-  "create": "Créer une Association",
-  "members": "Membres",
-  "finances": "Finances",
-  "settings": "Paramètres",
-  "notFound": "Association introuvable",
-  
-  "status": {
-    "active": "Actif",
-    "pending": "En attente validation",
-    "suspended": "Suspendu"
-  },
-  
-  "role": {
-    "admin": "Administrateur",
-    "member": "Membre"
-  },
-  
-  "configuredRoles": "Rôles Configurés",
-  "permissions": "permissions",
-  "generalInfo": "Informations générales",
-  "country": "Pays",
-  "city": "Ville",
-  "currency": "Devise",
-  "createdAt": "Créée le",
-  "statistics": "Statistiques",
-  "totalMembers": "Total membres",
-  "activeMembers": "Membres actifs",
-  "balance": "Balance",
-  "memberTypes": "Types de membres",
-  "defaultRoles": "rôles par défaut",
-  
-  "viewMembers": "Voir les membres",
-  "manageRoles": "Gérer les rôles"
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "back": "Retour",
+    "refresh": "Actualiser"
+  }
 }

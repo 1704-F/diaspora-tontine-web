@@ -1,6 +1,4 @@
-// ============================================
-// 10. LAYOUT ROOT MISE À JOUR (src/app/layout.tsx)
-// ============================================
+// src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -20,19 +18,48 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+// Charger les messages i18n
+async function getMessages(locale: string = 'fr') {
+  try {
+    // Charger common.json
+    const common = (await import(`../locales/${locale}/common.json`)).default;
+    
+    // Charger associations.json
+    let associations = {};
+    try {
+      associations = (await import(`../locales/${locale}/associations.json`)).default;
+    } catch {
+      // Fichier n'existe pas encore, ignorer
+    }
+    
+    return {
+      common,
+      associations
+    };
+  } catch (error) {
+    console.error('Erreur chargement messages i18n:', error);
+    return {
+      common: {},
+      associations: {}
+    };
+  }
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const locale = 'fr'; // Pour l'instant, français par défaut
+  const messages = await getMessages(locale);
+
   return (
-    <html lang="fr" className="h-full">
+    <html lang={locale} className="h-full">
       <body className={`${inter.className} h-full bg-white antialiased`}>
-        <Providers>
+        <Providers locale={locale} messages={messages}>
           {children}
         </Providers>
       </body>
     </html>
   )
 }
-    
