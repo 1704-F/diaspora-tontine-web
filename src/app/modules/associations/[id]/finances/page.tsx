@@ -33,7 +33,7 @@ import type {
   FinancialSummary, 
   ApiResponse,
   ExpenseRequestsResponse
-} from "@/types/modules/association/finances";
+} from "@/types/association/finances";
 
 export default function FinancesPage() {
   const { user, token } = useAuthStore();
