@@ -11,7 +11,15 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/stores/authStore";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { AddRepaymentModal } from "@/components/modules/associations/AddRepaymentModal";
+import { LoanDetailsModal } from "@/components/modules/associations/LoanDetailsModal";
 import {
   ArrowLeft,
   Clock,
@@ -32,39 +40,72 @@ import {
   Eye,
   Download,
   Phone,
-  Mail
+  Mail,
 } from "lucide-react";
 
 interface Loan {
   id: number;
   title: string;
   description: string;
-  borrowerType: 'internal' | 'external';
+  expenseType: string;
+  expenseSubtype: string;
+
+  // Bénéficiaire
+  borrowerType: "internal" | "external";
   borrower: {
     name: string;
     contact?: string;
     email?: string;
     phone?: string;
   };
+  beneficiaryExternal?: {
+    name: string;
+    type: string;
+    contact?: string;
+    iban?: string;
+  };
+  beneficiary?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+  };
+
+  // Montants
+  amountRequested: string;
   amountGranted: number;
   amountRepaid: number;
   amountOutstanding: number;
   currency: string;
-  interestRate: number;
-  durationMonths: number;
-  monthlyPayment: number;
+
+  // Conditions prêt
+  loanTerms: {
+    durationMonths: number;
+    interestRate: number;
+    monthlyPayment: number;
+  };
+
+  // Dates
   startDate: string;
   endDate: string;
   nextDueDate: string;
-  status: 'active' | 'completed' | 'defaulted' | 'suspended';
-  repaymentStatus: 'not_started' | 'in_progress' | 'completed' | 'defaulted';
+  created_at: string;
+
+  // Statuts
+  status: string;
+  isLoan: boolean;
+  repaymentStatus: string | null;
   daysLate: number;
+
+  // Remboursements
   repayments: LoanRepayment[];
-  createdAt: string;
-  loanTerms: {
-    gracePeriodDays: number;
-    penaltyRate: number;
-    allowEarlyRepayment: boolean;
+
+  // Relations
+  requester: {
+    firstName: string;
+    lastName: string;
+  };
+  section?: {
+    name: string;
   };
 }
 
@@ -78,7 +119,7 @@ interface LoanRepayment {
   dueDate: string;
   paymentMethod: string;
   reference?: string;
-  status: 'pending' | 'validated' | 'rejected';
+  status: "pending" | "validated" | "rejected";
   daysLate: number;
   notes?: string;
   validatedBy?: {
@@ -108,47 +149,42 @@ export default function LoansPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<'overview' | 'active' | 'completed'>('overview');
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "active" | "completed"
+  >("overview");
 
   // Filtres
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Modal nouveau remboursement
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
   const [newRepaymentData, setNewRepaymentData] = useState<NewRepaymentData>({
     loanId: 0,
     amount: 0,
-    paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'bank_transfer',
-    reference: '',
-    notes: ''
+    paymentDate: new Date().toISOString().split("T")[0],
+    paymentMethod: "bank_transfer",
+    reference: "",
+    notes: "",
   });
+
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedLoanIdForDetails, setSelectedLoanIdForDetails] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     if (associationId && token && user) {
-      if (!canUserManageLoans()) {
-        setError("Vous n'avez pas les droits pour gérer les prêts"); 
-        return;
-      }
       fetchData();
     }
   }, [associationId, token, user]);
 
-  const canUserManageLoans = () => {
-    return user?.roles?.some((role: string) => 
-      ['president', 'tresorier', 'secretaire'].includes(role)
-    );
-  };
-
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      await Promise.all([
-        fetchAssociation(),
-        fetchLoans()
-      ]);
+      await fetchAssociation();
+      await fetchLoans();
     } catch (error) {
       console.error("Erreur chargement données:", error);
       setError("Erreur de chargement des données");
@@ -158,183 +194,125 @@ export default function LoansPage() {
   };
 
   const fetchAssociation = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-    if (response.ok) {
-      const result = await response.json();
-      setAssociation(result.data.association);
+      if (response.ok) {
+        const result = await response.json();
+        setAssociation(result.data.association);
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error("Erreur chargement association:", error);
+      throw error;
     }
   };
 
   const fetchLoans = async () => {
-    // TODO: Remplacer par le vrai endpoint
-    // const response = await fetch(
-    //   `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests?isLoan=true`,
-    //   {
-    //     headers: { Authorization: `Bearer ${token}` },
-    //   }
-    // );
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests?isLoan=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-    // Pour l'instant, données mockées
-    setLoans([
-      {
-        id: 1,
-        title: "Prêt Association Sœur Italie",
-        description: "Prêt pour financer leur projet de construction d'une école au Sénégal",
-        borrowerType: 'external',
-        borrower: {
-          name: "Association Sénégalaise Italie",
-          contact: "Marco Rossi",
-          email: "marco@assoc-senegal-italie.org",
-          phone: "+39 06 1234 5678"
-        },
-        amountGranted: 5000,
-        amountRepaid: 2000,
-        amountOutstanding: 3000,
-        currency: 'EUR',
-        interestRate: 0,
-        durationMonths: 12,
-        monthlyPayment: 416.67,
-        startDate: '2024-01-15',
-        endDate: '2025-01-15',
-        nextDueDate: '2024-11-15',
-        status: 'active',
-        repaymentStatus: 'in_progress',
-        daysLate: 0,
-        repayments: [
-          {
-            id: 1,
-            amount: 416.67,
-            principalAmount: 416.67,
-            interestAmount: 0,
-            penaltyAmount: 0,
-            paymentDate: '2024-02-15',
-            dueDate: '2024-02-15',
-            paymentMethod: 'bank_transfer',
-            reference: 'VIR-ITALIE-FEB-2024',
-            status: 'validated',
-            daysLate: 0,
-            validatedBy: { firstName: 'Amadou', lastName: 'Diop' }
-          },
-          {
-            id: 2,
-            amount: 416.67,
-            principalAmount: 416.67,
-            interestAmount: 0,
-            penaltyAmount: 0,
-            paymentDate: '2024-03-15',
-            dueDate: '2024-03-15',
-            paymentMethod: 'bank_transfer',
-            reference: 'VIR-ITALIE-MAR-2024',
-            status: 'validated',
-            daysLate: 0,
-            validatedBy: { firstName: 'Fatou', lastName: 'Sall' }
-          }
-        ],
-        createdAt: '2024-01-10',
-        loanTerms: {
-          gracePeriodDays: 7,
-          penaltyRate: 0.05,
-          allowEarlyRepayment: true
-        }
-      },
-      {
-        id: 2,
-        title: "Avance Ahmed Projet Commerce",
-        description: "Avance remboursable pour lancement boutique produits diaspora",
-        borrowerType: 'internal',
-        borrower: {
-          name: "Ahmed Ba",
-          email: "ahmed.ba@email.com",
-          phone: "+33 6 12 34 56 78"
-        },
-        amountGranted: 2000,
-        amountRepaid: 500,
-        amountOutstanding: 1500,
-        currency: 'EUR',
-        interestRate: 2,
-        durationMonths: 10,
-        monthlyPayment: 220,
-        startDate: '2024-05-01',
-        endDate: '2025-03-01',
-        nextDueDate: '2024-11-01',
-        status: 'active',
-        repaymentStatus: 'in_progress',
-        daysLate: 15,
-        repayments: [
-          {
-            id: 3,
-            amount: 220,
-            principalAmount: 200,
-            interestAmount: 20,
-            penaltyAmount: 0,
-            paymentDate: '2024-06-01',
-            dueDate: '2024-06-01',
-            paymentMethod: 'cash',
-            status: 'validated',
-            daysLate: 0,
-            validatedBy: { firstName: 'Ibrahim', lastName: 'Kane' }
-          }
-        ],
-        createdAt: '2024-04-25',
-        loanTerms: {
-          gracePeriodDays: 5,
-          penaltyRate: 0.1,
-          allowEarlyRepayment: true
-        }
-      },
-      {
-        id: 3,
-        title: "Prêt Formation Professionnelle",
-        description: "Prêt remboursé pour formation certifiante Moussa",
-        borrowerType: 'internal',
-        borrower: {
-          name: "Moussa Traoré",
-          email: "moussa@email.com"
-        },
-        amountGranted: 1200,
-        amountRepaid: 1200,
-        amountOutstanding: 0,
-        currency: 'EUR',
-        interestRate: 0,
-        durationMonths: 8,
-        monthlyPayment: 150,
-        startDate: '2023-10-01',
-        endDate: '2024-06-01',
-        nextDueDate: '',
-        status: 'completed',
-        repaymentStatus: 'completed',
-        daysLate: 0,
-        repayments: [],
-        createdAt: '2023-09-25',
-        loanTerms: {
-          gracePeriodDays: 7,
-          penaltyRate: 0,
-          allowEarlyRepayment: true
-        }
+      if (response.ok) {
+        const result = await response.json();
+
+        // Transformer les données pour correspondre à l'UI
+        const transformedLoans = result.expenseRequests.map((loan: any) => ({
+          ...loan,
+          // Calculer montants (temporaire jusqu'à implémentation backend)
+          amountGranted: parseFloat(loan.amountRequested),
+          amountRepaid: 0, // TODO: calculer depuis remboursements
+          amountOutstanding: parseFloat(loan.amountRequested),
+
+          // Dates calculées (temporaire)
+          startDate: loan.created_at,
+          endDate: calculateEndDate(
+            loan.created_at,
+            loan.loanTerms?.durationMonths || 12
+          ),
+          nextDueDate: calculateNextDueDate(loan.created_at),
+
+          // Mapping bénéficiaire
+          borrowerType: loan.beneficiaryExternal ? "external" : "internal",
+          borrower: loan.beneficiaryExternal
+            ? {
+                name: loan.beneficiaryExternal.name,
+                contact: loan.beneficiaryExternal.contact,
+                email: "",
+                phone: loan.beneficiaryExternal.contact || "",
+              }
+            : loan.beneficiary
+              ? {
+                  name: `${loan.beneficiary.firstName} ${loan.beneficiary.lastName}`,
+                  email: "",
+                  phone: "",
+                }
+              : { name: "N/A" },
+
+          // Statut
+          daysLate: 0, // TODO: calculer
+          repayments: [], // Vide car NOT_IMPLEMENTED
+        }));
+
+        setLoans(transformedLoans);
+      } else {
+        setLoans([]);
       }
-    ]);
+    } catch (error) {
+      console.error("Erreur chargement prêts:", error);
+      setLoans([]);
+    }
+  };
+
+  // Fonctions utilitaires
+  const calculateEndDate = (startDate: string, months: number) => {
+    const date = new Date(startDate);
+    date.setMonth(date.getMonth() + months);
+    return date.toISOString();
+  };
+
+  const calculateNextDueDate = (startDate: string) => {
+    const date = new Date(startDate);
+    date.setMonth(date.getMonth() + 1);
+    return date.toISOString();
   };
 
   const getStatusBadge = (status: string, daysLate: number = 0) => {
     if (daysLate > 0) {
       return <Badge variant="destructive">En retard ({daysLate}j)</Badge>;
     }
-    
+
     switch (status) {
-      case 'active':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700">Actif</Badge>;
-      case 'completed':
-        return <Badge variant="outline" className="bg-green-50 text-green-700">Soldé</Badge>;
-      case 'defaulted':
+      case "active":
+        return (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+            Actif
+          </Badge>
+        );
+      case "completed":
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700">
+            Soldé
+          </Badge>
+        );
+      case "defaulted":
         return <Badge variant="destructive">Défaillant</Badge>;
-      case 'suspended':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700">Suspendu</Badge>;
+      case "suspended":
+        return (
+          <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+            Suspendu
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -342,26 +320,33 @@ export default function LoansPage() {
 
   const getRepaymentMethodLabel = (method: string) => {
     switch (method) {
-      case 'bank_transfer': return 'Virement bancaire';
-      case 'cash': return 'Espèces';
-      case 'check': return 'Chèque';
-      case 'card_payment': return 'Carte bancaire';
-      default: return method;
+      case "bank_transfer":
+        return "Virement bancaire";
+      case "cash":
+        return "Espèces";
+      case "check":
+        return "Chèque";
+      case "card_payment":
+        return "Carte bancaire";
+      default:
+        return method;
     }
   };
 
   const calculateNextPayment = (loan: Loan) => {
-    if (loan.status === 'completed') return null;
-    
+    if (loan.status === "completed") return null;
+
     const nextDue = new Date(loan.nextDueDate);
     const today = new Date();
-    const daysUntilDue = Math.ceil((nextDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+    const daysUntilDue = Math.ceil(
+      (nextDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
     return {
-      amount: loan.monthlyPayment,
+      amount: loan.loanTerms?.monthlyPayment || 0,
       dueDate: loan.nextDueDate,
       daysUntilDue,
-      isOverdue: daysUntilDue < 0
+      isOverdue: daysUntilDue < 0,
     };
   };
 
@@ -370,11 +355,11 @@ export default function LoansPage() {
     setSelectedLoan(loan);
     setNewRepaymentData({
       loanId: loan.id,
-      amount: nextPayment?.amount || loan.monthlyPayment,
-      paymentDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'bank_transfer',
+      amount: nextPayment?.amount || loan.loanTerms?.monthlyPayment || 0,
+      paymentDate: new Date().toISOString().split("T")[0],
+      paymentMethod: "bank_transfer",
       reference: `REMB-${loan.id}-${new Date().getMonth() + 1}-${new Date().getFullYear()}`,
-      notes: ''
+      notes: "",
     });
     setShowRepaymentModal(true);
   };
@@ -388,19 +373,19 @@ export default function LoansPage() {
     setIsSubmitting(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${newRepaymentData.loanId}/repayment`,
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${newRepaymentData.loanId}/repayments`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             amount: newRepaymentData.amount,
             paymentDate: newRepaymentData.paymentDate,
             paymentMethod: newRepaymentData.paymentMethod,
-            reference: newRepaymentData.reference,
-            notes: newRepaymentData.notes
+            manualReference: newRepaymentData.reference,
+            notes: newRepaymentData.notes,
           }),
         }
       );
@@ -411,10 +396,10 @@ export default function LoansPage() {
         setNewRepaymentData({
           loanId: 0,
           amount: 0,
-          paymentDate: new Date().toISOString().split('T')[0],
-          paymentMethod: 'bank_transfer',
-          reference: '',
-          notes: ''
+          paymentDate: new Date().toISOString().split("T")[0],
+          paymentMethod: "bank_transfer",
+          reference: "",
+          notes: "",
         });
         await fetchLoans();
       } else {
@@ -431,14 +416,25 @@ export default function LoansPage() {
 
   // Calculs statistiques
   const calculateStats = () => {
-    const activeLoans = loans.filter(loan => loan.status === 'active');
-    const completedLoans = loans.filter(loan => loan.status === 'completed');
-    const overdueLoans = loans.filter(loan => loan.daysLate > 0);
-    
-    const totalGranted = loans.reduce((sum, loan) => sum + loan.amountGranted, 0);
-    const totalOutstanding = activeLoans.reduce((sum, loan) => sum + loan.amountOutstanding, 0);
+    const activeLoans = loans.filter(
+      (loan) => loan.status === "approved" || loan.status === "paid"
+    );
+    const completedLoans = loans.filter(
+      (loan) => loan.repaymentStatus === "completed"
+    );
+    const overdueLoans = loans.filter((loan) => loan.daysLate > 0);
+
+    const totalGranted = activeLoans.reduce(
+      (sum, loan) => sum + parseFloat(loan.amountRequested),
+      0
+    );
+    const totalOutstanding = activeLoans.reduce(
+      (sum, loan) =>
+        sum + (parseFloat(loan.amountRequested) - loan.amountRepaid),
+      0
+    );
     const totalRepaid = loans.reduce((sum, loan) => sum + loan.amountRepaid, 0);
-    
+
     return {
       totalLoans: loans.length,
       activeLoans: activeLoans.length,
@@ -447,17 +443,21 @@ export default function LoansPage() {
       totalGranted,
       totalOutstanding,
       totalRepaid,
-      repaymentRate: totalGranted > 0 ? (totalRepaid / totalGranted) * 100 : 0
+      repaymentRate: totalGranted > 0 ? (totalRepaid / totalGranted) * 100 : 0,
     };
   };
 
   // Filtrer les prêts
-  const filteredLoans = loans.filter(loan => {
-    if (filterStatus !== 'all' && loan.status !== filterStatus) return false;
-    if (filterType !== 'all' && loan.borrowerType !== filterType) return false;
-    if (searchTerm && !loan.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !loan.borrower.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    
+  const filteredLoans = loans.filter((loan) => {
+    if (filterStatus !== "all" && loan.status !== filterStatus) return false;
+    if (filterType !== "all" && loan.borrowerType !== filterType) return false;
+    if (
+      searchTerm &&
+      !loan.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !loan.borrower.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+      return false;
+
     return true;
   });
 
@@ -473,12 +473,14 @@ export default function LoansPage() {
     );
   }
 
-  if (error && !canUserManageLoans()) {
+  if (error) {
     return (
       <ProtectedRoute requiredModule="associations">
         <div className="max-w-6xl mx-auto p-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Accès refusé</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">
+              Accès refusé
+            </h1>
             <p className="text-gray-600 mb-4">{error}</p>
             <Button onClick={() => router.back()}>
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -498,13 +500,17 @@ export default function LoansPage() {
           <div className="flex items-center space-x-4">
             <Button
               variant="ghost"
-              onClick={() => router.push(`/modules/associations/${associationId}/finances`)}
+              onClick={() =>
+                router.push(`/modules/associations/${associationId}/finances`)
+              }
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Retour aux finances
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Suivi des Prêts</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Suivi des Prêts
+              </h1>
               <p className="text-gray-600">{association?.name}</p>
             </div>
           </div>
@@ -516,7 +522,9 @@ export default function LoansPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total prêtés</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    Total prêtés
+                  </p>
                   <p className="text-2xl font-bold text-blue-600">
                     {stats.totalGranted.toFixed(2)} €
                   </p>
@@ -544,7 +552,9 @@ export default function LoansPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Remboursés</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    Remboursés
+                  </p>
                   <p className="text-2xl font-bold text-green-600">
                     {stats.totalRepaid.toFixed(2)} €
                   </p>
@@ -559,7 +569,9 @@ export default function LoansPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">En retard</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.overdueLoans}</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {stats.overdueLoans}
+                  </p>
                 </div>
                 <AlertTriangle className="h-8 w-8 text-red-600" />
               </div>
@@ -571,33 +583,33 @@ export default function LoansPage() {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => setActiveTab("overview")}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                activeTab === "overview"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
               <Calculator className="h-4 w-4 inline mr-2" />
               Vue d'ensemble
             </button>
             <button
-              onClick={() => setActiveTab('active')}
+              onClick={() => setActiveTab("active")}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'active'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                activeTab === "active"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
               <Clock className="h-4 w-4 inline mr-2" />
               Prêts actifs ({stats.activeLoans})
             </button>
             <button
-              onClick={() => setActiveTab('completed')}
+              onClick={() => setActiveTab("completed")}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'completed'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                activeTab === "completed"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
               <CheckCircle className="h-4 w-4 inline mr-2" />
@@ -607,7 +619,7 @@ export default function LoansPage() {
         </div>
 
         {/* Content based on active tab */}
-        {activeTab === 'overview' && (
+        {activeTab === "overview" && (
           <div className="space-y-6">
             {/* Filtres */}
             <Card>
@@ -623,7 +635,7 @@ export default function LoansPage() {
                       className="pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                  
+
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
                     <SelectTrigger>
                       <SelectValue placeholder="Statut" />
@@ -647,11 +659,14 @@ export default function LoansPage() {
                     </SelectContent>
                   </Select>
 
-                  <Button variant="outline" onClick={() => {
-                    setFilterStatus('all');
-                    setFilterType('all');
-                    setSearchTerm('');
-                  }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setFilterStatus("all");
+                      setFilterType("all");
+                      setSearchTerm("");
+                    }}
+                  >
                     <Filter className="h-4 w-4 mr-2" />
                     Réinitialiser
                   </Button>
@@ -665,24 +680,31 @@ export default function LoansPage() {
                 <Card>
                   <CardContent className="p-8 text-center">
                     <Handshake className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun prêt trouvé</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      Aucun prêt trouvé
+                    </h3>
                     <p className="text-gray-600">
-                      {loans.length === 0 
+                      {loans.length === 0
                         ? "Aucun prêt n'a encore été accordé"
-                        : "Aucun prêt ne correspond aux critères de filtrage"
-                      }
+                        : "Aucun prêt ne correspond aux critères de filtrage"}
                     </p>
                   </CardContent>
                 </Card>
               ) : (
                 filteredLoans.map((loan) => {
                   const nextPayment = calculateNextPayment(loan);
-                  const progressPercentage = loan.amountGranted > 0 
-                    ? ((loan.amountGranted - loan.amountOutstanding) / loan.amountGranted) * 100 
-                    : 0;
+                  const progressPercentage =
+                    loan.amountGranted > 0
+                      ? ((loan.amountGranted - loan.amountOutstanding) /
+                          loan.amountGranted) *
+                        100
+                      : 0;
 
                   return (
-                    <Card key={loan.id} className={`${loan.daysLate > 0 ? 'border-red-200 bg-red-50' : ''}`}>
+                    <Card
+                      key={loan.id}
+                      className={`${loan.daysLate > 0 ? "border-red-200 bg-red-50" : ""}`}
+                    >
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -691,33 +713,51 @@ export default function LoansPage() {
                                 <Handshake className="h-5 w-5 text-blue-600" />
                               </div>
                               <div>
-                                <h3 className="text-lg font-semibold text-gray-900">{loan.title}</h3>
-                                <p className="text-sm text-gray-600">{loan.borrower.name}</p>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  {loan.title}
+                                </h3>
+                                <p className="text-sm text-gray-600">
+                                  {loan.borrower.name}
+                                </p>
                               </div>
                               {getStatusBadge(loan.status, loan.daysLate)}
-                              {loan.borrowerType === 'external' && (
-                                <Badge variant="outline" className="bg-gray-50">Externe</Badge>
+                              {loan.borrowerType === "external" && (
+                                <Badge variant="outline" className="bg-gray-50">
+                                  Externe
+                                </Badge>
                               )}
                             </div>
 
-                            <p className="text-gray-700 mb-4">{loan.description}</p>
+                            <p className="text-gray-700 mb-4">
+                              {loan.description}
+                            </p>
 
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm mb-4">
                               <div>
                                 <p className="text-gray-500">Montant accordé</p>
-                                <p className="font-medium">{loan.amountGranted.toFixed(2)} €</p>
+                                <p className="font-medium">
+                                  {loan.amountGranted.toFixed(2)} €
+                                </p>
                               </div>
                               <div>
                                 <p className="text-gray-500">Remboursé</p>
-                                <p className="font-medium text-green-600">{loan.amountRepaid.toFixed(2)} €</p>
+                                <p className="font-medium text-green-600">
+                                  {loan.amountRepaid.toFixed(2)} €
+                                </p>
                               </div>
                               <div>
                                 <p className="text-gray-500">Restant dû</p>
-                                <p className="font-medium text-orange-600">{loan.amountOutstanding.toFixed(2)} €</p>
+                                <p className="font-medium text-orange-600">
+                                  {loan.amountOutstanding.toFixed(2)} €
+                                </p>
                               </div>
                               <div>
-                                <p className="text-gray-500">Échéance mensuelle</p>
-                                <p className="font-medium">{loan.monthlyPayment.toFixed(2)} €</p>
+                                <p className="text-gray-500">
+                                  Échéance mensuelle
+                                </p>
+                                <p className="font-medium">
+                                  {loan.loanTerms?.monthlyPayment.toFixed(2)} €
+                                </p>
                               </div>
                             </div>
 
@@ -752,19 +792,25 @@ export default function LoansPage() {
                             </div>
 
                             {/* Prochaine échéance */}
-                            {nextPayment && loan.status === 'active' && (
+                            {nextPayment && loan.status === "active" && (
                               <div className="mt-4 p-3 rounded-lg bg-blue-50">
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-sm font-medium text-blue-900">Prochaine échéance</p>
+                                    <p className="text-sm font-medium text-blue-900">
+                                      Prochaine échéance
+                                    </p>
                                     <p className="text-sm text-blue-700">
-                                      {nextPayment.amount.toFixed(2)} € - {new Date(nextPayment.dueDate).toLocaleDateString('fr-FR')}
+                                      {nextPayment.amount.toFixed(2)} € -{" "}
+                                      {new Date(
+                                        nextPayment.dueDate
+                                      ).toLocaleDateString("fr-FR")}
                                     </p>
                                   </div>
                                   <div className="text-right">
                                     {nextPayment.isOverdue ? (
                                       <Badge variant="destructive">
-                                        En retard ({Math.abs(nextPayment.daysUntilDue)}j)
+                                        En retard (
+                                        {Math.abs(nextPayment.daysUntilDue)}j)
                                       </Badge>
                                     ) : nextPayment.daysUntilDue <= 7 ? (
                                       <Badge className="bg-orange-100 text-orange-700">
@@ -783,7 +829,9 @@ export default function LoansPage() {
 
                           <div className="text-right ml-6">
                             <div className="mb-4">
-                              <p className="text-sm text-gray-500">Taux de remboursement</p>
+                              <p className="text-sm text-gray-500">
+                                Taux de remboursement
+                              </p>
                               <p className="text-lg font-bold text-gray-900">
                                 {progressPercentage.toFixed(1)}%
                               </p>
@@ -793,17 +841,20 @@ export default function LoansPage() {
                               <Button
                                 size="sm"
                                 onClick={() => openRepaymentModal(loan)}
-                                disabled={loan.status !== 'active'}
+                                disabled={loan.status !== "active"}
                                 className="w-full bg-green-600 hover:bg-green-700"
                               >
                                 <Plus className="h-4 w-4 mr-1" />
                                 Enregistrer remboursement
                               </Button>
-                              
+
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => router.push(`/modules/associations/${associationId}/finances/loans/${loan.id}`)}
+                                onClick={() => {
+                                  setSelectedLoanIdForDetails(loan.id);
+                                  setShowDetailsModal(true);
+                                }}
                                 className="w-full"
                               >
                                 <Eye className="h-4 w-4 mr-1" />
@@ -814,7 +865,9 @@ export default function LoansPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => window.open(`tel:${loan.borrower.phone}`)}
+                                  onClick={() =>
+                                    window.open(`tel:${loan.borrower.phone}`)
+                                  }
                                   className="w-full"
                                 >
                                   <Phone className="h-4 w-4 mr-1" />
@@ -834,242 +887,178 @@ export default function LoansPage() {
         )}
 
         {/* Active loans tab */}
-        {activeTab === 'active' && (
+        {activeTab === "active" && (
           <div className="space-y-4">
-            {loans.filter(loan => loan.status === 'active').map((loan) => {
-              const nextPayment = calculateNextPayment(loan);
-              
-              return (
-                <Card key={loan.id} className={`${loan.daysLate > 0 ? 'border-red-200 bg-red-50' : ''}`}>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">{loan.title}</h3>
-                        <p className="text-gray-600">{loan.borrower.name}</p>
-                      </div>
-                      {getStatusBadge(loan.status, loan.daysLate)}
-                    </div>
+            {loans
+              .filter((loan) => loan.status === "active")
+              .map((loan) => {
+                const nextPayment = calculateNextPayment(loan);
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div className="text-center p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500">Restant dû</p>
-                        <p className="text-xl font-bold text-orange-600">{loan.amountOutstanding.toFixed(2)} €</p>
+                return (
+                  <Card
+                    key={loan.id}
+                    className={`${loan.daysLate > 0 ? "border-red-200 bg-red-50" : ""}`}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">
+                            {loan.title}
+                          </h3>
+                          <p className="text-gray-600">{loan.borrower.name}</p>
+                        </div>
+                        {getStatusBadge(loan.status, loan.daysLate)}
                       </div>
-                      <div className="text-center p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500">Échéance mensuelle</p>
-                        <p className="text-xl font-bold text-blue-600">{loan.monthlyPayment.toFixed(2)} €</p>
-                      </div>
-                      <div className="text-center p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500">Prochaine échéance</p>
-                        <p className="text-sm font-medium">
-                          {nextPayment ? new Date(nextPayment.dueDate).toLocaleDateString('fr-FR') : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
 
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        size="sm"
-                        onClick={() => openRepaymentModal(loan)}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Nouveau remboursement
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => router.push(`/modules/associations/${associationId}/finances/loans/${loan.id}`)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Détails
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-500">Restant dû</p>
+                          <p className="text-xl font-bold text-orange-600">
+                            {loan.amountOutstanding.toFixed(2)} €
+                          </p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-500">
+                            Échéance mensuelle
+                          </p>
+                          <p className="text-xl font-bold text-blue-600">
+                            {loan.loanTerms?.monthlyPayment.toFixed(2)} €
+                          </p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-500">
+                            Prochaine échéance
+                          </p>
+                          <p className="text-sm font-medium">
+                            {nextPayment
+                              ? new Date(
+                                  nextPayment.dueDate
+                                ).toLocaleDateString("fr-FR")
+                              : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          size="sm"
+                          onClick={() => openRepaymentModal(loan)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Nouveau remboursement
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            router.push(
+                              `/modules/associations/${associationId}/finances/loans/${loan.id}`
+                            )
+                          }
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Détails
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
           </div>
         )}
 
         {/* Completed loans tab */}
-        {activeTab === 'completed' && (
+        {activeTab === "completed" && (
           <div className="space-y-4">
-            {loans.filter(loan => loan.status === 'completed').map((loan) => (
-              <Card key={loan.id}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
+            {loans
+              .filter((loan) => loan.status === "completed")
+              .map((loan) => (
+                <Card key={loan.id}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900">
+                              {loan.title}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              {loan.borrower.name}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="bg-green-50 text-green-700"
+                          >
+                            Soldé
+                          </Badge>
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{loan.title}</h3>
-                          <p className="text-sm text-gray-600">{loan.borrower.name}</p>
+
+                        <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <p className="text-gray-500">Montant accordé</p>
+                            <p className="font-medium">
+                              {loan.amountGranted.toFixed(2)} €
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Durée</p>
+                            <p className="font-medium">
+                              {loan.loanTerms?.durationMonths || 0} mois
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Date fin</p>
+                            <p className="font-medium">
+                              {new Date(loan.endDate).toLocaleDateString(
+                                "fr-FR"
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <Badge variant="outline" className="bg-green-50 text-green-700">Soldé</Badge>
                       </div>
-                      
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-500">Montant accordé</p>
-                          <p className="font-medium">{loan.amountGranted.toFixed(2)} €</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Durée</p>
-                          <p className="font-medium">{loan.durationMonths} mois</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Date fin</p>
-                          <p className="font-medium">{new Date(loan.endDate).toLocaleDateString('fr-FR')}</p>
-                        </div>
-                      </div>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          router.push(
+                            `/modules/associations/${associationId}/finances/loans/${loan.id}`
+                          )
+                        }
+                      >
+                        <History className="h-4 w-4 mr-1" />
+                        Voir historique
+                      </Button>
                     </div>
-                    
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => router.push(`/modules/associations/${associationId}/finances/loans/${loan.id}`)}
-                    >
-                      <History className="h-4 w-4 mr-1" />
-                      Voir historique
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
           </div>
         )}
 
         {/* Modal nouveau remboursement */}
         {showRepaymentModal && selectedLoan && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-2xl m-4">
-              <h2 className="text-xl font-bold mb-4">💰 Enregistrer un Remboursement</h2>
-
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                <h3 className="font-semibold text-blue-900">{selectedLoan.title}</h3>
-                <p className="text-blue-700">
-                  Emprunteur: {selectedLoan.borrower.name} | 
-                  Restant dû: {selectedLoan.amountOutstanding.toFixed(2)} € |
-                  Échéance: {selectedLoan.monthlyPayment.toFixed(2)} €
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="amount" required>Montant reçu (€)</Label>
-                    <input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={selectedLoan.amountOutstanding}
-                      value={newRepaymentData.amount || ''}
-                      onChange={(e) => setNewRepaymentData({
-                        ...newRepaymentData,
-                        amount: parseFloat(e.target.value) || 0
-                      })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                      placeholder={selectedLoan.monthlyPayment.toString()}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="paymentDate" required>Date de réception</Label>
-                    <input
-                      id="paymentDate"
-                      type="date"
-                      value={newRepaymentData.paymentDate}
-                      onChange={(e) => setNewRepaymentData({ ...newRepaymentData, paymentDate: e.target.value })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="paymentMethod" required>Méthode de paiement</Label>
-                    <Select value={newRepaymentData.paymentMethod} onValueChange={(value) => 
-                      setNewRepaymentData({ ...newRepaymentData, paymentMethod: value })
-                    }>
-                      <SelectTrigger id="paymentMethod" className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bank_transfer">🏦 Virement bancaire</SelectItem>
-                        <SelectItem value="cash">💵 Espèces</SelectItem>
-                        <SelectItem value="check">📝 Chèque</SelectItem>
-                        <SelectItem value="card_payment">💳 Carte bancaire</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="reference" required>Référence</Label>
-                    <input
-                      id="reference"
-                      type="text"
-                      value={newRepaymentData.reference}
-                      onChange={(e) => setNewRepaymentData({ ...newRepaymentData, reference: e.target.value })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                      placeholder="Ex: VIR-ITALIE-NOV-2024"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="notes">Notes/Commentaires</Label>
-                  <Textarea
-                    id="notes"
-                    value={newRepaymentData.notes}
-                    onChange={(e) => setNewRepaymentData({ ...newRepaymentData, notes: e.target.value })}
-                    placeholder="Informations complémentaires sur le remboursement..."
-                    className="mt-1"
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowRepaymentModal(false);
-                    setSelectedLoan(null);
-                    setNewRepaymentData({
-                      loanId: 0,
-                      amount: 0,
-                      paymentDate: new Date().toISOString().split('T')[0],
-                      paymentMethod: 'bank_transfer',
-                      reference: '',
-                      notes: ''
-                    });
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Annuler
-                </Button>
-                <Button
-                  onClick={recordRepayment}
-                  disabled={isSubmitting || !newRepaymentData.amount || !newRepaymentData.reference.trim()}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {isSubmitting ? (
-                    <LoadingSpinner size="sm" className="mr-2" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                  )}
-                  Enregistrer
-                </Button>
-              </div>
-            </div>
-          </div>
+          <AddRepaymentModal
+            isOpen={showRepaymentModal}
+            onClose={() => {
+              setShowRepaymentModal(false);
+              setSelectedLoan(null);
+            }}
+            associationId={associationId}
+            loanId={selectedLoan.id}
+            loanDetails={{
+              title: selectedLoan.title,
+              borrowerName: selectedLoan.borrower.name,
+              amountOutstanding: selectedLoan.amountOutstanding,
+              monthlyPayment: selectedLoan.loanTerms?.monthlyPayment || 0,
+            }}
+            onRepaymentAdded={() => fetchLoans()}
+          />
         )}
 
         {error && (
@@ -1085,6 +1074,18 @@ export default function LoansPage() {
               </button>
             </div>
           </div>
+        )}
+
+        {showDetailsModal && selectedLoanIdForDetails && (
+          <LoanDetailsModal
+            isOpen={showDetailsModal}
+            onClose={() => {
+              setShowDetailsModal(false);
+              setSelectedLoanIdForDetails(null);
+            }}
+            associationId={associationId}
+            loanId={selectedLoanIdForDetails}
+          />
         )}
       </div>
     </ProtectedRoute>

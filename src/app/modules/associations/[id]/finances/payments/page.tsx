@@ -92,20 +92,11 @@ export default function PaymentsPage() {
     justificatifFile: undefined
   });
 
-  useEffect(() => {
-    if (associationId && token && user) {
-      // Vérifier que l'utilisateur est trésorier
-      if (!canUserMakePayments()) {
-        setError("Seul le trésorier peut effectuer les paiements");
-        return;
-      }
-      fetchData();
-    }
-  }, [associationId, token, user]);
-
-  const canUserMakePayments = () => {
-    return user?.roles?.includes('tresorier');
-  };
+ useEffect(() => {
+  if (associationId && token && user) {
+    fetchData(); // ✅ Pas de vérification frontend, le backend s'en charge
+  }
+}, [associationId, token, user]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -122,19 +113,20 @@ export default function PaymentsPage() {
     }
   };
 
-  const fetchAssociation = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    if (response.ok) {
-      const result = await response.json();
-      setAssociation(result.data.association);
+ const fetchAssociation = async () => {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
     }
-  };
+  );
+
+  if (response.ok) {
+    const result = await response.json();
+    setAssociation(result.data.association);
+    // ✅ Pas besoin de setMembership
+  }
+};
 
   const fetchApprovedExpenses = async () => {
     const response = await fetch(
@@ -228,57 +220,63 @@ export default function PaymentsPage() {
   };
 
   const confirmPayment = async () => {
-    if (!paymentData.paymentReference.trim() || !paymentData.details.trim()) {
-      setError("Référence et détails du paiement sont requis");
-      return;
-    }
+  if (!paymentData.paymentReference.trim() || !paymentData.details.trim()) {
+    setError("Référence et détails du paiement sont requis");
+    return;
+  }
 
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      formData.append('paymentMethod', paymentData.paymentMethod);
-      formData.append('executionDate', paymentData.executionDate);
-      formData.append('paymentReference', paymentData.paymentReference);
-      formData.append('details', paymentData.details);
-      
-      if (paymentData.justificatifFile) {
-        formData.append('justificatif', paymentData.justificatifFile);
+  setIsSubmitting(true);
+  try {
+    // ✅ Envoyer en JSON pour l'instant (pas FormData)
+    const requestBody = {
+      paymentMode: 'manual',
+      paymentMethod: paymentData.paymentMethod,
+      paymentDate: paymentData.executionDate,
+      manualPaymentReference: paymentData.paymentReference,
+      manualPaymentDetails: {
+        description: paymentData.details,
+        executedBy: user?.id,
+        executedAt: new Date().toISOString()
+      },
+      notes: paymentData.details
+    };
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${paymentData.expenseId}/pay`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestBody),
       }
+    );
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${paymentData.expenseId}/pay`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (response.ok) {
-        setShowPaymentModal(false);
-        setSelectedExpense(null);
-        setPaymentData({
-          expenseId: 0,
-          paymentMethod: 'bank_transfer',
-          executionDate: new Date().toISOString().split('T')[0],
-          paymentReference: '',
-          details: '',
-          justificatifFile: undefined
-        });
-        await fetchApprovedExpenses(); // Recharger la liste
-      } else {
-        const error = await response.json();
-        setError(error.message || "Erreur lors de la confirmation du paiement");
-      }
-    } catch (error) {
-      console.error("Erreur paiement:", error);
-      setError("Erreur lors de la confirmation du paiement");
-    } finally {
-      setIsSubmitting(false);
+    if (response.ok) {
+      setShowPaymentModal(false);
+      setSelectedExpense(null);
+      setPaymentData({
+        expenseId: 0,
+        paymentMethod: 'bank_transfer',
+        executionDate: new Date().toISOString().split('T')[0],
+        paymentReference: '',
+        details: '',
+        justificatifFile: undefined
+      });
+      setError(""); // Clear errors
+      await fetchApprovedExpenses();
+    } else {
+      const error = await response.json();
+      setError(error.error || error.message || "Erreur lors de la confirmation du paiement");
     }
-  };
+  } catch (error) {
+    console.error("Erreur paiement:", error);
+    setError("Erreur lors de la confirmation du paiement");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   if (isLoading) {
     return (
@@ -290,22 +288,22 @@ export default function PaymentsPage() {
     );
   }
 
-  if (error && !canUserMakePayments()) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-6xl mx-auto p-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Accès refusé</h1>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
-            </Button>
-          </div>
+  if (error) { // ✅ Pas de && !canUserMakePayments()
+  return (
+    <ProtectedRoute requiredModule="associations">
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Erreur</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Retour
+          </Button>
         </div>
-      </ProtectedRoute>
-    );
-  }
+      </div>
+    </ProtectedRoute>
+  );
+}
 
   return (
     <ProtectedRoute requiredModule="associations">

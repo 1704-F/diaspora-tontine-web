@@ -1,6 +1,3 @@
-// ============================================
-// src/components/layout/MainLayout.tsx
-// ============================================
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -32,12 +29,14 @@ export function MainLayout({ children, currentModule, additionalHeaderActions }:
     const handleClickOutside = (event: MouseEvent) => {
       const sidebar = document.getElementById('mobile-sidebar')
       const menuButton = document.getElementById('mobile-menu-button')
+      const submenu = document.querySelector('[data-submenu]')
       
       if (sidebarOpen && 
           sidebar && 
           !sidebar.contains(event.target as Node) &&
           menuButton && 
-          !menuButton.contains(event.target as Node)) {
+          !menuButton.contains(event.target as Node) &&
+          (!submenu || !submenu.contains(event.target as Node))) {
         setSidebarOpen(false)
       }
     }
@@ -65,7 +64,7 @@ export function MainLayout({ children, currentModule, additionalHeaderActions }:
         />
 
         {/* Main content area */}
-        <main className="flex-1 overflow-y-auto lg:ml-0">
+        <main className="flex-1 overflow-y-auto lg:ml-0 relative z-10">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-7xl">
             {children}
           </div>

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/stores/authStore";
-import { Textarea } from "@/components/ui/Textarea";
+import { Textarea } from "@/components/ui/Textarea"; 
 import { Label } from "@/components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import {
@@ -39,7 +39,7 @@ interface ExpenseRequest {
   description: string;
   expenseType: string;
   expenseSubtype?: string;
-  amountRequested: number;
+  amountRequested: string | number;
   amountApproved?: number;
   currency: string;
   status: string;
@@ -103,6 +103,7 @@ export default function ValidationsPage() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterUrgency, setFilterUrgency] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [membership, setMembership] = useState<any>(null);
 
   // Modal validation
   const [showValidationModal, setShowValidationModal] = useState(false);
@@ -115,23 +116,25 @@ export default function ValidationsPage() {
   });
 
   useEffect(() => {
-    if (associationId && token && user) {
-      // Vérifier que l'utilisateur a les droits de validation
-      if (!canUserValidate()) {
-        setError("Vous n'avez pas les droits pour valider les demandes");
-        return;
-      }
-      fetchData();
-    }
-  }, [associationId, token, user]);
+  if (associationId && token && user) {
+    fetchData();
+  }
+}, [associationId, token, user]);
 
   const canUserValidate = () => {
-    // Vérifier si l'utilisateur est membre du bureau central
-    // Cette logique dépend de votre système de rôles
-    return user?.roles?.some((role: string) => 
-      ['president', 'tresorier', 'secretaire'].includes(role)
-    );
-  };
+  const userRoles = membership?.roles || [];
+  
+  // Vérifier d'abord les rôles dans l'association
+  const hasAssociationRole = userRoles.some((role: string) => 
+    ['admin_association', 'president', 'tresorier', 'secretaire'].includes(role)
+  );
+  
+  // Vérifier si super_admin au niveau plateforme (si ce champ existe)
+  // ✅ Supprimer cette vérification si user.role n'a pas 'super_admin'
+  // const isPlatformAdmin = user?.role === 'super_admin';
+  
+  return hasAssociationRole;
+};
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -150,22 +153,24 @@ export default function ValidationsPage() {
   };
 
   const fetchAssociation = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    if (response.ok) {
-      const result = await response.json();
-      setAssociation(result.data.association);
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
     }
-  };
+  );
+
+  if (response.ok) {
+    const result = await response.json();
+    setAssociation(result.data.association);
+    setMembership(result.data.membership || null);
+  }
+};
 
   const fetchPendingRequests = async () => {
+  try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests?status=pending,under_review&sortBy=urgencyLevel,createdAt&sortOrder=DESC`,
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests-pending`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -173,9 +178,15 @@ export default function ValidationsPage() {
 
     if (response.ok) {
       const result = await response.json();
-      setPendingRequests(result.expenseRequests || []);
+      setPendingRequests(result.data?.pendingRequests || []);
+    } else {
+      setPendingRequests([]);
     }
-  };
+  } catch (error) {
+    console.error("Erreur chargement demandes:", error);
+    setPendingRequests([]);
+  }
+};
 
   const fetchAvailableBalance = async () => {
     const response = await fetch(
@@ -245,71 +256,88 @@ export default function ValidationsPage() {
     return !userValidation; // Peut valider si pas encore validé
   };
 
-  const hasSufficientFunds = (amount: number) => {
-    return availableBalance >= amount;
-  };
+  const hasSufficientFunds = (amount: number | string) => {
+  const parsedAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return availableBalance >= parsedAmount;
+};
 
-  const openValidationModal = (request: ExpenseRequest, decision: 'approved' | 'rejected' | 'info_needed') => {
-    setValidationAction({
-      requestId: request.id,
-      decision,
-      comment: '',
-      amountApproved: decision === 'approved' ? request.amountRequested : undefined,
-      conditions: ''
-    });
-    setSelectedRequest(request);
-    setShowValidationModal(true);
-  };
+ const openValidationModal = (request: ExpenseRequest, decision: 'approved' | 'rejected' | 'info_needed') => {
+  const requestedAmount = typeof request.amountRequested === 'string' 
+    ? parseFloat(request.amountRequested) 
+    : request.amountRequested;
+    
+  setValidationAction({
+    requestId: request.id,
+    decision,
+    comment: '',
+    amountApproved: decision === 'approved' ? requestedAmount : undefined,
+    conditions: ''
+  });
+  setSelectedRequest(request);
+  setShowValidationModal(true);
+};
 
   const submitValidation = async () => {
-    if (!validationAction.comment.trim()) {
-      setError("Un commentaire est requis");
-      return;
-    }
+  if (!validationAction.comment.trim()) {
+    setError("Un commentaire est requis");
+    return;
+  }
 
-    setIsSubmitting(true);
-    try {
-      const endpoint = validationAction.decision === 'approved' ? 'approve' : 
+  setIsSubmitting(true);
+  try {
+    const endpoint = validationAction.decision === 'approved' ? 'approve' : 
                      validationAction.decision === 'rejected' ? 'reject' : 'request-info';
-      
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${validationAction.requestId}/${endpoint}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            comment: validationAction.comment,
-            amountApproved: validationAction.amountApproved,
-            conditions: validationAction.conditions,
-            ...(validationAction.decision === 'rejected' && { 
-              rejectionReason: validationAction.comment 
-            }),
-            ...(validationAction.decision === 'info_needed' && { 
-              requestedInfo: validationAction.comment 
-            })
-          }),
+    
+    // ✅ Construire directement le bon objet selon l'action
+    const requestBody = validationAction.decision === 'approved' 
+      ? {
+          comment: validationAction.comment,
+          amountApproved: validationAction.amountApproved,
+          ...(validationAction.conditions && { conditions: validationAction.conditions })
         }
-      );
+      : validationAction.decision === 'rejected'
+      ? {
+          rejectionReason: validationAction.comment
+        }
+      : {
+          requestedInfo: validationAction.comment
+        };
 
-      if (response.ok) {
-        setShowValidationModal(false);
-        setValidationAction({ requestId: 0, decision: 'approved', comment: '', amountApproved: undefined, conditions: '' });
-        setSelectedRequest(null);
-        await fetchPendingRequests(); // Recharger la liste
-      } else {
-        const error = await response.json();
-        setError(error.message || "Erreur lors de la validation");
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${validationAction.requestId}/${endpoint}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestBody),
       }
-    } catch (error) {
-      console.error("Erreur validation:", error);
-      setError("Erreur lors de la validation");
-    } finally {
-      setIsSubmitting(false);
+    );
+
+    if (response.ok) {
+      setShowValidationModal(false);
+      setValidationAction({ 
+        requestId: 0, 
+        decision: 'approved', 
+        comment: '', 
+        amountApproved: undefined, 
+        conditions: '' 
+      });
+      setSelectedRequest(null);
+      await fetchPendingRequests();
+      setError("");
+    } else {
+      const error = await response.json();
+      setError(error.error || error.message || "Erreur lors de la validation");
     }
-  };
+  } catch (error) {
+    console.error("Erreur validation:", error);
+    setError("Erreur lors de la validation");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // Filtrer les demandes
   const filteredRequests = pendingRequests.filter(request => {
@@ -333,22 +361,22 @@ export default function ValidationsPage() {
     );
   }
 
-  if (error && !canUserValidate()) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-6xl mx-auto p-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Accès refusé</h1>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
-            </Button>
-          </div>
+ if (error) {
+  return (
+    <ProtectedRoute requiredModule="associations">
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Erreur</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Retour
+          </Button>
         </div>
-      </ProtectedRoute>
-    );
-  }
+      </div>
+    </ProtectedRoute>
+  );
+}
 
   return (
     <ProtectedRoute requiredModule="associations">
@@ -512,9 +540,11 @@ export default function ValidationsPage() {
                               <AlertTriangle className="h-4 w-4 text-red-600 mr-2" />
                               <p className="text-sm text-red-700 font-medium">Fonds insuffisants</p>
                             </div>
+
                             <p className="text-sm text-red-600 mt-1">
-                              Solde disponible: {availableBalance.toFixed(2)} € | Demandé: {request.amountRequested.toFixed(2)} €
-                            </p>
+  Solde disponible: {availableBalance.toFixed(2)} € | Demandé: {parseFloat(request.amountRequested.toString()).toFixed(2)} €
+</p>
+
                           </div>
                         )}
 
@@ -556,7 +586,7 @@ export default function ValidationsPage() {
                                     {validation.decision === 'approved' ? 'Approuvé' : 'Refusé'}
                                   </span>
                                   {validation.comment && (
-                                    <span className="text-gray-600">- "{validation.comment}"</span>
+                                    <span className="text-gray-600">-&ldquo;{validation.comment}&rdquo;</span>
                                   )}
                                 </div>
                               ))}
@@ -566,9 +596,10 @@ export default function ValidationsPage() {
                       </div>
 
                       <div className="text-right ml-6">
+
                         <p className="text-2xl font-bold text-gray-900 mb-2">
-                          {request.amountRequested.toFixed(2)} {request.currency}
-                        </p>
+  {parseFloat(request.amountRequested.toString()).toFixed(2)} {request.currency}
+</p>
 
                         {/* Progression validation */}
                         <div className="mb-4">
@@ -595,7 +626,7 @@ export default function ValidationsPage() {
                               <span className="font-medium">Votre décision: {userValidation.decision === 'approved' ? 'Approuvé' : 'Refusé'}</span>
                             </div>
                             {userValidation.comment && (
-                              <p className="text-xs text-gray-600 italic">"{userValidation.comment}"</p>
+                              <p className="text-xs text-gray-600 italic">&ldquo;{userValidation.comment}&rdquo;</p>
                             )}
                           </div>
                         ) : canValidate ? (
@@ -652,29 +683,34 @@ export default function ValidationsPage() {
 
               <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                 <h3 className="font-medium">{selectedRequest.title}</h3>
-                <p className="text-sm text-gray-600">
-                  {selectedRequest.requester.firstName} {selectedRequest.requester.lastName} - {selectedRequest.amountRequested.toFixed(2)} €
-                </p>
+
+               <p className="text-sm text-gray-600">
+  {selectedRequest.requester.firstName} {selectedRequest.requester.lastName} - {parseFloat(selectedRequest.amountRequested.toString()).toFixed(2)} €
+</p>
+
               </div>
 
               {validationAction.decision === 'approved' && (
                 <div className="space-y-4 mb-4">
                   <div>
                     <Label htmlFor="amountApproved">Montant approuvé (€)</Label>
+
                     <input
-                      id="amountApproved"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={selectedRequest.amountRequested}
-                      value={validationAction.amountApproved || ''}
-                      onChange={(e) => setValidationAction({
-                        ...validationAction,
-                        amountApproved: parseFloat(e.target.value) || undefined
-                      })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                      placeholder={selectedRequest.amountRequested.toString()}
-                    />
+  id="amountApproved"
+  type="number"
+  step="0.01"
+  min="0"
+  max={parseFloat(selectedRequest.amountRequested.toString())}
+  value={validationAction.amountApproved || ''}
+  onChange={(e) => setValidationAction({
+    ...validationAction,
+    amountApproved: parseFloat(e.target.value) || undefined
+  })}
+  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+  placeholder={selectedRequest.amountRequested.toString()}
+/>
+
+
                   </div>
 
                   <div>
