@@ -1,33 +1,11 @@
-//src\stores\authStore.ts
+//src/stores/authStore.ts
 import { create } from 'zustand'
-
-interface User {
-  id: number
-  firstName: string
-  lastName: string
-  email: string
-  phoneNumber: string
-  profilePicture?: string
-  role: 'member' | 'association_admin' | 'platform_admin'
-  enabledModules: {
-    associations: { enabled: boolean; plan: string }
-    tontines: { enabled: boolean; plan: string }
-    family: { enabled: boolean; plan: string }
-    commerce: { enabled: boolean; plan: string }
-  }
-  associations?: Array<{
-    id: number
-    name: string
-    role: string
-    status: string
-  }>
-  tontines?: Array<{
-    id: number
-    name: string
-    role: 'organizer' | 'participant'
-    status: string
-  }>
-}
+import { 
+  User, 
+  UserAssociationMembership,
+  isAssociationAdmin,
+  getUserRolesInAssociation 
+} from '@/types/user'
 
 interface AuthState {
   user: User | null
@@ -41,9 +19,14 @@ interface AuthState {
   logout: () => void
   setSelectedModule: (module: 'associations' | 'tontines' | 'family' | 'commerce') => void
   login: (credentials: { phoneNumber: string; otpCode: string; module?: string }) => Promise<boolean>
-  loadUserProfile: () => Promise<boolean>  // ← Ajouter cette ligne
+  loadUserProfile: () => Promise<boolean>
   
-  // Helpers
+  // ✅ NOUVEAU : Helpers RBAC
+  getUserMembershipInAssociation: (associationId: number) => UserAssociationMembership | undefined
+  isAdminOfAssociation: (associationId: number) => boolean
+  getUserRolesInAssociation: (associationId: number) => string[]
+  
+  // Helpers existants
   getUserModuleState: (module: string) => 'new' | 'active'
   getLastSelectedModule: () => string | null
 }
@@ -59,7 +42,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   
   setSelectedModule: (module) => {
     set({ selectedModule: module })
-    // Persistance automatique
     localStorage.setItem('lastSelectedModule', module)
   },
   
@@ -68,6 +50,43 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.removeItem('user')
     localStorage.removeItem('lastSelectedModule')
     set({ user: null, token: null, selectedModule: null })
+  },
+
+  // ✅ NOUVEAU : Récupérer le membership complet d'un user dans une association
+  getUserMembershipInAssociation: (associationId: number) => {
+    const { user } = get()
+    if (!user?.associations) return undefined
+    
+    // Chercher dans les associations
+    const membership = user.associations.find(a => {
+      // Format complet UserAssociationMembership
+      if ('associationId' in a) {
+        return a.associationId === associationId
+      }
+      // Format simplifié (fallback)
+      return a.id === associationId
+    })
+    
+    // Retourner uniquement si c'est le format complet avec RBAC
+    if (membership && 'isAdmin' in membership) {
+      return membership as UserAssociationMembership
+    }
+    
+    return undefined
+  },
+
+  // ✅ NOUVEAU : Vérifier si user est admin d'une association
+  isAdminOfAssociation: (associationId: number) => {
+    const { user } = get()
+    if (!user) return false
+    return isAssociationAdmin(user, associationId)
+  },
+
+  // ✅ NOUVEAU : Obtenir les rôles attribués d'un user dans une association
+  getUserRolesInAssociation: (associationId: number) => {
+    const { user } = get()
+    if (!user) return []
+    return getUserRolesInAssociation(user, associationId)
   },
 
   // Helper pour déterminer l'état d'un utilisateur dans un module
@@ -105,14 +124,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const data = await response.json()
       
       if (data.success && data.data.user) {
-        set({ user: data.data.user })
-        localStorage.setItem('user', JSON.stringify(data.data.user))
+        const user = data.data.user
+        
+        // ✅ Debug logs (uniquement en dev)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('👤 User profile loaded:', {
+            id: user.id,
+            name: `${user.firstName} ${user.lastName}`,
+            role: user.role,
+            associationsCount: user.associations?.length || 0,
+            tontinesCount: user.tontines?.length || 0
+          })
+          
+          // Vérifier format RBAC
+          if (user.associations && user.associations.length > 0) {
+            const firstAssoc = user.associations[0]
+            console.log('🔐 RBAC check:', {
+              hasIsAdmin: 'isAdmin' in firstAssoc,
+              hasAssignedRoles: 'assignedRoles' in firstAssoc,
+              hasCustomPermissions: 'customPermissions' in firstAssoc,
+              isAdmin: firstAssoc.isAdmin,
+              assignedRoles: firstAssoc.assignedRoles,
+              customPermissions: firstAssoc.customPermissions
+            })
+          }
+        }
+        
+        set({ user })
+        localStorage.setItem('user', JSON.stringify(user))
         return true
       }
       
       return false
     } catch (error) {
-      console.error('Erreur loadUserProfile:', error)
+      console.error('❌ Erreur loadUserProfile:', error)
       return false
     }
   },
