@@ -1,7 +1,7 @@
 // src/types/association/association.ts
 
 import { RolesConfiguration } from './role';
-import { MemberTypeConfig } from './member';
+import { MemberTypeConfig, AssociationMember } from './member';
 
 /**
  * 🏛️ Association complète
@@ -11,6 +11,11 @@ export interface Association {
   name: string;
   slug: string;
   description: string;
+  domiciliationCountry: string;
+  domiciliationCity: string | null;
+  primaryCurrency: string;
+  created_at: string;
+  updated_at: string;
   
   // 🔐 RBAC Configuration
   rolesConfiguration: RolesConfiguration;
@@ -83,7 +88,11 @@ export interface AssociationSummary {
  */
 export interface GetAssociationResponse {
   success: boolean;
-  data: Association;
+  data: {
+    association: Association;
+    userMembership?: AssociationMember; // Membership de l'utilisateur connecté
+    userPermissions?: Record<string, boolean>; // Permissions calculées
+  };
 }
 
 /**

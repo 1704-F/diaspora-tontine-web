@@ -195,18 +195,19 @@ export default function AssociationDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-600">
                   {t("country")}
                 </label>
-                <p className="text-gray-900">{association.country}</p>
+                <p className="text-gray-900">{association.domiciliationCountry}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-600">
                   {t("city")}
                 </label>
-                <p className="text-gray-900">{association.city}</p>
+                <p className="text-gray-900">{association.domiciliationCity || '-'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-600">
@@ -214,7 +215,7 @@ export default function AssociationDetailPage() {
                 </label>
                 <p className="text-gray-900 flex items-center gap-1">
                   <Euro className="h-4 w-4" />
-                  {association.settings?.currency || "EUR"}
+                  {association.primaryCurrency}
                 </p>
               </div>
               <div>
@@ -222,10 +223,13 @@ export default function AssociationDetailPage() {
                   {t("createdAt")}
                 </label>
                 <p className="text-gray-900">
-                  {new Date(association.createdAt).toLocaleDateString("fr-FR")}
+                  {new Date(association.created_at).toLocaleDateString("fr-FR")}
                 </p>
               </div>
             </div>
+
+          
+
           </CardContent>
         </Card>
 

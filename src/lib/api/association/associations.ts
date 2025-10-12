@@ -1,4 +1,8 @@
 // src/lib/api/association/associations.ts
+/**
+ * 🏛️ API Associations - VERSION CORRIGÉE
+ * Compatible avec format backend: { success, data: { association, userMembership } }
+ */
 
 import { apiClient } from '../client';
 import type {
@@ -10,9 +14,6 @@ import type {
   AssociationStats
 } from '@/types/association';
 
-/**
- * 🏛️ API Associations
- */
 export const associationsApi = {
   
   /**
@@ -25,10 +26,11 @@ export const associationsApi = {
 
   /**
    * 🔍 Récupérer une association par ID
+   * ✅ CORRECTION : Retourne { association, userMembership } dans data
    */
   getById: async (associationId: number): Promise<GetAssociationResponse> => {
     const response = await apiClient.get(`/associations/${associationId}`);
-    return response.data;
+    return response.data; // Backend renvoie déjà { success, data: { association, userMembership } }
   },
 
   /**

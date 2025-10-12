@@ -41,22 +41,18 @@ export function useAssociation(associationId: number) {
       // Charger association
       const response = await associationsApi.getById(associationId);
       
-      if (response.success) {
-        setAssociation(response.data);
-      }
+      if (response.success && response.data) {
+        const responseData = response.data as unknown as {
+          association: Association;
+          userMembership?: AssociationMember;
+          userPermissions?: Record<string, boolean>;
+        };
 
-      // Charger membership actuel de l'utilisateur
-      if (user?.id) {
-        const membersResponse = await membersApi.getAll(associationId, {
-          // Filtrer pour avoir seulement le membre actuel
-          // Note: Adapter selon votre API backend
-        });
-
-        if (membersResponse.success) {
-          const myMembership = membersResponse.data.members.find(
-            (m) => m.userId === user.id
-          );
-          setCurrentMembership(myMembership || null);
+        // ✅ Pas de transformation, on utilise directement les données backend
+        setAssociation(responseData.association);
+        
+        if (responseData.userMembership) {
+          setCurrentMembership(responseData.userMembership);
         }
       }
     } catch (err) {
@@ -65,7 +61,7 @@ export function useAssociation(associationId: number) {
     } finally {
       setLoading(false);
     }
-  }, [associationId, user?.id]);
+  }, [associationId]);
 
   /**
    * 📊 Charger statistiques
@@ -93,7 +89,7 @@ export function useAssociation(associationId: number) {
       try {
         const response = await associationsApi.update(associationId, data);
         if (response.success) {
-          setAssociation(response.data);
+          setAssociation(response.data.association);
         }
       } catch (err) {
         console.error('Erreur mise à jour association:', err);
