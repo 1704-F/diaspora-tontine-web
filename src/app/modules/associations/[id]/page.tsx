@@ -89,9 +89,10 @@ export default function AssociationDetailPage() {
     }
 
     // Afficher premier rôle assigné
-    if (currentMembership.assignedRoles.length > 0) {
-      const firstRole = association?.rolesConfiguration.roles.find(
-        (r) => r.id === currentMembership.assignedRoles[0]
+    const assignedRoles = currentMembership.assignedRoles || [];
+    if (assignedRoles.length > 0) {
+      const firstRole = association?.rolesConfiguration?.roles?.find(
+        (r) => r.id === assignedRoles[0]
       );
       return <Badge variant="secondary">{firstRole?.name || t("role.member")}</Badge>;
     }
@@ -153,6 +154,7 @@ export default function AssociationDetailPage() {
 
       {/* Bureau Central - Si rôles configurés */}
       {isSetupComplete() &&
+        association.rolesConfiguration?.roles &&
         association.rolesConfiguration.roles.length > 0 && (
           <Card>
             <CardHeader>
@@ -173,7 +175,7 @@ export default function AssociationDetailPage() {
                       {role.name}
                     </div>
                     <div className="text-sm text-gray-600">
-                      {role.permissions.length} {t("permissions")}
+                      {role.permissions?.length || 0} {t("permissions")}
                     </div>
                   </div>
                 ))}

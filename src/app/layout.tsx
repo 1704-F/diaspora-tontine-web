@@ -21,27 +21,20 @@ export const metadata: Metadata = {
 // Charger les messages i18n
 async function getMessages(locale: string = 'fr') {
   try {
-    // Charger common.json
-    const common = (await import(`../locales/${locale}/common.json`)).default;
+    // Charger tous les fichiers de traduction
+    const [common, associations] = await Promise.all([
+      import(`../locales/${locale}/common.json`).then(m => m.default).catch(() => ({})),
+      import(`../locales/${locale}/associations.json`).then(m => m.default).catch(() => ({}))
+    ]);
     
-    // Charger associations.json
-    let associations = {};
-    try {
-      associations = (await import(`../locales/${locale}/associations.json`)).default;
-    } catch {
-      // Fichier n'existe pas encore, ignorer
-    }
-    
+    // ✅ Retourner les messages à plat (sans namespace imbriqué)
     return {
-      common,
-      associations
+      ...common,
+      ...associations
     };
   } catch (error) {
     console.error('Erreur chargement messages i18n:', error);
-    return {
-      common: {},
-      associations: {}
-    };
+    return {};
   }
 }
 
@@ -56,7 +49,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} className="h-full">
       <body className={`${inter.className} h-full bg-white antialiased`}>
-        <Providers locale={locale} messages={messages}>
+        <Providers locale={locale} messages={messages} timeZone="Europe/Paris">
           {children}
         </Providers>
       </body>

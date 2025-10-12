@@ -14,9 +14,15 @@ interface ProvidersProps {
   children: React.ReactNode
   locale?: string
   messages?: Messages
+  timeZone?: string
 }
 
-export function Providers({ children, locale = 'fr', messages = {} }: ProvidersProps) {
+export function Providers({ 
+  children, 
+  locale = 'fr', 
+  messages = {},
+  timeZone = 'Europe/Paris'
+}: ProvidersProps) {
   const [queryClient] = useState(
     () => new QueryClient({
       defaultOptions: {
@@ -29,7 +35,11 @@ export function Providers({ children, locale = 'fr', messages = {} }: ProvidersP
   )
 
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider 
+      locale={locale} 
+      messages={messages}
+      timeZone={timeZone}
+    >
       <QueryClientProvider client={queryClient}>
         {children}
         {/* 🍞 Sonner Toast Provider */}
