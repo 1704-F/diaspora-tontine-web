@@ -21,27 +21,125 @@ export interface Association {
   rolesConfiguration: RolesConfiguration;
   
   // 👥 Types de membres configurables
-  memberTypes: Record<string, MemberTypeConfig>; // { "membre_actif": {...}, "membre_honneur": {...} }
+  memberTypes: MemberTypeConfig[]; // ✅ MODIFIÉ : Array au lieu de Record
+  
+  // 🎭 Rôles organisationnels personnalisés
+  customRoles?: CustomRole[]; // ✅ NOUVEAU
   
   // 📍 Infos générales
   country: string;
   city: string;
   address?: string;
   logo?: string;
-  status?: 'active' | 'pending_validation' | 'suspended'; // Statut de l'association
+  status?: 'active' | 'pending_validation' | 'suspended' | 'deleted';
+  
+  // 🏢 Structure
+  isMultiSection?: boolean; // ✅ NOUVEAU
   
   // 📊 Statistiques
   totalMembers: number;
   activeMembers: number;
   totalBalance?: number;
+  membersCount?: number; // ✅ NOUVEAU (alias)
+  
+  // 💰 Paramètres cotisations
+  cotisationSettings?: CotisationSettings; // ✅ NOUVEAU
+  
+  // 🔐 Droits d'accès (legacy - à migrer)
+  accessRights?: AccessRights; // ✅ NOUVEAU
   
   // 📅 Dates
-  foundedAt?: string; // ISO date
+  foundedAt?: string;
+  founderId?: number; // ✅ NOUVEAU
   createdAt: string;
   updatedAt: string;
   
   // ⚙️ Paramètres
   settings?: AssociationSettings;
+  
+  // 📦 Features/Limits
+  features?: AssociationFeatures; // ✅ NOUVEAU
+  
+  // 📄 Documents KYB
+  documentsStatus?: DocumentsStatus; // ✅ NOUVEAU
+}
+
+/**
+ * 🎭 Rôle organisationnel personnalisé (pour organigramme)
+ * Différent des rôles RBAC - ce sont des titres/postes
+ */
+export interface CustomRole {
+  id: string; // UUID généré
+  name: string; // "Commissaire aux comptes", "Chargé communication"
+  description: string;
+  assignedTo: number | null; // userId du membre assigné (null si libre)
+  assignedAt?: string; // ISO date
+  createdAt?: string; // ISO date
+  createdBy?: number; // userId créateur
+}
+
+/**
+ * 💰 Paramètres des cotisations
+ */
+export interface CotisationSettings {
+  dueDay: number; // Jour du mois (1-28)
+  gracePeriodDays: number; // Délai de grâce
+  lateFeesEnabled: boolean;
+  lateFeesAmount: number;
+  inactivityThresholdMonths: number; // Mois avant inactivité
+  autoPaymentEnabled?: boolean;
+  reminderDaysBefore?: number; // Jours avant rappel
+}
+
+/**
+ * 🔐 Droits d'accès (système legacy)
+ * @deprecated Utiliser rolesConfiguration à la place
+ */
+export interface AccessRights {
+  finances?: 'all_members' | 'central_board_only' | 'bureau_and_sections' | 'disabled';
+  membersList?: 'all_members' | 'central_board_only' | 'bureau_and_sections' | 'disabled';
+  statistics?: 'all_members' | 'central_board_only' | 'bureau_and_sections' | 'disabled';
+  calendar?: 'all_members' | 'central_board_only' | 'bureau_and_sections' | 'disabled';
+  expenses?: 'all_members' | 'central_board_only' | 'bureau_and_sections' | 'disabled';
+}
+
+/**
+ * 📦 Features et limites de l'association
+ */
+export interface AssociationFeatures {
+  maxMembers: number;
+  maxSections: number;
+  customTypes: boolean;
+  advancedReports: boolean;
+  apiAccess: boolean;
+  multiCurrency?: boolean;
+  customBranding?: boolean;
+}
+
+/**
+ * 📄 Statut des documents KYB
+ */
+export interface DocumentsStatus {
+  statuts?: {
+    uploaded: boolean;
+    validated: boolean;
+    expiresAt: string | null;
+  };
+  receipisse?: {
+    uploaded: boolean;
+    validated: boolean;
+    expiresAt: string | null;
+  };
+  rib?: {
+    uploaded: boolean;
+    validated: boolean;
+    expiresAt: string | null;
+  };
+  pv_creation?: {
+    uploaded: boolean;
+    validated: boolean;
+    expiresAt: string | null;
+  };
 }
 
 /**
@@ -91,7 +189,7 @@ export interface GetAssociationResponse {
   data: {
     association: Association;
     userMembership?: AssociationMember; // Membership de l'utilisateur connecté
-    userPermissions?: Record<string, boolean>; // Permissions calculées
+    userPermissions?: string[]; // ✅ MODIFIÉ : Array de permission IDs au lieu de Record
   };
 }
 
@@ -103,6 +201,12 @@ export interface GetAssociationsResponse {
   data: {
     associations: AssociationSummary[];
     total: number;
+    pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
   };
 }
 
@@ -115,6 +219,9 @@ export interface CreateAssociationPayload {
   country: string;
   city: string;
   address?: string;
+  legalStatus?: string;
+  registrationNumber?: string;
+  memberTypes?: MemberTypeConfig[];
   settings?: Partial<AssociationSettings>;
 }
 
@@ -123,6 +230,18 @@ export interface CreateAssociationPayload {
  */
 export interface UpdateAssociationPayload extends Partial<CreateAssociationPayload> {
   logo?: string; // URL ou base64
+  customRoles?: CustomRole[]; // ✅ NOUVEAU
+  isMultiSection?: boolean; // ✅ NOUVEAU
+}
+
+/**
+ * 📝 Payload modification configuration
+ */
+export interface UpdateConfigurationPayload {
+  memberTypes?: MemberTypeConfig[];
+  customRoles?: CustomRole[];
+  accessRights?: AccessRights;
+  cotisationSettings?: CotisationSettings;
 }
 
 /**
@@ -133,6 +252,9 @@ export interface AssociationFilters {
   country?: string;
   city?: string;
   hasRoles?: string[]; // Filtrer par rôles utilisateur
+  status?: 'active' | 'pending_validation' | 'suspended' | 'all';
+  page?: number;
+  limit?: number;
 }
 
 /**
@@ -213,5 +335,28 @@ export interface AssociationValidation {
   isNameUnique: boolean;
   isSlugUnique: boolean;
   hasMinimumInfo: boolean; // Nom + description + pays
+  hasRolesConfigured: boolean; // ✅ NOUVEAU
+  hasMemberTypesConfigured: boolean; // ✅ NOUVEAU
   errors: string[];
+}
+
+/**
+ * 📄 Section d'une association multi-sections
+ */
+export interface Section {
+  id: number;
+  associationId: number;
+  name: string;
+  country: string;
+  city: string;
+  currency: string;
+  language: string;
+  membersCount: number;
+  bureauSection?: {
+    responsable?: { userId: number; name: string; phoneNumber: string };
+    secretaire?: { userId: number; name: string; phoneNumber: string };
+    tresorier?: { userId: number; name: string; phoneNumber: string };
+  };
+  createdAt: string;
+  updatedAt: string;
 }

@@ -19,21 +19,22 @@ export const metadata: Metadata = {
 }
 
 // Charger les messages i18n
-// Charger les messages i18n
 async function getMessages(locale: string = 'fr') {
   try {
     // Charger tous les fichiers de traduction
-    const [common, associations, roles] = await Promise.all([
+    const [common, associations, roles, settings] = await Promise.all([
       import(`../locales/${locale}/common.json`).then(m => m.default).catch(() => ({})),
       import(`../locales/${locale}/associations.json`).then(m => m.default).catch(() => ({})),
-      import(`../locales/${locale}/roles.json`).then(m => m.default).catch(() => ({}))  // ✅ AJOUTÉ
+      import(`../locales/${locale}/roles.json`).then(m => m.default).catch(() => ({})),  // ✅ AJOUTÉ
+      import(`../locales/${locale}/settings.json`).then(m => m.default).catch(() => ({}))  // ✅ AJOUTÉ
     ]);
     
-    // ✅ Retourner les messages à plat (sans namespace imbriqué)
+    // ✅ Retourner les messages à plat (sans namespace imbriqué) 
     return {
       ...common,
       ...associations,
-      ...roles  // ✅ AJOUTÉ
+      ...roles,
+      ...settings
     };
   } catch (error) {
     console.error('Erreur chargement messages i18n:', error);

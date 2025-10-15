@@ -71,7 +71,7 @@ export default function RolesManagementPage() {
   const associationId = parseInt(params.id as string);
 
   // ✅ Hooks RBAC
-  const { association, loading: loadingAssociation } = useAssociation(associationId);
+  const { association, currentMembership, loading: loadingAssociation } = useAssociation(associationId);
   const { roles, availablePermissions, loading: loadingRoles, refetch: refetchRoles } = useRoles(associationId);
   const { isAdmin, canManageRoles } = usePermissions(associationId);
 
@@ -85,16 +85,49 @@ export default function RolesManagementPage() {
     totalAdmins: association?.activeMembers || 0,
   };
 
-  // ✅ Vérification permissions (attend la fin du loading)
-  useEffect(() => {
-    if (loadingAssociation || loadingRoles) return;
-    
-    if (!isAdmin && !canManageRoles) {
-      toast.error(t("errors.insufficient_permissions"));
-      router.push(`/modules/associations/${associationId}`);
-    }
-  }, [isAdmin, canManageRoles, loadingAssociation, loadingRoles]);
+  // Dans le useEffect de la page (ligne 88-119)
+useEffect(() => {
+  // Attendre que les données soient chargées
+  if (loadingAssociation || loadingRoles) {
+    console.log('⏳ Roles Page - En attente du chargement...');
+    return;
+  }
+  
+  if (!currentMembership) {
+    console.log('⏳ Roles Page - En attente de currentMembership...');
+    return;
+  }
 
+  // ✅ AJOUT : Attendre que isAdmin se stabilise
+  if (currentMembership && !isAdmin && !canManageRoles) {
+    // Petit délai pour laisser le temps aux hooks de se synchroniser
+    const timer = setTimeout(() => {
+      console.log('🔐 Roles Page - Permission Check:', {
+        loadingAssociation,
+        loadingRoles,
+        hasCurrentMembership: !!currentMembership,
+        isAdmin,
+        canManageRoles,
+        currentMembershipIsAdmin: currentMembership?.isAdmin, // ← DEBUG
+        shouldRedirect: !isAdmin && !canManageRoles
+      });
+      
+      // Vérifier les permissions seulement si vraiment pas admin
+      if (!isAdmin && !canManageRoles && !currentMembership.isAdmin) {
+        console.log('❌ Roles Page - Permissions insuffisantes, redirection...');
+        toast.error(t("errors.insufficient_permissions"));
+        router.push(`/modules/associations/${associationId}`);
+      } else {
+        console.log('✅ Roles Page - Accès autorisé');
+      }
+    }, 100); // 100ms pour laisser React se synchroniser
+
+    return () => clearTimeout(timer);
+  }
+  
+  console.log('✅ Roles Page - Accès autorisé (isAdmin ou canManageRoles)');
+}, [isAdmin, canManageRoles, loadingAssociation, loadingRoles, currentMembership, associationId, router, t]);
+ 
   // ============================================
   // HANDLERS
   // ============================================
@@ -209,7 +242,7 @@ export default function RolesManagementPage() {
   // LOADING STATE
   // ============================================
 
-  if (loadingAssociation || loadingRoles) {
+  if (loadingAssociation || loadingRoles || !currentMembership) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">

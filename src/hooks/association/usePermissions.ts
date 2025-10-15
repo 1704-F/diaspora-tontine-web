@@ -107,7 +107,33 @@ export function usePermissions(associationId: number) {
 
   /**
    * 🎯 Permissions spécifiques métier (helpers)
+   * ✅ FIX: Vérification directe des customPermissions.granted pour éviter race conditions
    */
+  
+  // ✅ FIX CRITIQUE: canManageRoles vérifie customPermissions.granted directement
+  const canManageRoles = useMemo(() => {
+    if (isAdmin) {
+      console.log('🔐 canManageRoles: TRUE (isAdmin)');
+      return true;
+    }
+    
+    // Vérifier si manage_roles est dans customPermissions.granted DIRECTEMENT
+    const customGranted = currentMembership?.customPermissions?.granted || [];
+    if (customGranted.includes('manage_roles')) {
+      console.log('🔐 canManageRoles: TRUE (customPermissions.granted)', customGranted);
+      return true;
+    }
+    
+    // Sinon vérifier via effectivePermissions (rôles assignés)
+    const hasViaEffective = effectivePermissions.includes('manage_roles');
+    console.log('🔐 canManageRoles:', hasViaEffective, {
+      effectivePermissions,
+      customGranted,
+      isAdmin
+    });
+    return hasViaEffective;
+  }, [isAdmin, currentMembership, effectivePermissions]);
+
   const canManageFinances = useMemo(
     () => hasAnyPermission('validate_expenses', 'manage_budgets', 'view_finances'),
     [hasAnyPermission]
@@ -116,11 +142,6 @@ export function usePermissions(associationId: number) {
   const canManageMembers = useMemo(
     () => hasPermission('manage_members'),
     [hasPermission]
-  );
-
-  const canManageRoles = useMemo(
-    () => isAdmin || hasPermission('manage_roles'),
-    [isAdmin, hasPermission]
   );
 
   const canViewFinances = useMemo(
@@ -143,10 +164,15 @@ export function usePermissions(associationId: number) {
     [hasPermission]
   );
 
-  const canModifySettings = useMemo(
-    () => isAdmin || hasPermission('modify_settings'),
-    [isAdmin, hasPermission]
-  );
+  // ✅ FIX APPLIQUÉ AUSSI: canModifySettings vérifie customPermissions.granted directement
+  const canModifySettings = useMemo(() => {
+    if (isAdmin) return true;
+    
+    const customGranted = currentMembership?.customPermissions?.granted || [];
+    if (customGranted.includes('modify_settings')) return true;
+    
+    return effectivePermissions.includes('modify_settings');
+  }, [isAdmin, currentMembership, effectivePermissions]);
 
   return {
     // État
