@@ -7,27 +7,26 @@ import { NextIntlClientProvider } from 'next-intl'
 import { useState } from 'react'
 import { Toaster } from 'sonner'
 
-// 🌐 Type pour les messages i18n
 type Messages = Record<string, Record<string, string | Record<string, string>>>
 
 interface ProvidersProps {
   children: React.ReactNode
-  locale?: string
-  messages?: Messages
+  locale: string
+  messages: Messages
   timeZone?: string
 }
 
 export function Providers({ 
   children, 
-  locale = 'fr', 
-  messages = {},
+  locale, 
+  messages,
   timeZone = 'Europe/Paris'
 }: ProvidersProps) {
   const [queryClient] = useState(
     () => new QueryClient({
       defaultOptions: {
         queries: {
-          staleTime: 60 * 1000, // 1 minute
+          staleTime: 60 * 1000,
           retry: 1,
         },
       },
@@ -42,7 +41,6 @@ export function Providers({
     >
       <QueryClientProvider client={queryClient}>
         {children}
-        {/* 🍞 Sonner Toast Provider */}
         <Toaster 
           position="top-right"
           closeButton
@@ -57,7 +55,6 @@ export function Providers({
             },
           }}
         />
-        {/* React Query DevTools */}
         {process.env.NODE_ENV === 'development' && (
           <ReactQueryDevtools initialIsOpen={false} />
         )}

@@ -18,27 +18,31 @@ export const metadata: Metadata = {
   },
 }
 
-// Charger les messages i18n
-async function getMessages(locale: string = 'fr') {
+type Messages = Record<string, Record<string, string | Record<string, string>>>
+
+async function getMessages(locale: string = 'fr'): Promise<Messages> {
   try {
-    // Charger tous les fichiers de traduction
     const [common, associations, roles, settings] = await Promise.all([
-      import(`../locales/${locale}/common.json`).then(m => m.default).catch(() => ({})),
-      import(`../locales/${locale}/associations.json`).then(m => m.default).catch(() => ({})),
-      import(`../locales/${locale}/roles.json`).then(m => m.default).catch(() => ({})),  // ✅ AJOUTÉ
-      import(`../locales/${locale}/settings.json`).then(m => m.default).catch(() => ({}))  // ✅ AJOUTÉ
+      import(`../locales/${locale}/common.json`).then(m => m.default),
+      import(`../locales/${locale}/associations.json`).then(m => m.default),
+      import(`../locales/${locale}/roles.json`).then(m => m.default),
+      import(`../locales/${locale}/settings.json`).then(m => m.default)
     ]);
     
-    // ✅ Retourner les messages à plat (sans namespace imbriqué) 
     return {
-      ...common,
-      ...associations,
-      ...roles,
-      ...settings
+      common,
+      associations,
+      roles,
+      settings
     };
   } catch (error) {
     console.error('Erreur chargement messages i18n:', error);
-    return {};
+    return {
+      common: {},
+      associations: {},
+      roles: {},
+      settings: {}
+    };
   }
 }
 
@@ -47,7 +51,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const locale = 'fr'; // Pour l'instant, français par défaut
+  const locale = 'fr';
   const messages = await getMessages(locale);
 
   return (

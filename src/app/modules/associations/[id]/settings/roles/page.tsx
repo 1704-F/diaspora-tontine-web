@@ -21,7 +21,7 @@ import {
   Trash2,
   Settings,
   Info,
-  CheckCircle,
+  CheckCircle, 
   AlertCircle,
 } from "lucide-react";
 

@@ -1,108 +1,106 @@
 {
-  "roles": {
-    "title": "Gestion des rôles",
-    "subtitle": "Configurez les rôles et permissions de votre association",
-    "permissions": "Permissions",
-    "members": "Membres",
-    "roles_list": "Rôles configurés",
-    
-    "stats": {
-      "roles": "Rôles configurés",
-      "permissions": "Permissions disponibles",
-      "admins": "Administrateurs"
-    },
-    
-    "actions": {
-      "create_role": "Créer un rôle",
-      "create_first_role": "Créer mon premier rôle",
-      "edit_role": "Modifier le rôle",
-      "delete_role": "Supprimer le rôle",
-      "assign_roles": "Attribuer des rôles",
-      "manage_permissions": "Gérer les permissions",
-      "transfer_admin": "Transférer la propriété"
-    },
-    
-    "empty_state": {
-      "title": "Aucun rôle configuré",
-      "description": "Créez votre premier rôle pour commencer à organiser les permissions de votre association"
-    },
-    
-    "admin_actions": {
-      "title": "Actions administrateur",
-      "transfer_admin": "Transférer la propriété",
-      "info_title": "Administrateur",
-      "info_description": "En tant qu'administrateur, vous avez accès à toutes les fonctionnalités"
-    },
-    
-    "form": {
-      "name": "Nom du rôle",
-      "name_placeholder": "Ex: Coordinateur, Responsable communication...",
-      "description": "Description",
-      "description_placeholder": "Décrivez les responsabilités de ce rôle",
-      "color": "Couleur",
-      "icon": "Icône",
-      "permissions_title": "Permissions",
-      "permissions_description": "Sélectionnez les permissions accordées à ce rôle",
-      "is_unique": "Rôle unique",
-      "is_unique_help": "Un seul membre peut avoir ce rôle",
-      "is_mandatory": "Rôle obligatoire",
-      "is_mandatory_help": "Au moins un membre doit avoir ce rôle",
-      "select_all": "Tout sélectionner",
-      "deselect_all": "Tout désélectionner"
-    },
-    
-    "categories": {
-      "finances": "Finances",
-      "membres": "Membres",
-      "administration": "Administration",
-      "documents": "Documents",
-      "evenements": "Événements"
-    },
-    
-    "permissions_list": {
-      "view_finances": "Voir les finances",
-      "manage_budgets": "Gérer les budgets",
-      "validate_expenses": "Valider les dépenses",
-      "manage_members": "Gérer les membres",
-      "approve_members": "Approuver les membres",
-      "manage_roles": "Gérer les rôles",
-      "modify_settings": "Modifier les paramètres",
-      "create_events": "Créer des événements",
-      "manage_documents": "Gérer les documents",
-      "view_reports": "Voir les rapports",
-      "export_data": "Exporter les données"
-    },
-    
-    "delete_confirmation": {
-      "title": "Supprimer ce rôle ?",
-      "description": "Cette action est irréversible. Les membres ayant ce rôle le perdront.",
-      "cannot_delete_mandatory": "Impossible de supprimer un rôle obligatoire",
-      "cannot_delete_assigned": "Ce rôle est attribué à {count} membre(s). Retirez-le d'abord."
-    },
-    
-    "errors": {
-      "insufficient_permissions": "Vous n'avez pas les permissions pour gérer les rôles",
-      "name_required": "Le nom du rôle est requis",
-      "description_required": "La description est requise",
-      "min_permissions": "Sélectionnez au moins une permission",
-      "unique_name": "Un rôle avec ce nom existe déjà",
-      "load_failed": "Erreur de chargement des rôles"
-    },
-    
-    "success": {
-      "changes_saved": "Modifications enregistrées avec succès",
-      "role_created": "Rôle créé avec succès",
-      "role_updated": "Rôle modifié avec succès",
-      "role_deleted": "Rôle supprimé avec succès",
-      "roles_assigned": "Rôles attribués avec succès",
-      "permissions_updated": "Permissions mises à jour"
-    },
-    
-    "badges": {
-      "unique": "Unique",
-      "mandatory": "Obligatoire",
-      "admin": "Admin",
-      "custom": "Personnalisé"
-    }
+  "title": "Gestion des rôles",
+  "subtitle": "Configurez les rôles et permissions de votre association",
+  "permissions": "Permissions",
+  "members": "Membres",
+  "roles_list": "Rôles configurés",
+  
+  "stats": {
+    "roles": "Rôles configurés",
+    "permissions": "Permissions disponibles",
+    "admins": "Administrateurs"
+  },
+  
+  "actions": {
+    "create_role": "Créer un rôle",
+    "create_first_role": "Créer mon premier rôle",
+    "edit_role": "Modifier le rôle",
+    "delete_role": "Supprimer le rôle",
+    "assign_roles": "Attribuer des rôles",
+    "manage_permissions": "Gérer les permissions",
+    "transfer_admin": "Transférer la propriété"
+  },
+  
+  "empty_state": {
+    "title": "Aucun rôle configuré",
+    "description": "Créez votre premier rôle pour commencer à organiser les permissions de votre association"
+  },
+  
+  "admin_actions": {
+    "title": "Actions administrateur",
+    "transfer_admin": "Transférer la propriété",
+    "info_title": "Administrateur",
+    "info_description": "En tant qu'administrateur, vous avez accès à toutes les fonctionnalités"
+  },
+  
+  "form": {
+    "name": "Nom du rôle",
+    "name_placeholder": "Ex: Coordinateur, Responsable communication...",
+    "description": "Description",
+    "description_placeholder": "Décrivez les responsabilités de ce rôle",
+    "color": "Couleur",
+    "icon": "Icône",
+    "permissions_title": "Permissions",
+    "permissions_description": "Sélectionnez les permissions accordées à ce rôle",
+    "is_unique": "Rôle unique",
+    "is_unique_help": "Un seul membre peut avoir ce rôle",
+    "is_mandatory": "Rôle obligatoire",
+    "is_mandatory_help": "Au moins un membre doit avoir ce rôle",
+    "select_all": "Tout sélectionner",
+    "deselect_all": "Tout désélectionner"
+  },
+  
+  "categories": {
+    "finances": "Finances",
+    "membres": "Membres",
+    "administration": "Administration",
+    "documents": "Documents",
+    "evenements": "Événements"
+  },
+  
+  "permissions_list": {
+    "view_finances": "Voir les finances",
+    "manage_budgets": "Gérer les budgets",
+    "validate_expenses": "Valider les dépenses",
+    "manage_members": "Gérer les membres",
+    "approve_members": "Approuver les membres",
+    "manage_roles": "Gérer les rôles",
+    "modify_settings": "Modifier les paramètres",
+    "create_events": "Créer des événements",
+    "manage_documents": "Gérer les documents",
+    "view_reports": "Voir les rapports",
+    "export_data": "Exporter les données"
+  },
+  
+  "delete_confirmation": {
+    "title": "Supprimer ce rôle ?",
+    "description": "Cette action est irréversible. Les membres ayant ce rôle le perdront.",
+    "cannot_delete_mandatory": "Impossible de supprimer un rôle obligatoire",
+    "cannot_delete_assigned": "Ce rôle est attribué à {count} membre(s). Retirez-le d'abord."
+  },
+  
+  "errors": {
+    "insufficient_permissions": "Vous n'avez pas les permissions pour gérer les rôles",
+    "name_required": "Le nom du rôle est requis",
+    "description_required": "La description est requise",
+    "min_permissions": "Sélectionnez au moins une permission",
+    "unique_name": "Un rôle avec ce nom existe déjà",
+    "load_failed": "Erreur de chargement des rôles"
+  },
+  
+  "success": {
+    "changes_saved": "Modifications enregistrées avec succès",
+    "role_created": "Rôle créé avec succès",
+    "role_updated": "Rôle modifié avec succès",
+    "role_deleted": "Rôle supprimé avec succès",
+    "roles_assigned": "Rôles attribués avec succès",
+    "permissions_updated": "Permissions mises à jour"
+  },
+  
+  "badges": {
+    "unique": "Unique",
+    "mandatory": "Obligatoire",
+    "admin": "Admin",
+    "custom": "Personnalisé"
   }
 }

@@ -1,4 +1,14 @@
 {
+  "loading": "Chargement...",
+  "error": "Erreur",
+  "success": "Succès",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "delete": "Supprimer",
+  "edit": "Modifier",
+  "back": "Retour",
+  "refresh": "Actualiser",
+  
   "nav": {
     "dashboard": "Tableau de bord",
     "associations": "Associations",
@@ -6,6 +16,7 @@
     "profile": "Profil",
     "logout": "Déconnexion"
   },
+  
   "auth": {
     "login": "Se connecter",
     "register": "S'inscrire",
@@ -14,16 +25,5 @@
     "phone": "Numéro de téléphone",
     "loginFor": "Me connecter pour",
     "selectContext": "Sélectionnez votre contexte"
-  },
-  "common": {
-    "loading": "Chargement...",
-    "error": "Erreur",
-    "success": "Succès",
-    "save": "Enregistrer",
-    "cancel": "Annuler",
-    "delete": "Supprimer",
-    "edit": "Modifier",
-    "back": "Retour",
-    "refresh": "Actualiser"
   }
 }

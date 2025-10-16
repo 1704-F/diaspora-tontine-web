@@ -46,7 +46,7 @@ interface CustomRole {
   assignedAt?: string;
 }
 
-type ActiveTab = "members" | "sections" | "cotisations" | "organisation";
+type ActiveTab = "members" | "sections" | "cotisations";
 
 // ============================================
 // COMPOSANT PRINCIPAL
@@ -58,12 +58,15 @@ export default function AssociationSettingsPage() {
   const associationId = parseInt(params.id as string);
 
   // Hooks réutilisables
-  const { association, loading, refetch } = useAssociation(associationId);
+  const { association, currentMembership, loading, refetch } =
+    useAssociation(associationId);
   const { roles } = useRoles(associationId);
   const { isAdmin, canModifySettings } = usePermissions(associationId);
 
   // États locaux
-  const [editingMemberType, setEditingMemberType] = useState<number | null>(null);
+  const [editingMemberType, setEditingMemberType] = useState<number | null>(
+    null
+  );
   const [newMemberType, setNewMemberType] = useState<MemberType>({
     name: "",
     cotisationAmount: 0,
@@ -74,7 +77,9 @@ export default function AssociationSettingsPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("members");
 
   const [showAddCustomRole, setShowAddCustomRole] = useState(false);
-  const [newCustomRole, setNewCustomRole] = useState<Omit<CustomRole, 'id' | 'assignedTo' | 'assignedAt'>>({
+  const [newCustomRole, setNewCustomRole] = useState<
+    Omit<CustomRole, "id" | "assignedTo" | "assignedAt">
+  >({
     name: "",
     description: "",
   });
@@ -92,30 +97,70 @@ export default function AssociationSettingsPage() {
     id: string;
     data: CustomRole;
   } | null>(null);
-  const [members, setMembers] = useState<Array<{
-    userId: number;
-    status: string;
-    user: {
-      firstName: string;
-      lastName: string;
-      phoneNumber: string;
-    };
-  }>>([]);
+  const [members, setMembers] = useState<
+    Array<{
+      userId: number;
+      status: string;
+      user: {
+        firstName: string;
+        lastName: string;
+        phoneNumber: string;
+      };
+    }>
+  >([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
   // Vérification permissions (avec protection race condition)
   useEffect(() => {
-    if (loading) return;
-    if (!association) return;
-    
-    if (!isAdmin && !canModifySettings) {
+    // 1️⃣ Attendre le loading
+    if (loading) {
+      console.log("⏳ Settings - En attente du chargement...");
+      return;
+    }
+
+    // 2️⃣ Attendre que l'association existe
+    if (!association) {
+      console.log("⏳ Settings - Association non chargée...");
+      return;
+    }
+
+    // 3️⃣ Attendre que currentMembership existe (SOURCE DE VÉRITÉ)
+    if (!currentMembership) {
+      console.log("⏳ Settings - currentMembership non chargé...");
+      return;
+    }
+
+    // 4️⃣ Utiliser la source de vérité directement
+    const hasAccess = currentMembership.isAdmin || canModifySettings;
+
+    console.log("🔐 Settings - Permission Check:", {
+      userId: currentMembership.userId,
+      isAdmin: currentMembership.isAdmin,
+      canModifySettings,
+      hasAccess,
+      shouldRedirect: !hasAccess,
+    });
+
+    // 5️⃣ Maintenant on peut vérifier les permissions
+    if (!hasAccess) {
+      console.log("❌ Settings - Redirection (accès refusé)");
       toast.error(t("accessDenied"), {
-        description: t("accessDeniedDescription")
+        description: t("accessDeniedDescription"),
       });
       router.push(`/modules/associations/${associationId}`);
+    } else {
+      console.log("✅ Settings - Accès autorisé");
     }
-  }, [loading, association, isAdmin, canModifySettings, t, router, associationId]);
+  }, [
+    loading,
+    association,
+    currentMembership,
+    canModifySettings,
+    t,
+    router,
+    associationId,
+  ]);
 
   const showConfirmDialog = (
     title: string,
@@ -137,14 +182,14 @@ export default function AssociationSettingsPage() {
   const handleAddMemberType = async () => {
     if (!newMemberType.name || !newMemberType.description) {
       toast.error(t("memberTypes.missingFields"), {
-        description: t("memberTypes.missingFieldsDescription")
+        description: t("memberTypes.missingFieldsDescription"),
       });
       return;
     }
 
     if (!newMemberType.defaultRole) {
       toast.error(t("memberTypes.missingDefaultRole"), {
-        description: t("memberTypes.missingDefaultRoleDescription")
+        description: t("memberTypes.missingDefaultRoleDescription"),
       });
       return;
     }
@@ -161,7 +206,7 @@ export default function AssociationSettingsPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({ memberTypes: updatedMemberTypes }),
         }
@@ -183,7 +228,8 @@ export default function AssociationSettingsPage() {
       }
     } catch (error: unknown) {
       console.error("Erreur ajout type membre:", error);
-      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
+      const errorMessage =
+        error instanceof Error ? error.message : "Erreur inconnue";
       toast.error(errorMessage);
     }
   };
@@ -204,7 +250,7 @@ export default function AssociationSettingsPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({ memberTypes: updatedMemberTypes }),
         }
@@ -223,7 +269,7 @@ export default function AssociationSettingsPage() {
 
   const handleDeleteMemberType = async (index: number) => {
     const typeToDelete = association?.memberTypes?.[index];
-    
+
     showConfirmDialog(
       t("memberTypes.deleteConfirmTitle"),
       t("memberTypes.deleteConfirmMessage", { name: typeToDelete?.name || "" }),
@@ -238,7 +284,7 @@ export default function AssociationSettingsPage() {
               method: "PUT",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
               },
               body: JSON.stringify({ memberTypes: updatedMemberTypes }),
             }
@@ -264,7 +310,7 @@ export default function AssociationSettingsPage() {
   const handleAddCustomRole = async () => {
     if (!newCustomRole.name.trim() || !newCustomRole.description.trim()) {
       toast.error(t("memberTypes.missingFields"), {
-        description: t("memberTypes.missingFieldsDescription")
+        description: t("memberTypes.missingFieldsDescription"),
       });
       return;
     }
@@ -290,7 +336,7 @@ export default function AssociationSettingsPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({ customRoles: updatedCustomRoles }),
         }
@@ -304,7 +350,9 @@ export default function AssociationSettingsPage() {
         });
         setShowAddCustomRole(false);
         toast.success(t("organisation.roleCreated"), {
-          description: t("organisation.roleCreatedDescription", { name: newCustomRole.name })
+          description: t("organisation.roleCreatedDescription", {
+            name: newCustomRole.name,
+          }),
         });
       } else {
         throw new Error("Erreur serveur");
@@ -316,23 +364,25 @@ export default function AssociationSettingsPage() {
   };
 
   const handleDeleteCustomRole = async (roleId: string) => {
-    const roleToDelete = association?.customRoles?.find(r => r.id === roleId);
+    const roleToDelete = association?.customRoles?.find((r) => r.id === roleId);
 
     if (roleToDelete?.assignedTo) {
       toast.warning(t("organisation.roleAssigned"), {
-        description: t("organisation.roleAssignedDescription")
+        description: t("organisation.roleAssignedDescription"),
       });
       return;
     }
 
     showConfirmDialog(
       t("organisation.deleteRoleConfirmTitle"),
-   
 
-      t("organisation.deleteRoleConfirmMessage", { name: roleToDelete?.name || "" }),
+      t("organisation.deleteRoleConfirmMessage", {
+        name: roleToDelete?.name || "",
+      }),
       async () => {
         try {
-          const updatedCustomRoles = association?.customRoles?.filter(r => r.id !== roleId) || [];
+          const updatedCustomRoles =
+            association?.customRoles?.filter((r) => r.id !== roleId) || [];
 
           const response = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
@@ -340,7 +390,7 @@ export default function AssociationSettingsPage() {
               method: "PUT",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
               },
               body: JSON.stringify({ customRoles: updatedCustomRoles }),
             }
@@ -369,7 +419,7 @@ export default function AssociationSettingsPage() {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
         {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         }
       );
 
@@ -386,7 +436,7 @@ export default function AssociationSettingsPage() {
 
   const handleAssignRole = async (roleId: string, role: CustomRole) => {
     setCurrentRole({ id: roleId, data: role });
-    
+
     if (role.assignedTo) {
       setSelectedMemberId(role.assignedTo.toString());
     } else {
@@ -404,31 +454,32 @@ export default function AssociationSettingsPage() {
       const selectedMember = members.find(
         (m) => m.userId.toString() === selectedMemberId
       );
-      
+
       if (!selectedMember) {
         toast.error(t("organisation.memberNotFound"), {
-          description: t("organisation.memberNotFoundDescription")
+          description: t("organisation.memberNotFoundDescription"),
         });
         return;
       }
 
-      const updatedCustomRoles = association?.customRoles?.map(role => {
-        if (role.id === currentRole.id) {
-          return {
-            ...role,
-            assignedTo: selectedMember.userId,
-            assignedAt: new Date().toISOString(),
-          };
-        }
-        if (role.assignedTo === selectedMember.userId) {
-          return {
-            ...role,
-            assignedTo: null,
-            assignedAt: undefined,
-          };
-        }
-        return role;
-      }) || [];
+      const updatedCustomRoles =
+        association?.customRoles?.map((role) => {
+          if (role.id === currentRole.id) {
+            return {
+              ...role,
+              assignedTo: selectedMember.userId,
+              assignedAt: new Date().toISOString(),
+            };
+          }
+          if (role.assignedTo === selectedMember.userId) {
+            return {
+              ...role,
+              assignedTo: null,
+              assignedAt: undefined,
+            };
+          }
+          return role;
+        }) || [];
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
@@ -436,7 +487,7 @@ export default function AssociationSettingsPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({ customRoles: updatedCustomRoles }),
         }
@@ -450,14 +501,14 @@ export default function AssociationSettingsPage() {
         toast.success(t("organisation.roleAssignedSuccess"), {
           description: t("organisation.roleAssignedSuccessDescription", {
             name: `${selectedMember.user.firstName} ${selectedMember.user.lastName}`,
-            role: currentRole.data.name
-          })
+            role: currentRole.data.name,
+          }),
         });
       }
     } catch (error) {
       console.error("Erreur attribution rôle:", error);
       toast.error(t("organisation.assignError"), {
-        description: t("organisation.assignErrorDescription")
+        description: t("organisation.assignErrorDescription"),
       });
     }
   };
@@ -470,16 +521,17 @@ export default function AssociationSettingsPage() {
       t("organisation.removeAssignmentMessage"),
       async () => {
         try {
-          const updatedCustomRoles = association?.customRoles?.map(role => {
-            if (role.id === currentRole.id) {
-              return {
-                ...role,
-                assignedTo: null,
-                assignedAt: undefined,
-              };
-            }
-            return role;
-          }) || [];
+          const updatedCustomRoles =
+            association?.customRoles?.map((role) => {
+              if (role.id === currentRole.id) {
+                return {
+                  ...role,
+                  assignedTo: null,
+                  assignedAt: undefined,
+                };
+              }
+              return role;
+            }) || [];
 
           const response = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
@@ -487,7 +539,7 @@ export default function AssociationSettingsPage() {
               method: "PUT",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
               },
               body: JSON.stringify({ customRoles: updatedCustomRoles }),
             }
@@ -502,7 +554,7 @@ export default function AssociationSettingsPage() {
         } catch (error) {
           console.error("Erreur retrait rôle:", error);
           toast.error(t("organisation.removeError"), {
-            description: t("organisation.removeErrorDescription")
+            description: t("organisation.removeErrorDescription"),
           });
         } finally {
           setConfirmDialog(null);
@@ -516,8 +568,8 @@ export default function AssociationSettingsPage() {
 
     const assignedUserIds = new Set(
       association?.customRoles
-        ?.filter(r => r.assignedTo && r.id !== currentRole?.id)
-        .map(r => r.assignedTo) || []
+        ?.filter((r) => r.assignedTo && r.id !== currentRole?.id)
+        .map((r) => r.assignedTo) || []
     );
 
     return members.filter(
@@ -529,7 +581,10 @@ export default function AssociationSettingsPage() {
   // ============================================
   // GESTION COTISATIONS
   // ============================================
-  const handleUpdateCotisationSettings = async (field: string, value: number | boolean) => {
+  const handleUpdateCotisationSettings = async (
+    field: string,
+    value: number | boolean
+  ) => {
     try {
       const updatedCotisationSettings = {
         ...association?.cotisationSettings,
@@ -542,7 +597,7 @@ export default function AssociationSettingsPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({
             cotisationSettings: updatedCotisationSettings,
@@ -602,14 +657,14 @@ export default function AssociationSettingsPage() {
             <h1 className="text-2xl font-bold text-gray-900">
               {t("title")} - {association.name}
             </h1>
-            <p className="text-gray-600">
-              {t("subtitle")}
-            </p>
+            <p className="text-gray-600">{t("subtitle")}</p>
           </div>
         </div>
-        
+
         <Button
-          onClick={() => router.push(`/modules/associations/${associationId}/settings/roles`)}
+          onClick={() =>
+            router.push(`/modules/associations/${associationId}/settings/roles`)
+          }
           className="flex items-center gap-2"
         >
           <Shield className="h-4 w-4" />
@@ -623,10 +678,20 @@ export default function AssociationSettingsPage() {
           {[
             { key: "members" as const, label: t("tabs.members"), icon: Users },
             ...(association?.isMultiSection
-              ? [{ key: "sections" as const, label: t("tabs.sections"), icon: Building2 }]
+              ? [
+                  {
+                    key: "sections" as const,
+                    label: t("tabs.sections"),
+                    icon: Building2,
+                  },
+                ]
               : []),
-            { key: "cotisations" as const, label: t("tabs.cotisations"), icon: Euro },
-            { key: "organisation" as const, label: t("tabs.organisation"), icon: Settings },
+            {
+              key: "cotisations" as const,
+              label: t("tabs.cotisations"),
+              icon: Euro,
+            }
+           
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -666,8 +731,11 @@ export default function AssociationSettingsPage() {
                       description: t("memberTypes.noRolesDescription"),
                       action: {
                         label: t("memberTypes.createRoles"),
-                        onClick: () => router.push(`/modules/associations/${associationId}/settings/roles`)
-                      }
+                        onClick: () =>
+                          router.push(
+                            `/modules/associations/${associationId}/settings/roles`
+                          ),
+                      },
                     });
                     return;
                   }
@@ -718,7 +786,7 @@ export default function AssociationSettingsPage() {
                       }))
                     }
                   />
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       {t("memberTypes.defaultRole")} *
@@ -736,7 +804,8 @@ export default function AssociationSettingsPage() {
                       <option value="">{t("memberTypes.selectRole")}</option>
                       {roles?.map((role) => (
                         <option key={role.id} value={role.id}>
-                          {role.name} ({role.permissions?.length || 0} {t("memberTypes.permissions")})
+                          {role.name} ({role.permissions?.length || 0}{" "}
+                          {t("memberTypes.permissions")})
                         </option>
                       ))}
                     </select>
@@ -765,8 +834,10 @@ export default function AssociationSettingsPage() {
             {/* Liste des types existants */}
             <div className="space-y-3">
               {association.memberTypes?.map((type, index) => {
-                const linkedRole = roles?.find(r => r.id === type.defaultRole);
-                
+                const linkedRole = roles?.find(
+                  (r) => r.id === type.defaultRole
+                );
+
                 return (
                   <Card key={index} className="p-4">
                     {editingMemberType === index ? (
@@ -785,7 +856,7 @@ export default function AssociationSettingsPage() {
                           selectRole: t("memberTypes.selectRole"),
                           permissions: t("memberTypes.permissions"),
                           save: t("memberTypes.save"),
-                          cancel: t("memberTypes.cancel")
+                          cancel: t("memberTypes.cancel"),
                         }}
                       />
                     ) : (
@@ -799,7 +870,8 @@ export default function AssociationSettingsPage() {
                               variant="secondary"
                               className="bg-green-100 text-green-700"
                             >
-                              {type.cotisationAmount}{t("memberTypes.perMonth")}
+                              {type.cotisationAmount}
+                              {t("memberTypes.perMonth")}
                             </Badge>
                             {linkedRole && (
                               <Badge variant="outline" className="text-xs">
@@ -814,7 +886,7 @@ export default function AssociationSettingsPage() {
                             <p className="text-xs text-gray-500 mt-1">
                               {t("memberTypes.defaultRoleInfo", {
                                 roleName: linkedRole.name,
-                                count: linkedRole.permissions?.length || 0
+                                count: linkedRole.permissions?.length || 0,
                               })}
                             </p>
                           )}
@@ -841,14 +913,13 @@ export default function AssociationSettingsPage() {
                   </Card>
                 );
               })}
-              
-              {(!association.memberTypes || association.memberTypes.length === 0) && (
+
+              {(!association.memberTypes ||
+                association.memberTypes.length === 0) && (
                 <div className="text-center py-8 text-gray-500">
                   <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p>{t("memberTypes.empty")}</p>
-                  <p className="text-sm">
-                    {t("memberTypes.emptyHelp")}
-                  </p>
+                  <p className="text-sm">{t("memberTypes.emptyHelp")}</p>
                 </div>
               )}
             </div>
@@ -872,6 +943,7 @@ export default function AssociationSettingsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     {t("cotisations.dueDay")}
                   </label>
+
                   <select
                     value={association.cotisationSettings?.dueDay || 1}
                     onChange={(e) =>
@@ -882,11 +954,19 @@ export default function AssociationSettingsPage() {
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
-                      <option key={day} value={day}>
-                        {t("cotisations.dueDayOption", { day })}
-                      </option>
-                    ))}
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => {
+                      console.log(
+                        "🔍 Jour:",
+                        day,
+                        "Traduction:",
+                        t("cotisations.dueDayOption", { day })
+                      );
+                      return (
+                        <option key={day} value={day}>
+                          {t("cotisations.dueDayOption", { day })}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -919,7 +999,10 @@ export default function AssociationSettingsPage() {
                     type="number"
                     min="1"
                     max="12"
-                    value={association.cotisationSettings?.inactivityThresholdMonths || 3}
+                    value={
+                      association.cotisationSettings
+                        ?.inactivityThresholdMonths || 3
+                    }
                     onChange={(e) =>
                       handleUpdateCotisationSettings(
                         "inactivityThresholdMonths",
@@ -938,7 +1021,9 @@ export default function AssociationSettingsPage() {
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={association.cotisationSettings?.lateFeesEnabled || false}
+                      checked={
+                        association.cotisationSettings?.lateFeesEnabled || false
+                      }
                       onChange={(e) =>
                         handleUpdateCotisationSettings(
                           "lateFeesEnabled",
@@ -961,7 +1046,9 @@ export default function AssociationSettingsPage() {
                       type="number"
                       min="0"
                       step="0.01"
-                      value={association.cotisationSettings?.lateFeesAmount || 0}
+                      value={
+                        association.cotisationSettings?.lateFeesAmount || 0
+                      }
                       onChange={(e) =>
                         handleUpdateCotisationSettings(
                           "lateFeesAmount",
@@ -992,232 +1079,25 @@ export default function AssociationSettingsPage() {
                   <div className="text-2xl font-bold text-gray-900">
                     {association.cotisationSettings?.dueDay || 1}
                   </div>
-                  <div className="text-sm text-gray-600">{t("cotisations.dueDayLabel")}</div>
+                  <div className="text-sm text-gray-600">
+                    {t("cotisations.dueDayLabel")}
+                  </div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <div className="text-2xl font-bold text-gray-900">
                     {association.cotisationSettings?.gracePeriodDays || 0}
                   </div>
-                  <div className="text-sm text-gray-600">{t("cotisations.graceDaysLabel")}</div>
+                  <div className="text-sm text-gray-600">
+                    {t("cotisations.graceDaysLabel")}
+                  </div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <div className="text-2xl font-bold text-gray-900">
-                    {association.cotisationSettings?.inactivityThresholdMonths || 3}
+                    {association.cotisationSettings
+                      ?.inactivityThresholdMonths || 3}
                   </div>
-                  <div className="text-sm text-gray-600">{t("cotisations.inactivityLabel")}</div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Content - Organisation Tab */}
-      {activeTab === "organisation" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              {t("organisation.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            
-            {/* Lien vers RBAC */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-blue-900 mb-1">
-                    {t("organisation.rolesAndPermissions")}
-                  </h4>
-                  <p className="text-sm text-blue-700">
-                    {t("organisation.rolesDescription")}
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    {t("organisation.rolesConfigured", { count: roles?.length || 0 })}
-                  </p>
-                </div>
-                <Button
-                  onClick={() => router.push(`/modules/associations/${associationId}/settings/roles`)}
-                >
-                  <Shield className="h-4 w-4 mr-2" />
-                  {t("organisation.manageRoles")}
-                </Button>
-              </div>
-            </div>
-
-            {/* Rôles Organisationnels */}
-            <div className="border-t pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium">
-                  {t("organisation.organisationalRoles")}
-                </h3>
-                <Button
-                  onClick={() => setShowAddCustomRole(true)}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  {t("organisation.addRole")}
-                </Button>
-              </div>
-
-              {/* Formulaire d'ajout */}
-              {showAddCustomRole && (
-                <Card className="p-4 border-dashed border-2 border-gray-300 mb-4">
-                  <div className="space-y-4">
-                    <Input
-                      placeholder={t("organisation.roleName")}
-                      value={newCustomRole.name}
-                      onChange={(e) =>
-                        setNewCustomRole((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                    />
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {t("organisation.roleDescription")} *
-                      </label>
-                      <Textarea
-                        placeholder={t("organisation.roleDescriptionPlaceholder")}
-                        value={newCustomRole.description}
-                        onChange={(e) =>
-                          setNewCustomRole((prev) => ({
-                            ...prev,
-                            description: e.target.value,
-                          }))
-                        }
-                        rows={3}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {t("organisation.roleDescriptionHelp")}
-                      </p>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                      <div className="flex items-start gap-2">
-                        <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-                        <div className="text-sm text-blue-700">
-                          <h4 className="font-medium mb-1">{t("organisation.organisationalRoleInfo")}</h4>
-                          <p>
-                            {t("organisation.organisationalRoleHelp")}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button onClick={handleAddCustomRole}>
-                        <Save className="h-4 w-4 mr-2" />
-                        {t("organisation.createRole")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowAddCustomRole(false);
-                          setNewCustomRole({ name: "", description: "" });
-                        }}
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        {t("memberTypes.cancel")}
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              )}
-
-              {/* Liste des rôles organisationnels */}
-              <div className="space-y-3">
-                {association?.customRoles?.map((role) => {
-                  const assignedMember = role.assignedTo 
-                    ? members.find(m => m.userId === role.assignedTo)
-                    : null;
-
-                  return (
-                    <Card key={role.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="font-medium text-gray-900">
-                              {role.name}
-                            </h4>
-                            <Badge
-                              variant={role.assignedTo ? "default" : "outline"}
-                              className={
-                                role.assignedTo
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-600"
-                              }
-                            >
-                              {role.assignedTo ? t("organisation.occupied") : t("organisation.free")}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-2">
-                            {role.description}
-                          </p>
-                          {assignedMember && (
-                            <p className="text-xs text-gray-500">
-                              {t("organisation.assignedTo", {
-                                name: `${assignedMember.user.firstName} ${assignedMember.user.lastName}`
-                              })}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAssignRole(role.id, role)}
-                          >
-                            <Users className="h-4 w-4 mr-1" />
-                            {role.assignedTo ? t("organisation.modify") : t("organisation.assign")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className={`text-red-600 ${
-                              role.assignedTo ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-700'
-                            }`}
-                            onClick={() => !role.assignedTo && handleDeleteCustomRole(role.id)}
-                            disabled={!!role.assignedTo}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-
-                {(!association?.customRoles || association.customRoles.length === 0) && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                    <p>{t("organisation.empty")}</p>
-                    <p className="text-sm">
-                      {t("organisation.emptyHelp")}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Workflow de succession */}
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {t("organisation.mandates")}
-              </h3>
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Calendar className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-yellow-800">
-                      {t("organisation.mandatesTitle")}
-                    </h4>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      {t("organisation.mandatesDescription")}
-                    </p>
+                  <div className="text-sm text-gray-600">
+                    {t("cotisations.inactivityLabel")}
                   </div>
                 </div>
               </div>
@@ -1225,6 +1105,8 @@ export default function AssociationSettingsPage() {
           </CardContent>
         </Card>
       )}
+
+     
 
       {/* Content - Sections Tab */}
       {activeTab === "sections" && association && (
@@ -1236,105 +1118,12 @@ export default function AssociationSettingsPage() {
               isMultiSection: association.isMultiSection || false,
               features: association.features || { maxSections: 10 },
             }}
-            token={localStorage.getItem('token')}
+            token={localStorage.getItem("token")}
           />
         </div>
       )}
 
-      {/* Modal Assignation Rôle */}
-      {showAssignModal && currentRole && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">
-                {t("organisation.assignRoleTitle", { name: currentRole.data.name })}
-              </h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setShowAssignModal(false);
-                  setCurrentRole(null);
-                  setSelectedMemberId("");
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                {currentRole.data.description}
-              </p>
-
-              {currentRole.data.assignedTo && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-blue-800">
-                        {t("organisation.currentlyAssignedTo")}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-red-600"
-                      onClick={handleRemoveRoleAssignment}
-                    >
-                      {t("organisation.remove")}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {currentRole.data.assignedTo ? t("organisation.reassignTo") : t("organisation.assignTo")}
-                </label>
-
-                {isLoadingMembers ? (
-                  <p className="text-sm text-gray-500">{t("organisation.loadingMembers")}</p>
-                ) : (
-                  <select
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    value={selectedMemberId}
-                    onChange={(e) => setSelectedMemberId(e.target.value)}
-                  >
-                    <option value="">{t("organisation.selectMember")}</option>
-                    {getAvailableMembers().map((member) => (
-                      <option key={member.userId} value={member.userId}>
-                        {member.user.firstName} {member.user.lastName} - {member.user.phoneNumber}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <Button
-                onClick={handleConfirmAssignRole}
-                disabled={!selectedMemberId}
-                className="flex-1"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {t("organisation.confirm")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowAssignModal(false);
-                  setCurrentRole(null);
-                  setSelectedMemberId("");
-                }}
-                className="flex-1"
-              >
-                {t("memberTypes.cancel")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+    
 
       {/* Confirm Dialog */}
       {confirmDialog && (
@@ -1348,11 +1137,11 @@ export default function AssociationSettingsPage() {
                 {confirmDialog.title}
               </h3>
             </div>
-            
+
             <p className="text-sm text-gray-600 mb-6">
               {confirmDialog.message}
             </p>
-            
+
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -1371,6 +1160,7 @@ export default function AssociationSettingsPage() {
           </div>
         </div>
       )}
+      
     </div>
   );
 }
@@ -1401,7 +1191,7 @@ function EditMemberTypeForm({
   availableRoles,
   onSave,
   onCancel,
-  translations: t
+  translations: t,
 }: EditMemberTypeFormProps) {
   const [editedType, setEditedType] = useState(memberType);
 
@@ -1440,7 +1230,7 @@ function EditMemberTypeForm({
           }))
         }
       />
-      
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           {t.defaultRole} *

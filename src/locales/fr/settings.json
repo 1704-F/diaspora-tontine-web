@@ -47,7 +47,7 @@
   "cotisations": {
     "title": "Paramètres des cotisations",
     "dueDay": "Jour d'échéance mensuelle",
-    "dueDayOption": "{{day}} de chaque mois",
+    "dueDayOption": "{day} de chaque mois",
     "gracePeriod": "Délai de grâce (jours)",
     "gracePeriodHelp": "Nombre de jours après l'échéance avant considération en retard",
     "inactivityThreshold": "Seuil d'inactivité (mois)",
@@ -67,7 +67,7 @@
     "title": "Organisation de l'association",
     "rolesAndPermissions": "Rôles et Permissions",
     "rolesDescription": "Créez des rôles (Président, Trésorier, Coordinateur, etc.) et attribuez-leur des permissions spécifiques",
-    "rolesConfigured": "{{count}} rôles configurés",
+    "rolesConfigured": "{count} rôles configurés",
     "manageRoles": "Gérer les rôles",
     "organisationalRoles": "Rôles Organisationnels",
     "addRole": "Ajouter un rôle",
@@ -88,15 +88,15 @@
     "mandates": "Mandats et transitions",
     "mandatesTitle": "Gestion des mandats",
     "mandatesDescription": "Fonctionnalité à venir : Configuration des durées de mandat, élections automatiques, et workflow de passation de pouvoirs.",
-    "assignedTo": "Attribué à : {{name}}",
+    "assignedTo": "Attribué à : {name}",
     "deleteRoleConfirmTitle": "Supprimer le rôle organisationnel",
     "deleteRoleConfirmMessage": "Êtes-vous sûr de vouloir supprimer le rôle \"{{name}}\" ? Cette action est irréversible.",
     "roleAssigned": "Rôle attribué",
     "roleAssignedDescription": "Retirez d'abord l'assignation avant de supprimer ce rôle.",
     "roleCreated": "Rôle organisationnel créé avec succès",
-    "roleCreatedDescription": "Le rôle \"{{name}}\" a été ajouté",
+    "roleCreatedDescription": "Le rôle \"{name}\" a été ajouté",
     "roleDeleted": "Rôle supprimé avec succès",
-    "assignRoleTitle": "Attribuer le rôle \"{{name}}\"",
+    "assignRoleTitle": "Attribuer le rôle \"{name}\"",
     "currentlyAssignedTo": "Actuellement assigné",
     "assignTo": "Attribuer à :",
     "reassignTo": "Réassigner à :",
@@ -106,7 +106,7 @@
     "removeAssignment": "Retirer l'assignation du rôle",
     "removeAssignmentMessage": "Êtes-vous sûr de vouloir retirer ce rôle ?",
     "roleAssignedSuccess": "Rôle attribué avec succès",
-    "roleAssignedSuccessDescription": "{{name}} est maintenant {{role}}",
+    "roleAssignedSuccessDescription": "{name} est maintenant {role}",
     "roleRemovedSuccess": "Rôle retiré avec succès",
     "memberNotFound": "Membre introuvable",
     "memberNotFoundDescription": "Veuillez sélectionner un membre valide",
@@ -125,4 +125,4 @@
     "cancel": "Annuler",
     "confirm": "Confirmer"
   }
-}
+} 
