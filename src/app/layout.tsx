@@ -22,18 +22,20 @@ type Messages = Record<string, Record<string, string | Record<string, string>>>
 
 async function getMessages(locale: string = 'fr'): Promise<Messages> {
   try {
-    const [common, associations, roles, settings] = await Promise.all([
+    const [common, associations, roles, settings, createAssociation] = await Promise.all([
       import(`../locales/${locale}/common.json`).then(m => m.default),
       import(`../locales/${locale}/associations.json`).then(m => m.default),
       import(`../locales/${locale}/roles.json`).then(m => m.default),
-      import(`../locales/${locale}/settings.json`).then(m => m.default)
+      import(`../locales/${locale}/settings.json`).then(m => m.default),
+      import(`../locales/${locale}/create-association.json`).then(m => m.default)
     ]);
     
     return {
       common,
       associations,
       roles,
-      settings
+      settings,
+      createAssociation
     };
   } catch (error) {
     console.error('Erreur chargement messages i18n:', error);
@@ -41,7 +43,8 @@ async function getMessages(locale: string = 'fr'): Promise<Messages> {
       common: {},
       associations: {},
       roles: {},
-      settings: {}
+      settings: {},
+      createAssociation: {}
     };
   }
 }

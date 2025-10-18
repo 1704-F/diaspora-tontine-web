@@ -1,0 +1,153 @@
+{
+  "title": "Créer une nouvelle association",
+  "subtitle": "Créez votre association en quelques étapes simples",
+  "backButton": "Retour",
+  
+  "steps": {
+    "basic": "Informations de base",
+    "roles": "Rôles et permissions",
+    "memberTypes": "Types de membres",
+    "finalization": "Finalisation"
+  },
+  
+  "basicInfo": {
+    "title": "Informations de base",
+    "name": "Nom de l'association",
+    "nameRequired": "Nom requis",
+    "namePlaceholder": "Ex: Diaspora Malienne de France",
+    "legalStatus": "Statut légal",
+    "legalStatusRequired": "Statut légal requis",
+    "description": "Description",
+    "descriptionPlaceholder": "Décrivez les objectifs et missions de votre association...",
+    "country": "Pays principal",
+    "countryRequired": "Pays requis",
+    "city": "Ville principale",
+    "cityRequired": "Ville requise",
+    "cityPlaceholder": "Ex: Paris, Bruxelles...",
+    "registrationNumber": "Numéro d'enregistrement (optionnel)",
+    "registrationNumberPlaceholder": "Ex: W751234567 (pour association française)"
+  },
+  
+  "legalStatus": {
+    "association_1901": "Association loi 1901 (France)",
+    "asbl": "ASBL (Belgique)",
+    "nonprofit_501c3": "Nonprofit 501(c)(3) (USA)",
+    "other": "Autre statut"
+  },
+  
+  "countries": {
+    "FR": "France",
+    "BE": "Belgique",
+    "SN": "Sénégal",
+    "IT": "Italie",
+    "ES": "Espagne",
+    "US": "États-Unis",
+    "CA": "Canada"
+  },
+  
+  "roles": {
+    "title": "Rôles et permissions",
+    "subtitle": "Créez au moins 3 rôles pour organiser votre association",
+    "addRole": "Ajouter un rôle",
+    "roleName": "Nom du rôle",
+    "roleNamePlaceholder": "Ex: Coordinateur, Trésorier...",
+    "roleDescription": "Description du rôle",
+    "roleDescriptionPlaceholder": "Décrivez les responsabilités...",
+    "permissions": "Permissions",
+    "permissionsSubtitle": "Sélectionnez les permissions accordées à ce rôle",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner",
+    "color": "Couleur",
+    "minimumRoles": "Créez au moins 3 rôles (recommandé: Membre, Coordinateur, Administrateur)",
+    "roleNameRequired": "Nom du rôle requis",
+    "roleDescRequired": "Description requise",
+    "minPermissions": "Sélectionnez au moins une permission",
+    "deleteRole": "Supprimer ce rôle",
+    "roleCount": "{count} rôle(s) créé(s)"
+  },
+  
+  "permissionCategories": {
+    "finances": "Finances",
+    "membres": "Membres",
+    "administration": "Administration",
+    "documents": "Documents",
+    "evenements": "Événements"
+  },
+  
+  "memberTypes": {
+    "title": "Types de membres",
+    "subtitle": "Définissez les catégories de membres et leurs cotisations",
+    "addType": "Ajouter un type",
+    "typeName": "Nom du type",
+    "typeNamePlaceholder": "Ex: Membre actif, Bélier, Lion...",
+    "amount": "Cotisation mensuelle (€)",
+    "amountPlaceholder": "0.00",
+    "description": "Description",
+    "descriptionPlaceholder": "Avantages et privilèges de ce type...",
+    "defaultRole": "Rôle attribué automatiquement",
+    "selectRole": "Sélectionner un rôle...",
+    "roleHelp": "Les nouveaux membres de ce type hériteront automatiquement de ce rôle et de ses permissions",
+    "deleteType": "Supprimer ce type",
+    "typeNameRequired": "Nom du type requis",
+    "amountPositive": "Montant doit être positif",
+    "roleRequired": "Rôle par défaut requis",
+    "minimumTypes": "Créez au moins un type de membre",
+    "typeCount": "{count} type(s) de membre(s)"
+  },
+  
+  "finalization": {
+    "title": "Récapitulatif",
+    "subtitle": "Vérifiez les informations avant de créer votre association",
+    "generalInfo": "Informations générales",
+    "name": "Nom",
+    "status": "Statut",
+    "country": "Pays",
+    "city": "Ville",
+    "rolesCreated": "Rôles créés ({count})",
+    "memberTypesCreated": "Types de membres ({count})",
+    "perMonth": "{amount}€/mois",
+    "withRole": "avec rôle {role}",
+    "nextStepsTitle": "Prochaines étapes après création",
+    "nextSteps": [
+      "Vous serez automatiquement administrateur de cette association",
+      "Vous pourrez inviter d'autres membres",
+      "Tous les paramètres restent modifiables dans les réglages",
+      "Vous pourrez ajouter d'autres rôles et types de membres plus tard"
+    ]
+  },
+  
+  "navigation": {
+    "previous": "Précédent",
+    "next": "Suivant",
+    "create": "Créer l'association"
+  },
+  
+  "validation": {
+    "nameTooShort": "Nom trop court (minimum 3 caractères)",
+    "atLeastOneRole": "Créez au moins un rôle",
+    "atLeastOneMemberType": "Créez au moins un type de membre"
+  },
+  
+  "errors": {
+    "createFailed": "Erreur lors de la création de l'association",
+    "connectionError": "Erreur de connexion au serveur",
+    "roleCreationFailed": "Erreur lors de la création des rôles",
+    "configUpdateFailed": "Erreur lors de la mise à jour de la configuration"
+  },
+  
+  "success": {
+    "created": "Association créée avec succès !",
+    "redirecting": "Redirection en cours..."
+  },
+  
+  "colors": {
+    "blue": "Bleu",
+    "violet": "Violet",
+    "rose": "Rose",
+    "red": "Rouge",
+    "orange": "Orange",
+    "green": "Vert",
+    "cyan": "Cyan",
+    "indigo": "Indigo"
+  }
+}

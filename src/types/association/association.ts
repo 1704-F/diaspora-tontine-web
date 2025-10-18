@@ -216,8 +216,8 @@ export interface GetAssociationsResponse {
 export interface CreateAssociationPayload {
   name: string;
   description: string;
-  country: string;
-  city: string;
+  domiciliationCountry: string; 
+  domiciliationCity: string;  
   address?: string;
   legalStatus?: string;
   registrationNumber?: string;
