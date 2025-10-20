@@ -23,6 +23,9 @@ import {
   Info,
   Shield,
   X,
+  FileText,
+  Globe,
+  Upload,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -45,22 +48,27 @@ interface MemberTypeFormData extends MemberTypeConfig {
 }
 
 interface FormData {
-  // Étape 1: Infos de base
+  // Étape 1
   name: string;
   description: string;
   legalStatus: string;
-  country: string;
-  city: string;
+  domiciliationCountry: string;
+  domiciliationCity: string;
   registrationNumber: string;
+  isMultiSection: boolean;
+  currency: string;
 
-  // Étape 2: Rôles
+  // Étape 2
   roles: RoleFormData[];
 
-  // Étape 3: Types de membres
+  // Étape 3
   memberTypes: MemberTypeFormData[];
+
+  // Étape 4
+  documents: Record<string, File | null>;
 }
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 // ============================================
 // CONSTANTES
@@ -77,9 +85,17 @@ const PRESET_COLORS = [
   { value: "#6366F1", label: "indigo" },
 ];
 
-// Permissions disponibles par catégorie (tirées du backend)
+const COUNTRY_CODE_TO_NAME: Record<string, string> = {
+  FR: "France",
+  BE: "Belgique",
+  SN: "Sénégal",
+  IT: "Italie",
+  ES: "Espagne",
+  US: "États-Unis",
+  CA: "Canada",
+};
+
 const AVAILABLE_PERMISSIONS: Permission[] = [
-  // 💰 FINANCES
   {
     id: "finances.view_treasury",
     name: "Voir la trésorerie",
@@ -110,8 +126,6 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
     category: "finances",
     description: "Télécharger les rapports financiers en Excel/PDF",
   },
-
-  // 👥 MEMBRES
   {
     id: "membres.view_list",
     name: "Voir la liste des membres",
@@ -136,8 +150,6 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
     category: "membres",
     description: "Accéder aux informations personnelles des membres",
   },
-
-  // 🏛️ ADMINISTRATION
   {
     id: "administration.manage_roles",
     name: "Gérer les rôles",
@@ -162,8 +174,6 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
     category: "administration",
     description: "Créer et administrer les sections géographiques",
   },
-
-  // 📄 DOCUMENTS
   {
     id: "documents.upload",
     name: "Télécharger des documents",
@@ -182,8 +192,6 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
     category: "documents",
     description: "Approuver les documents officiels",
   },
-
-  // 📅 ÉVÉNEMENTS
   {
     id: "evenements.create",
     name: "Créer des événements",
@@ -204,6 +212,14 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
   },
 ];
 
+const CURRENCIES = [
+  { code: "EUR", label: "€ Euro", countries: ["FR", "BE", "IT", "ES"] },
+  { code: "USD", label: "$ Dollar US", countries: ["US"] },
+  { code: "CAD", label: "$ Dollar Canadien", countries: ["CA"] },
+  { code: "XOF", label: "CFA Franc", countries: ["SN", "ML", "CI", "TG"] },
+  { code: "GBP", label: "£ Livre Sterling", countries: ["GB"] },
+];
+
 const GROUPED_PERMISSIONS = AVAILABLE_PERMISSIONS.reduce(
   (acc, perm) => {
     if (!acc[perm.category]) acc[perm.category] = [];
@@ -221,38 +237,29 @@ export default function CreateAssociationPage() {
   const { token } = useAuthStore();
   const router = useRouter();
   const t = useTranslations("createAssociation");
-  const tCommon = useTranslations("common");
 
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState<FormData>({
-    // Étape 1
     name: "",
     description: "",
     legalStatus: "association_1901",
-    country: "FR",
-    city: "",
+    domiciliationCountry: "FR",
+    domiciliationCity: "",
     registrationNumber: "",
-
-    // Étape 2
+    isMultiSection: false,
+    currency: "EUR",
     roles: [],
-
-    // Étape 3
     memberTypes: [],
+    documents: {
+      statuts: null,
+      receipisse: null,
+      rib: null,
+      pv_creation: null,
+    },
   });
-
-  // Ajout après les imports
-  const COUNTRY_CODE_TO_NAME: Record<string, string> = {
-    FR: "France",
-    BE: "Belgique",
-    SN: "Sénégal",
-    IT: "Italie",
-    ES: "Espagne",
-    US: "États-Unis",
-    CA: "Canada",
-  };
 
   // ============================================
   // VALIDATION
@@ -266,11 +273,10 @@ export default function CreateAssociationPage() {
         if (!formData.name.trim()) newErrors.name = t("basicInfo.nameRequired");
         if (formData.name.length < 3)
           newErrors.name = t("validation.nameTooShort");
-        if (!formData.legalStatus)
-          newErrors.legalStatus = t("basicInfo.legalStatusRequired");
-        if (!formData.country)
+        if (!formData.domiciliationCountry)
           newErrors.country = t("basicInfo.countryRequired");
-        if (!formData.city.trim()) newErrors.city = t("basicInfo.cityRequired");
+        if (!formData.domiciliationCity.trim())
+          newErrors.city = t("basicInfo.cityRequired");
         break;
 
       case 2:
@@ -306,13 +312,9 @@ export default function CreateAssociationPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // ============================================
-  // NAVIGATION
-  // ============================================
-
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep((prev) => Math.min(prev + 1, 4) as Step);
+      setCurrentStep((prev) => Math.min(prev + 1, 5) as Step);
     }
   };
 
@@ -331,15 +333,34 @@ export default function CreateAssociationPage() {
 
     try {
       // 1️⃣ Créer l'association
-      console.log("📝 Étape 1: Création association...");
+      console.log("📝 Données envoyées au backend:", {
+        name: formData.name,
+        description: formData.description,
+        legalStatus: formData.legalStatus,
+        domiciliationCountry:
+          COUNTRY_CODE_TO_NAME[formData.domiciliationCountry] ||
+          formData.domiciliationCountry,
+        domiciliationCity: formData.domiciliationCity,
+        registrationNumber: formData.registrationNumber || undefined,
+        primaryCurrency: formData.currency,
+        settings: {
+          isMultiSection: formData.isMultiSection,
+        },
+      });
+
       const createResponse = await associationsApi.create({
         name: formData.name,
         description: formData.description,
         legalStatus: formData.legalStatus,
         domiciliationCountry:
-          COUNTRY_CODE_TO_NAME[formData.country] || formData.country, // ✅ Conversion code → nom
-        domiciliationCity: formData.city,
+          COUNTRY_CODE_TO_NAME[formData.domiciliationCountry] ||
+          formData.domiciliationCountry,
+        domiciliationCity: formData.domiciliationCity,
         registrationNumber: formData.registrationNumber || undefined,
+        primaryCurrency: formData.currency,
+        settings: {
+          isMultiSection: formData.isMultiSection,
+        },
       });
 
       if (!createResponse.success) {
@@ -347,10 +368,7 @@ export default function CreateAssociationPage() {
       }
 
       const associationId = createResponse.data.association.id;
-      console.log(`✅ Association créée avec ID: ${associationId}`);
 
-      // 2️⃣ Créer les rôles
-      console.log("🎭 Étape 2: Création des rôles...");
       const createdRoles: Array<{ tempId: string; realId: string }> = [];
 
       for (const role of formData.roles) {
@@ -364,20 +382,14 @@ export default function CreateAssociationPage() {
         });
 
         if (roleResponse.success) {
-          // Mapper l'index temporaire au vrai ID
           const tempId = formData.roles.indexOf(role).toString();
           createdRoles.push({
             tempId,
             realId: roleResponse.data.role.id,
           });
-          console.log(
-            `✅ Rôle "${role.name}" créé avec ID: ${roleResponse.data.role.id}`
-          );
         }
       }
 
-      // 3️⃣ Mettre à jour les memberTypes avec les vrais IDs de rôles
-      console.log("👥 Étape 3: Configuration des types de membres...");
       const memberTypesWithRealIds = formData.memberTypes.map((type) => {
         const mapping = createdRoles.find((r) => r.tempId === type.defaultRole);
         return {
@@ -386,8 +398,7 @@ export default function CreateAssociationPage() {
         };
       });
 
-      // Mettre à jour la configuration
-      const configResponse = await fetch(
+      await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
         {
           method: "PUT",
@@ -401,13 +412,25 @@ export default function CreateAssociationPage() {
         }
       );
 
-      if (!configResponse.ok) {
-        console.warn("⚠️  Erreur configuration memberTypes (non bloquant)");
-      } else {
-        console.log("✅ Types de membres configurés");
+      if (Object.values(formData.documents).some((doc) => doc !== null)) {
+        for (const [type, file] of Object.entries(formData.documents)) {
+          if (file) {
+            const formDataDoc = new FormData();
+            formDataDoc.append("document", file);
+            formDataDoc.append("type", type);
+
+            await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/documents`,
+              {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: formDataDoc,
+              }
+            );
+          }
+        }
       }
 
-      // 4️⃣ Succès ! Redirection
       toast.success(t("success.created"), {
         description: t("success.redirecting"),
       });
@@ -456,7 +479,7 @@ export default function CreateAssociationPage() {
   const updateRole = (
     index: number,
     field: keyof RoleFormData,
-    value: unknown
+    value: string | string[] | boolean
   ) => {
     setFormData((prev) => ({
       ...prev,
@@ -499,10 +522,6 @@ export default function CreateAssociationPage() {
     }));
   };
 
-  // ============================================
-  // GESTION TYPES DE MEMBRES
-  // ============================================
-
   const addMemberType = () => {
     setFormData((prev) => ({
       ...prev,
@@ -528,13 +547,23 @@ export default function CreateAssociationPage() {
   const updateMemberType = (
     index: number,
     field: keyof MemberTypeFormData,
-    value: unknown
+    value: string | number
   ) => {
     setFormData((prev) => ({
       ...prev,
       memberTypes: prev.memberTypes.map((type, i) =>
         i === index ? { ...type, [field]: value } : type
       ),
+    }));
+  };
+
+  const handleDocumentChange = (type: string, file: File | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: {
+        ...prev.documents,
+        [type]: file,
+      },
     }));
   };
 
@@ -546,7 +575,8 @@ export default function CreateAssociationPage() {
     { id: 1, label: t("steps.basic"), icon: Building2 },
     { id: 2, label: t("steps.roles"), icon: Shield },
     { id: 3, label: t("steps.memberTypes"), icon: Users },
-    { id: 4, label: t("steps.finalization"), icon: Check },
+    { id: 4, label: t("steps.documents"), icon: FileText },
+    { id: 5, label: t("steps.finalization"), icon: Check },
   ];
 
   return (
@@ -614,132 +644,235 @@ export default function CreateAssociationPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* ÉTAPE 1: Informations de base */}
+            {/* ÉTAPE 1: Informations + Structure */}
             {currentStep === 1 && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("basicInfo.name")} *
+                      </label>
+                      <Input
+                        value={formData.name}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder={t("basicInfo.namePlaceholder")}
+                        error={errors.name}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("basicInfo.legalStatus")} *
+                      </label>
+                      <select
+                        value={formData.legalStatus}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            legalStatus: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="association_1901">
+                          {t("legalStatus.association_1901")}
+                        </option>
+                        <option value="asbl">{t("legalStatus.asbl")}</option>
+                        <option value="nonprofit_501c3">
+                          {t("legalStatus.nonprofit_501c3")}
+                        </option>
+                        <option value="other">{t("legalStatus.other")}</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {t("basicInfo.name")} *
+                      {t("basicInfo.description")}
                     </label>
-                    <Input
-                      value={formData.name}
+                    <Textarea
+                      value={formData.description}
                       onChange={(e) =>
                         setFormData((prev) => ({
                           ...prev,
-                          name: e.target.value,
+                          description: e.target.value,
                         }))
                       }
-                      placeholder={t("basicInfo.namePlaceholder")}
-                      error={errors.name}
+                      placeholder={t("basicInfo.descriptionPlaceholder")}
+                      rows={3}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {t("basicInfo.legalStatus")} *
-                    </label>
-                    <select
-                      value={formData.legalStatus}
-                      onChange={(e) =>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("basicInfo.country")} *
+                      </label>
+
+                      <select
+                        value={formData.domiciliationCountry}
+                        onChange={(e) => {
+                          const country = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            domiciliationCountry: country,
+                            // ✅ Auto-sélection devise selon pays
+                            currency:
+                              CURRENCIES.find((c) =>
+                                c.countries.includes(country)
+                              )?.code || "EUR",
+                          }));
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="FR">{t("countries.FR")}</option>
+                        <option value="BE">{t("countries.BE")}</option>
+                        <option value="SN">{t("countries.SN")}</option>
+                        <option value="IT">{t("countries.IT")}</option>
+                        <option value="ES">{t("countries.ES")}</option>
+                        <option value="US">{t("countries.US")}</option>
+                        <option value="CA">{t("countries.CA")}</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("basicInfo.city")} *
+                      </label>
+                      <Input
+                        value={formData.domiciliationCity}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            domiciliationCity: e.target.value,
+                          }))
+                        }
+                        placeholder={t("basicInfo.cityPlaceholder")}
+                        error={errors.city}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Devise *
+                      </label>
+                      <select
+                        value={formData.currency}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            currency: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      >
+                        {CURRENCIES.map((curr) => (
+                          <option key={curr.code} value={curr.code}>
+                            {curr.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("basicInfo.registrationNumber")}
+                      </label>
+                      <Input
+                        value={formData.registrationNumber}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            registrationNumber: e.target.value,
+                          }))
+                        }
+                        placeholder={t(
+                          "basicInfo.registrationNumberPlaceholder"
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Type d'organisation */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">
+                    {t("structure.title")}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Association Simple */}
+                    <Card
+                      className={`p-4 cursor-pointer border-2 transition-colors ${
+                        !formData.isMultiSection
+                          ? "border-primary-500 bg-primary-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onClick={() =>
                         setFormData((prev) => ({
                           ...prev,
-                          legalStatus: e.target.value,
+                          isMultiSection: false,
                         }))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     >
-                      <option value="association_1901">
-                        {t("legalStatus.association_1901")}
-                      </option>
-                      <option value="asbl">{t("legalStatus.asbl")}</option>
-                      <option value="nonprofit_501c3">
-                        {t("legalStatus.nonprofit_501c3")}
-                      </option>
-                      <option value="other">{t("legalStatus.other")}</option>
-                    </select>
-                  </div>
-                </div>
+                      <div className="flex items-start gap-3">
+                        <Building2 className="h-6 w-6 text-primary-600 mt-1" />
+                        <div>
+                          <h4 className="font-medium">
+                            {t("structure.simple.title")}
+                          </h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {t("structure.simple.description")}
+                          </p>
+                          <Badge variant="secondary" className="mt-2">
+                            {t("structure.simple.badge")}
+                          </Badge>
+                        </div>
+                      </div>
+                    </Card>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {t("basicInfo.description")}
-                  </label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        description: e.target.value,
-                      }))
-                    }
-                    placeholder={t("basicInfo.descriptionPlaceholder")}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {t("basicInfo.country")} *
-                    </label>
-                    <select
-                      value={formData.country}
-                      onChange={(e) =>
+                    {/* Association Multi-Sections */}
+                    <Card
+                      className={`p-4 cursor-pointer border-2 transition-colors ${
+                        formData.isMultiSection
+                          ? "border-primary-500 bg-primary-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onClick={() =>
                         setFormData((prev) => ({
                           ...prev,
-                          country: e.target.value,
+                          isMultiSection: true,
                         }))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     >
-                      <option value="FR">{t("countries.FR")}</option>
-                      <option value="BE">{t("countries.BE")}</option>
-                      <option value="SN">{t("countries.SN")}</option>
-                      <option value="IT">{t("countries.IT")}</option>
-                      <option value="ES">{t("countries.ES")}</option>
-                      <option value="US">{t("countries.US")}</option>
-                      <option value="CA">{t("countries.CA")}</option>
-                    </select>
+                      <div className="flex items-start gap-3">
+                        <Globe className="h-6 w-6 text-primary-600 mt-1" />
+                        <div>
+                          <h4 className="font-medium">
+                            {t("structure.multiSection.title")}
+                          </h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {t("structure.multiSection.description")}
+                          </p>
+                          <Badge variant="outline" className="mt-2">
+                            {t("structure.multiSection.badge")}
+                          </Badge>
+                        </div>
+                      </div>
+                    </Card>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {t("basicInfo.city")} *
-                    </label>
-                    <Input
-                      value={formData.city}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          city: e.target.value,
-                        }))
-                      }
-                      placeholder={t("basicInfo.cityPlaceholder")}
-                      error={errors.city}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {t("basicInfo.registrationNumber")}
-                  </label>
-                  <Input
-                    value={formData.registrationNumber}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        registrationNumber: e.target.value,
-                      }))
-                    }
-                    placeholder={t("basicInfo.registrationNumberPlaceholder")}
-                  />
                 </div>
               </div>
             )}
 
-            {/* ÉTAPE 2: Rôles */}
+            {/* ÉTAPE 2: Rôles RBAC */}
             {currentStep === 2 && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -747,9 +880,6 @@ export default function CreateAssociationPage() {
                     <h3 className="text-lg font-medium">{t("roles.title")}</h3>
                     <p className="text-sm text-gray-600">
                       {t("roles.subtitle")}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t("roles.minimumRoles")}
                     </p>
                   </div>
                   <Button onClick={addRole} className="flex items-center gap-2">
@@ -768,9 +898,11 @@ export default function CreateAssociationPage() {
                   {formData.roles.map((role, roleIndex) => (
                     <Card key={roleIndex} className="p-4 border-2">
                       <div className="space-y-4">
-                        {/* Header avec suppression */}
+                        {/* Header */}
                         <div className="flex justify-between items-start">
-                          <h4 className="font-medium">Rôle {roleIndex + 1}</h4>
+                          <h4 className="font-medium">
+                            {t("roles.roleNumber", { number: roleIndex + 1 })}
+                          </h4>
                           <Button
                             variant="outline"
                             size="sm"
@@ -781,55 +913,46 @@ export default function CreateAssociationPage() {
                           </Button>
                         </div>
 
-                        {/* Nom & Description */}
+                        {/* Nom & Couleur */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <Input
-                              value={role.name}
-                              onChange={(e) =>
-                                updateRole(roleIndex, "name", e.target.value)
-                              }
-                              placeholder={t("roles.roleNamePlaceholder")}
-                              error={errors[`role_${roleIndex}_name`]}
-                            />
-                          </div>
-                          <div>
-                            <select
-                              value={role.color}
-                              onChange={(e) =>
-                                updateRole(roleIndex, "color", e.target.value)
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                            >
-                              {PRESET_COLORS.map((color) => (
-                                <option key={color.value} value={color.value}>
-                                  {t(`colors.${color.label}`)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                          <Input
+                            value={role.name}
+                            onChange={(e) =>
+                              updateRole(roleIndex, "name", e.target.value)
+                            }
+                            placeholder={t("roles.roleNamePlaceholder")}
+                            error={errors[`role_${roleIndex}_name`]}
+                          />
+                          <select
+                            value={role.color}
+                            onChange={(e) =>
+                              updateRole(roleIndex, "color", e.target.value)
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          >
+                            {PRESET_COLORS.map((color) => (
+                              <option key={color.value} value={color.value}>
+                                {t(`colors.${color.label}`)}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
-                        <div>
-                          <Textarea
-                            value={role.description}
-                            onChange={(e) =>
-                              updateRole(
-                                roleIndex,
-                                "description",
-                                e.target.value
-                              )
-                            }
-                            placeholder={t("roles.roleDescriptionPlaceholder")}
-                            rows={2}
-                            error={errors[`role_${roleIndex}_desc`]}
-                          />
-                        </div>
+                        {/* Description */}
+                        <Textarea
+                          value={role.description}
+                          onChange={(e) =>
+                            updateRole(roleIndex, "description", e.target.value)
+                          }
+                          placeholder={t("roles.roleDescriptionPlaceholder")}
+                          rows={2}
+                          error={errors[`role_${roleIndex}_desc`]}
+                        />
 
                         {/* Permissions */}
                         <div>
                           <div className="flex justify-between items-center mb-2">
-                            <label className="text-sm font-medium text-gray-700">
+                            <label className="text-sm font-medium">
                               {t("roles.permissions")} (
                               {role.permissions.length})
                             </label>
@@ -902,7 +1025,7 @@ export default function CreateAssociationPage() {
                   {formData.roles.length === 0 && (
                     <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
                       <Shield className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                      <p>{t("roles.roleCount", { count: 0 })}</p>
+                      <p>{t("roles.noRoles")}</p>
                     </div>
                   )}
                 </div>
@@ -941,52 +1064,46 @@ export default function CreateAssociationPage() {
                     <Card key={typeIndex} className="p-4">
                       <div className="flex gap-4">
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
-                          <div>
-                            <Input
-                              value={type.name}
-                              onChange={(e) =>
-                                updateMemberType(
-                                  typeIndex,
-                                  "name",
-                                  e.target.value
-                                )
-                              }
-                              placeholder={t("memberTypes.typeNamePlaceholder")}
-                              error={errors[`type_${typeIndex}_name`]}
-                            />
-                          </div>
-                          <div>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={type.cotisationAmount}
-                              onChange={(e) =>
-                                updateMemberType(
-                                  typeIndex,
-                                  "cotisationAmount",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              placeholder={t("memberTypes.amountPlaceholder")}
-                              error={errors[`type_${typeIndex}_amount`]}
-                            />
-                          </div>
-                          <div>
-                            <Input
-                              value={type.description}
-                              onChange={(e) =>
-                                updateMemberType(
-                                  typeIndex,
-                                  "description",
-                                  e.target.value
-                                )
-                              }
-                              placeholder={t(
-                                "memberTypes.descriptionPlaceholder"
-                              )}
-                            />
-                          </div>
+                          <Input
+                            value={type.name}
+                            onChange={(e) =>
+                              updateMemberType(
+                                typeIndex,
+                                "name",
+                                e.target.value
+                              )
+                            }
+                            placeholder={t("memberTypes.typeNamePlaceholder")}
+                            error={errors[`type_${typeIndex}_name`]}
+                          />
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={type.cotisationAmount}
+                            onChange={(e) =>
+                              updateMemberType(
+                                typeIndex,
+                                "cotisationAmount",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            placeholder={t("memberTypes.amountPlaceholder")}
+                            error={errors[`type_${typeIndex}_amount`]}
+                          />
+                          <Input
+                            value={type.description || ""}
+                            onChange={(e) =>
+                              updateMemberType(
+                                typeIndex,
+                                "description",
+                                e.target.value
+                              )
+                            }
+                            placeholder={t(
+                              "memberTypes.descriptionPlaceholder"
+                            )}
+                          />
                           <div>
                             <select
                               value={type.defaultRole}
@@ -1007,7 +1124,11 @@ export default function CreateAssociationPage() {
                                   key={roleIndex}
                                   value={roleIndex.toString()}
                                 >
-                                  {role.name} ({role.permissions.length} perms)
+                                  {role.name} (
+                                  {t("memberTypes.permissionsCount", {
+                                    count: role.permissions.length,
+                                  })}
+                                  )
                                 </option>
                               ))}
                             </select>
@@ -1033,7 +1154,7 @@ export default function CreateAssociationPage() {
                   {formData.memberTypes.length === 0 && (
                     <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
                       <Users className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                      <p>{t("memberTypes.typeCount", { count: 0 })}</p>
+                      <p>{t("memberTypes.noTypes")}</p>
                     </div>
                   )}
                 </div>
@@ -1049,8 +1170,78 @@ export default function CreateAssociationPage() {
               </div>
             )}
 
-            {/* ÉTAPE 4: Finalisation */}
+            {/* ÉTAPE 4: Documents (Optionnel) */}
             {currentStep === 4 && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium">
+                    {t("documents.title")}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {t("documents.subtitle")}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { key: "statuts", label: t("documents.statuts") },
+                    { key: "receipisse", label: t("documents.receipisse") },
+                    { key: "rib", label: t("documents.rib") },
+                    { key: "pv_creation", label: t("documents.pv_creation") },
+                  ].map((doc) => (
+                    <Card key={doc.key} className="p-4">
+                      <h4 className="font-medium mb-3">{doc.label}</h4>
+
+                      {formData.documents[doc.key] ? (
+                        <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-600" />
+                            <span className="text-sm text-green-700">
+                              {formData.documents[doc.key]?.name}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDocumentChange(doc.key, null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div>
+                          <input
+                            type="file"
+                            id={`upload-${doc.key}`}
+                            className="hidden"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleDocumentChange(doc.key, file);
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() =>
+                              document
+                                .getElementById(`upload-${doc.key}`)
+                                ?.click()
+                            }
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            {t("documents.upload")}
+                          </Button>
+                        </div>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ÉTAPE 5: Finalisation */}
+            {currentStep === 5 && (
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium">
@@ -1073,19 +1264,13 @@ export default function CreateAssociationPage() {
                         {formData.name}
                       </div>
                       <div>
-                        <strong>{t("finalization.status")}:</strong>{" "}
-                        {t(`legalStatus.${formData.legalStatus}`)}
+                        <strong>{t("finalization.country")}:</strong>{" "}
+                        {t(`countries.${formData.domiciliationCountry}`)}
                       </div>
                       <div>
-                        <strong>{t("finalization.country")}:</strong>{" "}
-                        {t(`countries.${formData.country}`)}
+                        <strong>{t("finalization.city")}:</strong>{" "}
+                        {formData.domiciliationCity}
                       </div>
-                      {formData.city && (
-                        <div>
-                          <strong>{t("finalization.city")}:</strong>{" "}
-                          {formData.city}
-                        </div>
-                      )}
                     </div>
                   </Card>
 
@@ -1105,7 +1290,9 @@ export default function CreateAssociationPage() {
                           />
                           <span>{role.name}</span>
                           <Badge variant="outline" className="text-xs">
-                            {role.permissions.length} perms
+                            {t("memberTypes.permissionsCount", {
+                              count: role.permissions.length,
+                            })}
                           </Badge>
                         </div>
                       ))}
@@ -1140,25 +1327,6 @@ export default function CreateAssociationPage() {
                   </div>
                 </Card>
 
-                {/* Next steps */}
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                  <div className="flex items-start gap-3">
-                    <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div className="text-sm text-blue-700">
-                      <h3 className="font-medium text-blue-800 mb-2">
-                        {t("finalization.nextStepsTitle")}
-                      </h3>
-                      <ul className="space-y-1">
-                        {(t.raw("finalization.nextSteps") as string[]).map(
-                          (step, index) => (
-                            <li key={index}>• {step}</li>
-                          )
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
                 {errors.submit && (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
                     {errors.submit}
@@ -1180,7 +1348,7 @@ export default function CreateAssociationPage() {
             {t("navigation.previous")}
           </Button>
 
-          {currentStep < 4 ? (
+          {currentStep < 5 ? (
             <Button onClick={handleNext}>
               {t("navigation.next")}
               <ArrowRight className="h-4 w-4 ml-2" />

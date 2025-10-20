@@ -7,6 +7,7 @@
     "basic": "Informations de base",
     "roles": "Rôles et permissions",
     "memberTypes": "Types de membres",
+    "documents": "Documents",
     "finalization": "Finalisation"
   },
   
@@ -25,7 +26,23 @@
     "cityRequired": "Ville requise",
     "cityPlaceholder": "Ex: Paris, Bruxelles...",
     "registrationNumber": "Numéro d'enregistrement (optionnel)",
-    "registrationNumberPlaceholder": "Ex: W751234567 (pour association française)"
+    "registrationNumberPlaceholder": "Ex: W751234567 (pour association française)",
+    "currency": "Devise",
+    "currencyRequired": "Devise requise"
+  },
+  
+  "structure": {
+    "title": "Type d'organisation",
+    "simple": {
+      "title": "Association Simple",
+      "description": "Une seule zone géographique",
+      "badge": "Recommandé"
+    },
+    "multiSection": {
+      "title": "Multi-Sections",
+      "description": "Plusieurs zones géographiques",
+      "badge": "Avancé"
+    }
   },
   
   "legalStatus": {
@@ -47,7 +64,7 @@
   
   "roles": {
     "title": "Rôles et permissions",
-    "subtitle": "Créez au moins 3 rôles pour organiser votre association",
+    "subtitle": "Créez les rôles avec leurs permissions",
     "addRole": "Ajouter un rôle",
     "roleName": "Nom du rôle",
     "roleNamePlaceholder": "Ex: Coordinateur, Trésorier...",
@@ -63,7 +80,9 @@
     "roleDescRequired": "Description requise",
     "minPermissions": "Sélectionnez au moins une permission",
     "deleteRole": "Supprimer ce rôle",
-    "roleCount": "{count} rôle(s) créé(s)"
+    "roleCount": "{count} rôle(s) créé(s)",
+    "roleNumber": "Rôle {number}",
+    "noRoles": "Aucun rôle créé"
   },
   
   "permissionCategories": {
@@ -92,7 +111,19 @@
     "amountPositive": "Montant doit être positif",
     "roleRequired": "Rôle par défaut requis",
     "minimumTypes": "Créez au moins un type de membre",
-    "typeCount": "{count} type(s) de membre(s)"
+    "typeCount": "{count} type(s) de membre(s)",
+    "noTypes": "Aucun type de membre",
+    "permissionsCount": "{count} perms"
+  },
+  
+  "documents": {
+    "title": "Documents KYB (Optionnel)",
+    "subtitle": "Vous pouvez sauter cette étape et uploader plus tard",
+    "statuts": "Statuts",
+    "receipisse": "Récépissé",
+    "rib": "RIB",
+    "pv_creation": "PV création",
+    "upload": "Télécharger"
   },
   
   "finalization": {

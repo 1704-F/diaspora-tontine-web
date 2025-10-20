@@ -146,6 +146,7 @@ export interface DocumentsStatus {
  * ⚙️ Paramètres d'une association
  */
 export interface AssociationSettings {
+   isMultiSection?: boolean;
   // 💰 Finances
   currency: string; // "EUR", "USD", "XOF"
   fiscalYearStart: string; // "01-01" (MM-DD)
@@ -221,6 +222,7 @@ export interface CreateAssociationPayload {
   address?: string;
   legalStatus?: string;
   registrationNumber?: string;
+  primaryCurrency?: string
   memberTypes?: MemberTypeConfig[];
   settings?: Partial<AssociationSettings>;
 }
