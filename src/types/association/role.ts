@@ -119,6 +119,7 @@ export interface CreateRolePayload {
   permissions: string[];
   isUnique?: boolean;
   isMandatory?: boolean;
+  isRequired?: boolean;
   color: string;
   iconName?: string;
 }

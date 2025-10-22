@@ -9,32 +9,32 @@ export interface AssociationMember {
   id: number;
   userId: number;
   associationId: number;
-  sectionId?: number | null; // ✅ NOUVEAU : Pour multi-sections
+  sectionId?: number | null;
   
   // 🔐 RBAC
-  isAdmin: boolean; // Admin association (créateur)
-  assignedRoles: string[]; // IDs des rôles attribués
-  customPermissions: CustomPermissions; // Override permissions
+  isAdmin: boolean;
+  assignedRoles: string[]; // ✅ MULTI-RÔLES
+  customPermissions: CustomPermissions;
   
   // 👤 Infos membre
-  memberType: string | null; // ✅ MODIFIÉ : Peut être null au départ
-  status: 'active' | 'suspended' | 'pending' | 'inactive'; // ✅ AJOUT 'inactive'
-  joinDate: string; // ✅ RENOMMÉ : joinedAt → joinDate (cohérence backend)
-  approvedDate?: string | null; // ✅ NOUVEAU
-  approvedBy?: number | null; // ✅ NOUVEAU
+  memberType: string | null;
+  status: 'active' | 'suspended' | 'pending' | 'inactive';
+  joinDate: string;
+  approvedDate?: string | null;
+  approvedBy?: number | null;
   
   // 💰 Cotisations
-  cotisationAmount?: number; // ✅ NOUVEAU : Montant cotisation mensuelle
-  autoPaymentEnabled?: boolean; // ✅ NOUVEAU
-  paymentMethod?: 'card' | 'bank_transfer' | null; // ✅ NOUVEAU
-  paymentMethodId?: string | null; // ✅ NOUVEAU : Stripe/Square payment method ID
+  cotisationAmount?: number;
+  autoPaymentEnabled?: boolean;
+  paymentMethod?: 'card' | 'bank_transfer' | null;
+  paymentMethodId?: string | null;
   
   // 📊 Statistiques financières
   totalContributed?: number;
-  totalAidsReceived?: number; // ✅ NOUVEAU
+  totalAidsReceived?: number;
   totalOwed?: number;
-  lastContributionDate?: string | null; // ✅ NOUVEAU
-  contributionStatus?: 'up_to_date' | 'late' | 'very_late' | 'inactive'; // ✅ NOUVEAU
+  lastContributionDate?: string | null;
+  contributionStatus?: 'up_to_date' | 'late' | 'very_late' | 'inactive';
   
   // 📱 Contact (si inclus via populate)
   user?: {
@@ -43,7 +43,7 @@ export interface AssociationMember {
     lastName: string;
     phoneNumber: string;
     email?: string;
-    profilePicture?: string; // ✅ NOUVEAU
+    profilePicture?: string;
   };
   
   // 📍 Section (si inclus via populate)
@@ -56,20 +56,20 @@ export interface AssociationMember {
   
   // 🏛️ Association (si inclus via populate pour RBAC)
   association?: {
-    rolesConfiguration: RolesConfiguration;  // Pour calcul permissions
+    rolesConfiguration: RolesConfiguration;
   };
   
-  created_at: string; // ✅ AJOUT : snake_case backend
-  updated_at: string; // ✅ AJOUT : snake_case backend
-  createdAt?: string; // ✅ GARDER : Compatibilité camelCase
-  updatedAt?: string; // ✅ GARDER : Compatibilité camelCase
+  created_at: string;
+  updated_at: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
  * 📊 Membre enrichi avec permissions calculées (pour UI)
  */
 export interface MemberWithPermissions extends AssociationMember {
-  effectivePermissions: string[]; // Toutes permissions finales
+  effectivePermissions: string[];
   roleDetails: Array<{
     id: string;
     name: string;
@@ -79,14 +79,24 @@ export interface MemberWithPermissions extends AssociationMember {
 
 /**
  * 🎭 Configuration type de membre (défini par association)
+ * ✅ MODIFIÉ : defaultRole SUPPRIMÉ
  */
 export interface MemberTypeConfig {
-  name: string; // ✅ MODIFIÉ : Plus besoin de id (name est la clé)
-  cotisationAmount: number; // ✅ AJOUT
+  name: string;
+  cotisationAmount: number;
   description: string;
-  defaultRole: string; // ✅ MODIFIÉ : Un seul rôle par défaut (ID du rôle RBAC)
-  requiresApproval?: boolean; // Adhésion nécessite validation
+  // ❌ SUPPRIMÉ : defaultRole
+  requiresApproval?: boolean;
   color?: string;
+}
+
+/**
+ * 🆕 Statut administrateur (pour création association)
+ */
+export interface AdminStatusFormData {
+  isMember: boolean; // L'admin est-il membre ?
+  memberType: string; // Si oui, son type de membre
+  assignedRoles: string[]; // Si oui, ses rôles (MULTI-RÔLES)
 }
 
 /**
@@ -109,7 +119,7 @@ export interface MemberRolesDetails {
     iconName?: string;
   }>;
   customPermissions: CustomPermissions;
-  effectivePermissions: string[]; // Permissions finales calculées
+  effectivePermissions: string[];
 }
 
 /**
@@ -147,10 +157,10 @@ export interface GetMemberResponse {
 }
 
 /**
- * 📝 Payload attribution rôles
+ * 📝 Payload attribution rôles (MULTI-RÔLES)
  */
 export interface AssignRolesPayload {
-  roleIds: string[];
+  roleIds: string[]; // ✅ Plusieurs rôles possibles
 }
 
 /**
@@ -166,15 +176,17 @@ export interface RevokePermissionPayload {
 
 /**
  * 📝 Payload création membre
+ * ✅ MODIFIÉ : assignedRoles au lieu de defaultRole
  */
 export interface CreateMemberPayload {
-  userId: number;
+  userId?: number; // Optionnel si création à partir du user courant
   memberType?: string | null;
   sectionId?: number | null;
-  assignedRoles?: string[];
+  assignedRoles?: string[]; // ✅ MULTI-RÔLES
   cotisationAmount?: number;
   autoPaymentEnabled?: boolean;
   paymentMethod?: 'card' | 'bank_transfer';
+  status?: 'active' | 'pending';
 }
 
 /**
@@ -184,7 +196,7 @@ export interface UpdateMemberPayload {
   memberType?: string | null;
   status?: 'active' | 'suspended' | 'pending' | 'inactive';
   sectionId?: number | null;
-  assignedRoles?: string[];
+  assignedRoles?: string[]; // ✅ MULTI-RÔLES
   cotisationAmount?: number;
   autoPaymentEnabled?: boolean;
   paymentMethod?: 'card' | 'bank_transfer';
@@ -195,13 +207,13 @@ export interface UpdateMemberPayload {
  * 🔍 Filtres membres (pour UI liste)
  */
 export interface MemberFilters {
-  search?: string; // Recherche nom/prénom
+  search?: string;
   memberTypes?: string[];
   roles?: string[];
   status?: AssociationMember['status'][];
   isAdmin?: boolean;
-  sectionId?: number; // ✅ NOUVEAU : Filtrer par section
-  contributionStatus?: 'up_to_date' | 'late' | 'very_late' | 'inactive'; // ✅ NOUVEAU
+  sectionId?: number;
+  contributionStatus?: 'up_to_date' | 'late' | 'very_late' | 'inactive';
   page?: number;
   limit?: number;
 }
@@ -235,8 +247,8 @@ export interface MemberValidation {
   canGrantPermissions: boolean;
   canRemoveRoles: boolean;
   canMakeAdmin: boolean;
-  canSuspend: boolean; // ✅ NOUVEAU
-  canDelete: boolean; // ✅ NOUVEAU
+  canSuspend: boolean;
+  canDelete: boolean;
   errors: string[];
 }
 
@@ -244,7 +256,7 @@ export interface MemberValidation {
  * 🔄 État formulaire membre (pour UI)
  */
 export interface MemberFormState {
-  selectedRoles: Set<string>;
+  selectedRoles: Set<string>; // ✅ MULTI-RÔLES
   grantedPermissions: Set<string>;
   revokedPermissions: Set<string>;
   memberType?: string | null;
@@ -256,7 +268,7 @@ export interface MemberFormState {
  */
 export interface TransferAdminPayload {
   newAdminMemberId: number;
-  reason?: string; // Optionnel, pour logs
+  reason?: string;
 }
 
 /**
@@ -286,11 +298,11 @@ export interface TransferAdminResponse {
 export interface MemberStats {
   totalContributions: number;
   totalExpensesRequested: number;
-  totalAidsReceived: number; // ✅ NOUVEAU
-  attendanceRate: number; // % présence événements
-  activeSince: string; // ISO date
-  monthsSinceLatePayment?: number; // ✅ NOUVEAU
-  consecutivePaymentsOnTime: number; // ✅ NOUVEAU
+  totalAidsReceived: number;
+  attendanceRate: number;
+  activeSince: string;
+  monthsSinceLatePayment?: number;
+  consecutivePaymentsOnTime: number;
   rolesHistory: Array<{
     roleId: string;
     roleName: string;
@@ -308,8 +320,8 @@ export interface RoleChangeNotification {
   action: 'assigned' | 'removed' | 'admin_transferred';
   roleId?: string;
   roleName?: string;
-  changedBy: number; // userId qui a fait le changement
-  changedAt: string; // ISO date
+  changedBy: number;
+  changedAt: string;
   reason?: string;
 }
 
@@ -321,7 +333,7 @@ export interface MemberContributionHistory {
   contributions: Array<{
     id: number;
     amount: number;
-    date: string; // ISO date
+    date: string;
     status: 'completed' | 'pending' | 'failed';
     method: 'card' | 'bank_transfer';
     transactionId?: string;
@@ -340,6 +352,7 @@ export interface InviteMemberPayload {
   firstName?: string;
   lastName?: string;
   memberType?: string;
+  assignedRoles?: string[]; // ✅ MULTI-RÔLES
   message?: string;
 }
 

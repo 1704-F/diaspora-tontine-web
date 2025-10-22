@@ -9,7 +9,7 @@ import type {
   RevokePermissionPayload,
   TransferAdminPayload,
   PaginatedMembers
-} from '@/types/association';
+} from '@/types/association'; 
 
 /**
  * 👥 API Membres

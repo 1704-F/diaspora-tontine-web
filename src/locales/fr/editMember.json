@@ -1,0 +1,45 @@
+{
+  "title": "Modifier le membre",
+  
+  "sections": {
+    "memberInfo": "Informations du membre"
+  },
+
+  "fields": {
+    "phone": "Téléphone",
+    "email": "Email",
+    "memberType": "Type de membre",
+    "selectMemberType": "Sélectionner un type...",
+    "status": "Statut",
+    "section": "Section",
+    "noSection": "Aucune section",
+    "roles": "Rôles",
+    "rolesHelp": "Sélectionnez un ou plusieurs rôles pour ce membre",
+    "cotisationAmount": "Montant cotisation (€/mois)",
+    "cotisationHelp": "Modifié automatiquement si vous changez le type de membre"
+  },
+
+  "status": {
+    "active": "Actif",
+    "pending": "En attente",
+    "suspended": "Suspendu",
+    "inactive": "Inactif"
+  },
+
+  "warnings": {
+    "adminTitle": "Membre administrateur",
+    "adminMessage": "Ce membre est administrateur de l'association. Certaines actions peuvent nécessiter des permissions spéciales."
+  },
+
+  "errors": {
+    "loadFailed": "Erreur lors du chargement des données du membre",
+    "updateFailed": "Erreur lors de la modification du membre",
+    "memberTypeRequired": "Le type de membre est obligatoire",
+    "rolesRequired": "Sélectionnez au moins un rôle"
+  },
+
+  "success": {
+    "updated": "Membre modifié avec succès",
+    "message": "Les modifications ont été enregistrées"
+  }
+}

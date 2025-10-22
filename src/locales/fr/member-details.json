@@ -1,0 +1,38 @@
+{
+  "title": "Détails du membre",
+  "admin": "Administrateur",
+  "memberSince": "Membre depuis",
+  "notProvided": "Non renseigné",
+  
+  "personalInfo": "Informations personnelles",
+  "phone": "Téléphone",
+  "email": "Email",
+  "memberType": "Type de membre",
+  "joinDate": "Date d'adhésion",
+  
+  "section": "Section",
+  
+  "roles": "Rôles",
+  "noRoles": "Aucun rôle attribué",
+  
+  "financialInfo": "Informations financières",
+  "monthlyContribution": "Cotisation mensuelle",
+  "totalContributed": "Total versé",
+  "lastPayment": "Dernier paiement",
+  
+  "customPermissions": "Permissions personnalisées",
+  "grantedPermissions": "Permissions accordées",
+  "revokedPermissions": "Permissions révoquées",
+  
+  "status": {
+    "active": "Actif",
+    "pending": "En attente",
+    "suspended": "Suspendu",
+    "inactive": "Inactif"
+  },
+  
+  "errors": {
+    "notFound": "Membre introuvable",
+    "loadFailed": "Erreur lors du chargement des détails du membre"
+  }
+}

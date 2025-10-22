@@ -26,29 +26,32 @@ import {
   FileText,
   Globe,
   Upload,
+  UserCog,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/authStore";
 import { associationsApi } from "@/lib/api/association/associations";
 import { rolesApi } from "@/lib/api/association/roles";
-import type { CreateRolePayload, Permission } from "@/types/association/role";
-import type { MemberTypeConfig } from "@/types/association/member";
 import { toast } from "sonner";
 
 // ============================================
-// INTERFACES
+// IMPORTS TYPES
+// ============================================
+import type { CreateRolePayload, Permission } from "@/types/association/role";
+import type { MemberTypeConfig, AdminStatusFormData } from "@/types/association/member";
+
+// ============================================
+// INTERFACES LOCALES (spécifiques au formulaire)
 // ============================================
 
 interface RoleFormData extends Omit<CreateRolePayload, "permissions"> {
   permissions: string[];
-}
-
-interface MemberTypeFormData extends MemberTypeConfig {
-  defaultRole: string;
+  isUnique?: boolean;
+  isRequired?: boolean;
 }
 
 interface FormData {
-  // Étape 1
+  // Étape 1: Informations de base
   name: string;
   description: string;
   legalStatus: string;
@@ -58,17 +61,20 @@ interface FormData {
   isMultiSection: boolean;
   currency: string;
 
-  // Étape 2
+  // Étape 2: Rôles
   roles: RoleFormData[];
 
-  // Étape 3
-  memberTypes: MemberTypeFormData[];
+  // Étape 3: Types de membres
+  memberTypes: MemberTypeConfig[];
 
-  // Étape 4
+  // Étape 4: Statut administrateur
+  adminStatus: AdminStatusFormData;
+
+  // Étape 5: Documents
   documents: Record<string, File | null>;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 // ============================================
 // CONSTANTES
@@ -253,6 +259,11 @@ export default function CreateAssociationPage() {
     currency: "EUR",
     roles: [],
     memberTypes: [],
+    adminStatus: {
+      isMember: true,
+      memberType: "",
+      assignedRoles: [],
+    },
     documents: {
       statuts: null,
       receipisse: null,
@@ -302,9 +313,18 @@ export default function CreateAssociationPage() {
             newErrors[`type_${index}_name`] = t("memberTypes.typeNameRequired");
           if (type.cotisationAmount < 0)
             newErrors[`type_${index}_amount`] = t("memberTypes.amountPositive");
-          if (!type.defaultRole)
-            newErrors[`type_${index}_role`] = t("memberTypes.roleRequired");
         });
+        break;
+
+      case 4:
+        if (formData.adminStatus.isMember) {
+          if (!formData.adminStatus.memberType) {
+            newErrors.adminMemberType = t("adminStatus.memberTypeRequired");
+          }
+          if (formData.adminStatus.assignedRoles.length === 0) {
+            newErrors.adminRoles = t("adminStatus.rolesRequired");
+          }
+        }
         break;
     }
 
@@ -314,7 +334,7 @@ export default function CreateAssociationPage() {
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep((prev) => Math.min(prev + 1, 5) as Step);
+      setCurrentStep((prev) => Math.min(prev + 1, 6) as Step);
     }
   };
 
@@ -333,21 +353,6 @@ export default function CreateAssociationPage() {
 
     try {
       // 1️⃣ Créer l'association
-      console.log("📝 Données envoyées au backend:", {
-        name: formData.name,
-        description: formData.description,
-        legalStatus: formData.legalStatus,
-        domiciliationCountry:
-          COUNTRY_CODE_TO_NAME[formData.domiciliationCountry] ||
-          formData.domiciliationCountry,
-        domiciliationCity: formData.domiciliationCity,
-        registrationNumber: formData.registrationNumber || undefined,
-        primaryCurrency: formData.currency,
-        settings: {
-          isMultiSection: formData.isMultiSection,
-        },
-      });
-
       const createResponse = await associationsApi.create({
         name: formData.name,
         description: formData.description,
@@ -369,6 +374,7 @@ export default function CreateAssociationPage() {
 
       const associationId = createResponse.data.association.id;
 
+      // 2️⃣ Créer les rôles
       const createdRoles: Array<{ tempId: string; realId: string }> = [];
 
       for (const role of formData.roles) {
@@ -379,6 +385,7 @@ export default function CreateAssociationPage() {
           color: role.color,
           iconName: role.iconName,
           isUnique: role.isUnique || false,
+          isRequired: role.isRequired || false, // ✅ AJOUTÉ
         });
 
         if (roleResponse.success) {
@@ -390,14 +397,7 @@ export default function CreateAssociationPage() {
         }
       }
 
-      const memberTypesWithRealIds = formData.memberTypes.map((type) => {
-        const mapping = createdRoles.find((r) => r.tempId === type.defaultRole);
-        return {
-          ...type,
-          defaultRole: mapping?.realId || type.defaultRole,
-        };
-      });
-
+      // 3️⃣ Configurer les types de membres (SANS defaultRole)
       await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
         {
@@ -407,11 +407,41 @@ export default function CreateAssociationPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            memberTypes: memberTypesWithRealIds,
+            memberTypes: formData.memberTypes,
           }),
         }
       );
 
+      // 4️⃣ Ajouter l'admin comme membre (SI isMember = true)
+      if (formData.adminStatus.isMember) {
+        const adminRoleIds = formData.adminStatus.assignedRoles.map((tempId) => {
+          const mapping = createdRoles.find((r) => r.tempId === tempId);
+          return mapping?.realId || tempId;
+        });
+
+        const memberType = formData.memberTypes.find(
+          (t) => t.name === formData.adminStatus.memberType
+        );
+
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              memberType: formData.adminStatus.memberType,
+              assignedRoles: adminRoleIds,
+              cotisationAmount: memberType?.cotisationAmount || 0,
+              status: "active",
+            }),
+          }
+        );
+      }
+
+      // 5️⃣ Upload documents (si présents)
       if (Object.values(formData.documents).some((doc) => doc !== null)) {
         for (const [type, file] of Object.entries(formData.documents)) {
           if (file) {
@@ -464,6 +494,7 @@ export default function CreateAssociationPage() {
           permissions: [],
           color: PRESET_COLORS[prev.roles.length % PRESET_COLORS.length].value,
           isUnique: false,
+          isRequired: false,
         },
       ],
     }));
@@ -522,6 +553,10 @@ export default function CreateAssociationPage() {
     }));
   };
 
+  // ============================================
+  // GESTION TYPES DE MEMBRES
+  // ============================================
+
   const addMemberType = () => {
     setFormData((prev) => ({
       ...prev,
@@ -531,7 +566,6 @@ export default function CreateAssociationPage() {
           name: "",
           cotisationAmount: 0,
           description: "",
-          defaultRole: "",
         },
       ],
     }));
@@ -546,7 +580,7 @@ export default function CreateAssociationPage() {
 
   const updateMemberType = (
     index: number,
-    field: keyof MemberTypeFormData,
+    field: keyof MemberTypeConfig,
     value: string | number
   ) => {
     setFormData((prev) => ({
@@ -556,6 +590,10 @@ export default function CreateAssociationPage() {
       ),
     }));
   };
+
+  // ============================================
+  // GESTION DOCUMENTS
+  // ============================================
 
   const handleDocumentChange = (type: string, file: File | null) => {
     setFormData((prev) => ({
@@ -568,6 +606,22 @@ export default function CreateAssociationPage() {
   };
 
   // ============================================
+  // GESTION RÔLES ADMIN (multi-sélection)
+  // ============================================
+
+  const toggleAdminRole = (roleIndex: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      adminStatus: {
+        ...prev.adminStatus,
+        assignedRoles: prev.adminStatus.assignedRoles.includes(roleIndex)
+          ? prev.adminStatus.assignedRoles.filter((r) => r !== roleIndex)
+          : [...prev.adminStatus.assignedRoles, roleIndex],
+      },
+    }));
+  };
+
+  // ============================================
   // RENDER
   // ============================================
 
@@ -575,8 +629,9 @@ export default function CreateAssociationPage() {
     { id: 1, label: t("steps.basic"), icon: Building2 },
     { id: 2, label: t("steps.roles"), icon: Shield },
     { id: 3, label: t("steps.memberTypes"), icon: Users },
-    { id: 4, label: t("steps.documents"), icon: FileText },
-    { id: 5, label: t("steps.finalization"), icon: Check },
+    { id: 4, label: t("steps.adminStatus"), icon: UserCog },
+    { id: 5, label: t("steps.documents"), icon: FileText },
+    { id: 6, label: t("steps.finalization"), icon: Check },
   ];
 
   return (
@@ -599,17 +654,17 @@ export default function CreateAssociationPage() {
         </div>
 
         {/* Stepper */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between overflow-x-auto">
           {steps.map((step, index) => {
             const Icon = step.icon;
             const isActive = currentStep === step.id;
             const isCompleted = currentStep > step.id;
 
             return (
-              <div key={step.id} className="flex items-center flex-1">
+              <div key={step.id} className="flex items-center flex-1 min-w-0">
                 <div
                   className={`
-                  flex items-center gap-3 px-4 py-2 rounded-lg transition-colors w-full justify-center
+                  flex items-center gap-2 px-3 py-2 rounded-lg transition-colors w-full justify-center
                   ${
                     isActive
                       ? "bg-primary-50 text-primary-600"
@@ -619,14 +674,14 @@ export default function CreateAssociationPage() {
                   }
                 `}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium hidden sm:block">
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="font-medium text-sm hidden md:block truncate">
                     {step.label}
                   </span>
-                  {isCompleted && <Check className="h-4 w-4" />}
+                  {isCompleted && <Check className="h-3 w-3 flex-shrink-0" />}
                 </div>
                 {index < steps.length - 1 && (
-                  <div className="w-full h-px bg-gray-200 mx-2" />
+                  <div className="w-full h-px bg-gray-200 mx-1 flex-shrink-0" />
                 )}
               </div>
             );
@@ -714,7 +769,6 @@ export default function CreateAssociationPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         {t("basicInfo.country")} *
                       </label>
-
                       <select
                         value={formData.domiciliationCountry}
                         onChange={(e) => {
@@ -722,7 +776,6 @@ export default function CreateAssociationPage() {
                           setFormData((prev) => ({
                             ...prev,
                             domiciliationCountry: country,
-                            // ✅ Auto-sélection devise selon pays
                             currency:
                               CURRENCIES.find((c) =>
                                 c.countries.includes(country)
@@ -762,7 +815,7 @@ export default function CreateAssociationPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Devise *
+                        {t("basicInfo.currency")} *
                       </label>
                       <select
                         value={formData.currency}
@@ -808,7 +861,6 @@ export default function CreateAssociationPage() {
                     {t("structure.title")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Association Simple */}
                     <Card
                       className={`p-4 cursor-pointer border-2 transition-colors ${
                         !formData.isMultiSection
@@ -838,7 +890,6 @@ export default function CreateAssociationPage() {
                       </div>
                     </Card>
 
-                    {/* Association Multi-Sections */}
                     <Card
                       className={`p-4 cursor-pointer border-2 transition-colors ${
                         formData.isMultiSection
@@ -898,7 +949,6 @@ export default function CreateAssociationPage() {
                   {formData.roles.map((role, roleIndex) => (
                     <Card key={roleIndex} className="p-4 border-2">
                       <div className="space-y-4">
-                        {/* Header */}
                         <div className="flex justify-between items-start">
                           <h4 className="font-medium">
                             {t("roles.roleNumber", { number: roleIndex + 1 })}
@@ -948,6 +998,43 @@ export default function CreateAssociationPage() {
                           rows={2}
                           error={errors[`role_${roleIndex}_desc`]}
                         />
+
+                        {/* ✅ NOUVEAU : Checkboxes isUnique et isRequired */}
+                        <div className="flex flex-wrap gap-4 p-3 bg-gray-50 rounded-md">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={role.isUnique || false}
+                              onChange={(e) =>
+                                updateRole(roleIndex, "isUnique", e.target.checked)
+                              }
+                              className="rounded"
+                            />
+                            <span className="text-sm font-medium">
+                              {t("roles.isUnique")}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {t("roles.isUniqueHelp")}
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={role.isRequired || false}
+                              onChange={(e) =>
+                                updateRole(roleIndex, "isRequired", e.target.checked)
+                              }
+                              className="rounded"
+                            />
+                            <span className="text-sm font-medium">
+                              {t("roles.isRequired")}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {t("roles.isRequiredHelp")}
+                            </span>
+                          </label>
+                        </div>
 
                         {/* Permissions */}
                         <div>
@@ -1032,7 +1119,7 @@ export default function CreateAssociationPage() {
               </div>
             )}
 
-            {/* ÉTAPE 3: Types de membres */}
+            {/* ÉTAPE 3: Types de membres (SANS defaultRole) */}
             {currentStep === 3 && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -1063,7 +1150,7 @@ export default function CreateAssociationPage() {
                   {formData.memberTypes.map((type, typeIndex) => (
                     <Card key={typeIndex} className="p-4">
                       <div className="flex gap-4">
-                        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
                           <Input
                             value={type.name}
                             onChange={(e) =>
@@ -1104,40 +1191,6 @@ export default function CreateAssociationPage() {
                               "memberTypes.descriptionPlaceholder"
                             )}
                           />
-                          <div>
-                            <select
-                              value={type.defaultRole}
-                              onChange={(e) =>
-                                updateMemberType(
-                                  typeIndex,
-                                  "defaultRole",
-                                  e.target.value
-                                )
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                            >
-                              <option value="">
-                                {t("memberTypes.selectRole")}
-                              </option>
-                              {formData.roles.map((role, roleIndex) => (
-                                <option
-                                  key={roleIndex}
-                                  value={roleIndex.toString()}
-                                >
-                                  {role.name} (
-                                  {t("memberTypes.permissionsCount", {
-                                    count: role.permissions.length,
-                                  })}
-                                  )
-                                </option>
-                              ))}
-                            </select>
-                            {errors[`type_${typeIndex}_role`] && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {errors[`type_${typeIndex}_role`]}
-                              </p>
-                            )}
-                          </div>
                         </div>
                         <Button
                           variant="outline"
@@ -1163,15 +1216,230 @@ export default function CreateAssociationPage() {
                   <div className="flex items-start gap-2">
                     <Info className="h-4 w-4 text-blue-600 mt-0.5" />
                     <p className="text-sm text-blue-700">
-                      {t("memberTypes.roleHelp")}
+                      {t("memberTypes.info")}
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ÉTAPE 4: Documents (Optionnel) */}
+            {/* ÉTAPE 4: Statut Administrateur (NOUVEAU) */}
             {currentStep === 4 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium">
+                    {t("adminStatus.title")}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {t("adminStatus.subtitle")}
+                  </p>
+                </div>
+
+                {/* Question principale */}
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    {t("adminStatus.question")}
+                  </label>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card
+                      className={`p-4 cursor-pointer border-2 transition-colors ${
+                        formData.adminStatus.isMember
+                          ? "border-primary-500 bg-primary-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          adminStatus: {
+                            ...prev.adminStatus,
+                            isMember: true,
+                          },
+                        }))
+                      }
+                    >
+                      <div className="flex items-start gap-3">
+                        <Check className="h-6 w-6 text-primary-600 mt-1" />
+                        <div>
+                          <h4 className="font-medium">
+                            {t("adminStatus.yesMember")}
+                          </h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {t("adminStatus.yesMemberDesc")}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+
+                    <Card
+                      className={`p-4 cursor-pointer border-2 transition-colors ${
+                        !formData.adminStatus.isMember
+                          ? "border-primary-500 bg-primary-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          adminStatus: {
+                            isMember: false,
+                            memberType: "",
+                            assignedRoles: [],
+                          },
+                        }))
+                      }
+                    >
+                      <div className="flex items-start gap-3">
+                        <X className="h-6 w-6 text-gray-600 mt-1" />
+                        <div>
+                          <h4 className="font-medium">
+                            {t("adminStatus.noMember")}
+                          </h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {t("adminStatus.noMemberDesc")}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Si OUI: Configuration membre */}
+                {formData.adminStatus.isMember && (
+                  <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                    <h4 className="font-medium">
+                      {t("adminStatus.configureProfile")}
+                    </h4>
+
+                    {/* Sélection type de membre */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("adminStatus.selectMemberType")} *
+                      </label>
+                      <select
+                        value={formData.adminStatus.memberType}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            adminStatus: {
+                              ...prev.adminStatus,
+                              memberType: e.target.value,
+                            },
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="">
+                          {t("adminStatus.selectMemberTypePlaceholder")}
+                        </option>
+                        {formData.memberTypes.map((type, index) => (
+                          <option key={index} value={type.name}>
+                            {type.name} ({type.cotisationAmount}€/mois)
+                          </option>
+                        ))}
+                      </select>
+                      {errors.adminMemberType && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.adminMemberType}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Sélection rôles (multi) */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("adminStatus.selectRoles")} *
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        {t("adminStatus.multiRolesInfo")}
+                      </p>
+
+                      <div className="space-y-2 border rounded-md p-3 max-h-64 overflow-y-auto">
+                        {formData.roles.map((role, roleIndex) => (
+                          <label
+                            key={roleIndex}
+                            className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.adminStatus.assignedRoles.includes(
+                                roleIndex.toString()
+                              )}
+                              onChange={() =>
+                                toggleAdminRole(roleIndex.toString())
+                              }
+                              className="rounded"
+                            />
+                            <div className="flex items-center gap-2 flex-1">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: role.color }}
+                              />
+                              <span className="font-medium">{role.name}</span>
+                            </div>
+                            <Badge variant="outline" className="text-xs">
+                              {role.permissions.length} perms
+                            </Badge>
+                          </label>
+                        ))}
+                      </div>
+
+                      {errors.adminRoles && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.adminRoles}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Récapitulatif */}
+                    {formData.adminStatus.memberType &&
+                      formData.adminStatus.assignedRoles.length > 0 && (
+                        <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                          <div className="flex items-start gap-2">
+                            <Check className="h-4 w-4 text-green-600 mt-0.5" />
+                            <div className="text-sm text-green-700">
+                              <p className="font-medium">
+                                {t("adminStatus.summary")}
+                              </p>
+                              <p className="mt-1">
+                                {t("adminStatus.summaryText", {
+                                  memberType: formData.adminStatus.memberType,
+                                  roles: formData.adminStatus.assignedRoles
+                                    .map(
+                                      (idx) => formData.roles[parseInt(idx)]?.name
+                                    )
+                                    .join(", "),
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
+
+                {/* Si NON: Info admin externe */}
+                {!formData.adminStatus.isMember && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                    <div className="flex items-start gap-3">
+                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div className="text-sm text-blue-700">
+                        <p className="font-medium">
+                          {t("adminStatus.externalAdminInfo")}
+                        </p>
+                        <ul className="mt-2 space-y-1 list-disc list-inside">
+                          <li>{t("adminStatus.externalAdminPoint1")}</li>
+                          <li>{t("adminStatus.externalAdminPoint2")}</li>
+                          <li>{t("adminStatus.externalAdminPoint3")}</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ÉTAPE 5: Documents */}
+            {currentStep === 5 && (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-lg font-medium">
@@ -1240,8 +1508,8 @@ export default function CreateAssociationPage() {
               </div>
             )}
 
-            {/* ÉTAPE 5: Finalisation */}
-            {currentStep === 5 && (
+            {/* ÉTAPE 6: Finalisation */}
+            {currentStep === 6 && (
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium">
@@ -1290,9 +1558,7 @@ export default function CreateAssociationPage() {
                           />
                           <span>{role.name}</span>
                           <Badge variant="outline" className="text-xs">
-                            {t("memberTypes.permissionsCount", {
-                              count: role.permissions.length,
-                            })}
+                            {role.permissions.length} perms
                           </Badge>
                         </div>
                       ))}
@@ -1308,22 +1574,45 @@ export default function CreateAssociationPage() {
                     })}
                   </h4>
                   <div className="space-y-2 text-sm">
-                    {formData.memberTypes.map((type, index) => {
-                      const roleIndex = parseInt(type.defaultRole);
-                      const role = formData.roles[roleIndex];
-                      return (
-                        <div key={index} className="flex justify-between">
-                          <span>{type.name}</span>
-                          <span>
-                            {t("finalization.perMonth", {
-                              amount: type.cotisationAmount,
-                            })}
-                            {role &&
-                              ` - ${t("finalization.withRole", { role: role.name })}`}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {formData.memberTypes.map((type, index) => (
+                      <div key={index} className="flex justify-between">
+                        <span>{type.name}</span>
+                        <span>
+                          {t("finalization.perMonth", {
+                            amount: type.cotisationAmount,
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Statut admin */}
+                <Card className="p-4">
+                  <h4 className="font-medium mb-3">
+                    {t("finalization.adminStatus")}
+                  </h4>
+                  <div className="text-sm">
+                    {formData.adminStatus.isMember ? (
+                      <div className="space-y-2">
+                        <p>
+                          <strong>{t("finalization.adminAsMember")}:</strong>{" "}
+                          {t("common.yes")}
+                        </p>
+                        <p>
+                          <strong>{t("finalization.memberType")}:</strong>{" "}
+                          {formData.adminStatus.memberType}
+                        </p>
+                        <p>
+                          <strong>{t("finalization.roles")}:</strong>{" "}
+                          {formData.adminStatus.assignedRoles
+                            .map((idx) => formData.roles[parseInt(idx)]?.name)
+                            .join(", ")}
+                        </p>
+                      </div>
+                    ) : (
+                      <p>{t("finalization.adminExternal")}</p>
+                    )}
                   </div>
                 </Card>
 
@@ -1348,7 +1637,7 @@ export default function CreateAssociationPage() {
             {t("navigation.previous")}
           </Button>
 
-          {currentStep < 5 ? (
+          {currentStep < 6 ? (
             <Button onClick={handleNext}>
               {t("navigation.next")}
               <ArrowRight className="h-4 w-4 ml-2" />

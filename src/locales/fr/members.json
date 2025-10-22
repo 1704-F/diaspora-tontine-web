@@ -1,0 +1,59 @@
+{
+  "title": "Membres",
+  "members": "membres",
+  "addMember": "Ajouter un membre",
+  "admin": "Administrateur",
+
+  "stats": {
+    "totalMembers": "Total membres",
+    "activeMembers": "Membres actifs",
+    "pendingMembers": "En attente",
+    "adminMembers": "Administrateurs"
+  },
+
+  "filters": {
+    "title": "Filtres",
+    "search": "Rechercher",
+    "searchPlaceholder": "Nom, prénom ou téléphone...",
+    "status": "Statut",
+    "memberType": "Type de membre",
+    "allStatuses": "Tous les statuts",
+    "allTypes": "Tous les types",
+    "active": "Actifs",
+    "pending": "En attente",
+    "suspended": "Suspendus",
+    "inactive": "Inactifs",
+    "results": "résultat(s)",
+    "reset": "Réinitialiser"
+  },
+
+  "status": {
+    "active": "Actif",
+    "pending": "En attente",
+    "suspended": "Suspendu",
+    "inactive": "Inactif"
+  },
+
+  "table": {
+    "name": "Nom",
+    "contact": "Contact",
+    "memberType": "Type",
+    "section": "Section",
+    "status": "Statut",
+    "roles": "Rôles",
+    "actions": "Actions",
+    "noRoles": "Aucun rôle"
+  },
+
+  "list": {
+    "title": "Liste des membres",
+    "noMembers": "Aucun membre trouvé",
+    "noMembersHint": "Essayez de modifier vos filtres ou ajoutez des membres"
+  },
+
+  "errors": {
+    "accessDenied": "Accès refusé",
+    "noPermission": "Vous n'avez pas la permission de voir les membres de cette association.",
+    "loadFailed": "Erreur lors du chargement des membres"
+  }
+}

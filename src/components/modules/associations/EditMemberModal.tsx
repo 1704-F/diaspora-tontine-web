@@ -1,11 +1,13 @@
 // src/components/modules/associations/EditMemberModal.tsx
 "use client";
+
 import React, { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { useAuthStore } from "@/stores/authStore";
+import { toast } from "sonner";
 import {
   X,
   Save,
@@ -14,287 +16,224 @@ import {
   Shield,
   AlertTriangle,
   Crown,
-  UserCheck,
+  CheckCircle,
   DollarSign,
 } from "lucide-react";
+
+// ✅ IMPORTS TYPES
+import type { AssociationMember } from "@/types/association/member";
+import type { Association } from "@/types/association/association";
+import type { Section } from "@/types/association/section";
+
+// ✅ IMPORTS API
+import { membersApi } from "@/lib/api/association/members";
+import { useAssociation } from "@/hooks/association/useAssociation";
+import { useRoles } from "@/hooks/association/useRoles";
+
+// ============================================
+// INTERFACES
+// ============================================
 
 interface EditMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   memberId: number;
-  associationId: string;
-  onMemberUpdated: () => void;
+  associationId: number;
 }
 
-interface MemberData {
-  id: number;
-  userId: number;
-  user: {
-    id: number;
-    firstName: string;
-    lastName: string;
-    phoneNumber: string;
-    email: string;
-  };
+interface FormData {
   memberType: string;
-  status: string;
+  status: AssociationMember["status"];
   sectionId: number | null;
-  section: {
-    id: number;
-    name: string;
-    country: string;
-    city: string;
-  } | null;
-  roles: string[];
-  cotisationAmount: string;
-}
-
-interface Section {
-  id: number;
-  name: string;
-  country: string;
-  city: string;
-}
-
-interface MemberType {
-  name: string;
+  assignedRoles: string[]; // ✅ MULTI-RÔLES
   cotisationAmount: number;
-  description: string;
 }
+
+// ============================================
+// COMPOSANT PRINCIPAL
+// ============================================
 
 export const EditMemberModal: React.FC<EditMemberModalProps> = ({
   isOpen,
   onClose,
   memberId,
   associationId,
-  onMemberUpdated,
 }) => {
-  const { token } = useAuthStore();
-  const [member, setMember] = useState<MemberData | null>(null);
+  const t = useTranslations("editMember");
+  const tCommon = useTranslations("common");
+
+  // ✅ HOOKS
+  const { association, currentMembership } = useAssociation(associationId);
+  const { roles } = useRoles(associationId);
+
+  // ✅ ÉTATS
+  const [member, setMember] = useState<AssociationMember | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
-  const [memberTypes, setMemberTypes] = useState<MemberType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [hasOtherAdmins, setHasOtherAdmins] = useState(true);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  // États pour les modifications
-  const [editedData, setEditedData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     memberType: "",
-    status: "",
-    sectionId: null as number | null,
-    roles: [] as string[],
-    cotisationAmount: "",
+    status: "active",
+    sectionId: null,
+    assignedRoles: [],
+    cotisationAmount: 0,
   });
 
-  const ROLE_OPTIONS = [
-    {
-      value: "president",
-      label: "Président",
-      icon: Crown,
-      color: "text-yellow-600",
-    },
-    {
-      value: "secretaire",
-      label: "Secrétaire",
-      icon: UserCheck,
-      color: "text-blue-600",
-    },
-    {
-      value: "tresorier",
-      label: "Trésorier",
-      icon: DollarSign,
-      color: "text-green-600",
-    },
-    {
-      value: "admin_association",
-      label: "Administrateur",
-      icon: Shield,
-      color: "text-red-600",
-    },
-  ];
-
-  const STATUS_OPTIONS = [
-    { value: "active", label: "Actif", color: "bg-green-100 text-green-800" },
-    {
-      value: "suspended",
-      label: "Suspendu",
-      color: "bg-yellow-100 text-yellow-800",
-    },
-    { value: "inactive", label: "Inactif", color: "bg-gray-100 text-gray-800" },
-  ];
+  // ============================================
+  // CHARGEMENT DONNÉES
+  // ============================================
 
   useEffect(() => {
-    if (isOpen) {
-      fetchMemberData();
+    if (isOpen && associationId && memberId) {
+      loadMemberData();
+      if (association?.isMultiSection) {
+        loadSections();
+      }
     }
-  }, [isOpen, memberId]);
+  }, [isOpen, associationId, memberId]);
 
-  const fetchMemberData = async () => {
-    if (!token) return;
-
+  const loadMemberData = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
+      const response = await membersApi.getById(associationId, memberId);
 
-      // Récupérer les données du membre, sections, types membres et autres admins
-      const [
-        memberResponse,
-        sectionsResponse,
-        associationResponse,
-        membersResponse,
-      ] = await Promise.all([
-        fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members/${memberId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        ),
-        fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        ),
-        fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        ),
-        fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        ),
-      ]);
-
-      if (memberResponse.ok) {
-        const memberResult = await memberResponse.json();
-        const memberData = memberResult.data.member;
+      if (response.success && response.data.member) {
+        const memberData = response.data.member;
         setMember(memberData);
 
-        // Initialiser les données éditées
-        setEditedData({
-          memberType: memberData.memberType,
+        // ✅ Initialiser formulaire avec données RBAC
+        setFormData({
+          memberType: memberData.memberType || "",
           status: memberData.status,
-          sectionId: memberData.sectionId,
-          roles: [...memberData.roles],
-          cotisationAmount: memberData.cotisationAmount || "0",
+          sectionId: memberData.sectionId || null,
+          assignedRoles: memberData.assignedRoles || [], // ✅ MULTI-RÔLES
+          cotisationAmount: memberData.cotisationAmount || 0,
         });
       }
-
-      if (sectionsResponse.ok) {
-        const sectionsResult = await sectionsResponse.json();
-        setSections(sectionsResult.data.sections || []);
-      }
-
-      if (associationResponse.ok) {
-        const assocResult = await associationResponse.json();
-        setMemberTypes(assocResult.data.association.memberTypes || []);
-      }
-
-      if (membersResponse.ok) {
-        const membersResult = await membersResponse.json();
-        const allMembers = membersResult.data.members;
-
-        // Vérifier s'il y a d'autres admins
-        const admins = allMembers.filter(
-          (m: any) =>
-            m.roles.includes("admin_association") && m.userId !== member?.userId
-        );
-        setHasOtherAdmins(admins.length > 0);
-      }
     } catch (error) {
-      console.error("Erreur chargement données membre:", error);
-      setErrors({ fetch: "Erreur de chargement des données" });
+      console.error("Erreur chargement membre:", error);
+      toast.error(t("errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRoleToggle = (roleValue: string) => {
-    // Si c'est admin_association et qu'il est le seul admin, ne pas permettre la suppression
-    if (
-      roleValue === "admin_association" &&
-      editedData.roles.includes("admin_association") &&
-      !hasOtherAdmins
-    ) {
-      setErrors({
-        roles:
-          "Impossible de retirer le rôle admin : vous êtes le seul administrateur",
-      });
-      return;
-    }
-
-    setErrors({ ...errors, roles: "" });
-
-    setEditedData((prev) => ({
-      ...prev,
-      roles: prev.roles.includes(roleValue)
-        ? prev.roles.filter((r) => r !== roleValue)
-        : [...prev.roles, roleValue],
-    }));
-  };
-
-  const handleSave = async () => {
-    if (!member || !token) return;
-
-    setIsSaving(true);
-    setErrors({});
-
+  const loadSections = async () => {
     try {
-      const updateData = {
-        memberType: editedData.memberType,
-        status: editedData.status,
-        sectionId: editedData.sectionId,
-        roles: editedData.roles,
-        cotisationAmount: parseFloat(editedData.cotisationAmount) || 0,
-      };
-
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members/${memberId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections`,
         {
-          method: "PUT",
           headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          body: JSON.stringify(updateData),
         }
       );
 
-      if (response.ok) {
-        onMemberUpdated();
-        onClose();
-      } else {
-        const error = await response.json();
-        setErrors({ submit: error.error || "Erreur lors de la mise à jour" });
+      const data = await response.json();
+      if (data.success) {
+        setSections(data.data.sections || []);
       }
     } catch (error) {
-      console.error("Erreur mise à jour membre:", error);
-      setErrors({ submit: "Erreur de connexion" });
+      console.error("Erreur chargement sections:", error);
+    }
+  };
+
+  // ============================================
+  // GESTION MULTI-RÔLES
+  // ============================================
+
+  const toggleRole = (roleId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      assignedRoles: prev.assignedRoles.includes(roleId)
+        ? prev.assignedRoles.filter((r) => r !== roleId)
+        : [...prev.assignedRoles, roleId],
+    }));
+  };
+
+  // ============================================
+  // SAUVEGARDE
+  // ============================================
+
+  const handleSave = async () => {
+    if (!member) return;
+
+    // Validation
+    if (!formData.memberType) {
+      toast.error(t("errors.memberTypeRequired"));
+      return;
+    }
+
+    if (formData.assignedRoles.length === 0) {
+      toast.error(t("errors.rolesRequired"));
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const response = await membersApi.update(associationId, memberId, {
+        memberType: formData.memberType,
+        status: formData.status,
+        sectionId: formData.sectionId,
+        assignedRoles: formData.assignedRoles, // ✅ MULTI-RÔLES
+        cotisationAmount: formData.cotisationAmount,
+      });
+
+      if (response.success) {
+        setShowSuccess(true);
+        toast.success(t("success.updated"));
+
+        setTimeout(() => {
+          setShowSuccess(false);
+          onClose();
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Erreur modification membre:", error);
+      toast.error(t("errors.updateFailed"));
     } finally {
       setIsSaving(false);
     }
   };
 
+  // ============================================
+  // FERMETURE
+  // ============================================
+
+  const handleClose = () => {
+    if (!isSaving) {
+      onClose();
+    }
+  };
+
+  // ============================================
+  // RENDER
+  // ============================================
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <User className="h-5 w-5 text-gray-600" />
+            <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+              <User className="h-5 w-5 text-primary-600" />
+            </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Modifier le membre
+                {t("title")}
               </h2>
               {member && (
                 <p className="text-sm text-gray-600">
-                  {member.user.firstName} {member.user.lastName}
+                  {member.user?.firstName} {member.user?.lastName}
+                  {member.isAdmin && (
+                    <Crown className="inline h-4 w-4 ml-1 text-yellow-500" />
+                  )}
                 </p>
               )}
             </div>
@@ -302,47 +241,50 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onClose}
-            className="h-8 w-8 p-0"
+            onClick={handleClose}
+            disabled={isSaving}
           >
             <X className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Contenu */}
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
             </div>
-          ) : member ? (
-            <div className="space-y-6">
-              {/* Informations utilisateur (lecture seule) */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
-                  Informations personnelles
+          ) : showSuccess ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+              <p className="text-lg font-medium text-gray-900">
+                {t("success.message")}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Infos membre (lecture seule) */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-gray-900">
+                  {t("sections.memberInfo")}
                 </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <span className="text-gray-500">Nom complet:</span>
-                    <p className="font-medium">
-                      {member.user.firstName} {member.user.lastName}
+                    <label className="text-xs text-gray-600">
+                      {t("fields.phone")}
+                    </label>
+                    <p className="text-sm font-medium text-gray-900">
+                      {member?.user?.phoneNumber}
                     </p>
                   </div>
                   <div>
-                    <span className="text-gray-500">Téléphone:</span>
-                    <p className="font-medium">{member.user.phoneNumber}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Email:</span>
-                    <p className="font-medium">
-                      {member.user.email || "Non renseigné"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Membre depuis:</span>
-                    <p className="font-medium">
-                      {new Date(member.joinDate).toLocaleDateString("fr-FR")}
+                    <label className="text-xs text-gray-600">
+                      {t("fields.email")}
+                    </label>
+                    <p className="text-sm font-medium text-gray-900">
+                      {member?.user?.email || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -351,26 +293,25 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
               {/* Type de membre */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Type de membre
+                  {t("fields.memberType")} *
                 </label>
-
                 <select
-                  value={editedData.memberType}
-                  onChange={(e) => {
-                    const selectedType = memberTypes.find(
-                      (type) => type.name === e.target.value
-                    );
-                    setEditedData((prev) => ({
+                  value={formData.memberType}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
                       ...prev,
                       memberType: e.target.value,
-                      cotisationAmount: selectedType
-                        ? selectedType.cotisationAmount.toString()
-                        : "0",
-                    }));
-                  }}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      cotisationAmount:
+                        association?.memberTypes?.find(
+                          (t) => t.name === e.target.value
+                        )?.cotisationAmount || 0,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  disabled={isSaving}
                 >
-                  {memberTypes.map((type) => (
+                  <option value="">{t("fields.selectMemberType")}</option>
+                  {association?.memberTypes?.map((type) => (
                     <option key={type.name} value={type.name}>
                       {type.name} ({type.cotisationAmount}€/mois)
                     </option>
@@ -378,162 +319,159 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
                 </select>
               </div>
 
-              {/* Section */}
-              {sections.length > 0 && (
+              {/* Statut */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("fields.status")} *
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      status: e.target.value as AssociationMember["status"],
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  disabled={isSaving}
+                >
+                  <option value="active">{t("status.active")}</option>
+                  <option value="pending">{t("status.pending")}</option>
+                  <option value="suspended">{t("status.suspended")}</option>
+                  <option value="inactive">{t("status.inactive")}</option>
+                </select>
+              </div>
+
+              {/* Section (si multi-sections) */}
+              {association?.isMultiSection && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Section géographique
+                    <MapPin className="inline h-4 w-4 mr-1" />
+                    {t("fields.section")}
                   </label>
                   <select
-                    value={editedData.sectionId || ""}
+                    value={formData.sectionId || ""}
                     onChange={(e) =>
-                      setEditedData((prev) => ({
+                      setFormData((prev) => ({
                         ...prev,
-                        sectionId: e.target.value
-                          ? parseInt(e.target.value)
-                          : null,
+                        sectionId: e.target.value ? parseInt(e.target.value) : null,
                       }))
                     }
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    disabled={isSaving}
                   >
-                    <option value="">
-                      Aucune section (association centrale)
-                    </option>
+                    <option value="">{t("fields.noSection")}</option>
                     {sections.map((section) => (
                       <option key={section.id} value={section.id}>
-                        {section.name} - {section.city}, {section.country}
+                        {section.name} ({section.city}, {section.country})
                       </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* Statut */}
+              {/* ✅ RÔLES (MULTI-SÉLECTION) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Statut du membre
+                  <Shield className="inline h-4 w-4 mr-1" />
+                  {t("fields.roles")} *
                 </label>
-                <div className="flex gap-2">
-                  {STATUS_OPTIONS.map((status) => (
-                    <button
-                      key={status.value}
-                      type="button"
-                      onClick={() =>
-                        setEditedData((prev) => ({
-                          ...prev,
-                          status: status.value,
-                        }))
-                      }
-                      className={`px-3 py-1 rounded-full text-xs font-medium border-2 transition-colors ${
-                        editedData.status === status.value
-                          ? `${status.color} border-blue-300`
-                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                      }`}
+                <p className="text-xs text-gray-500 mb-3">
+                  {t("fields.rolesHelp")}
+                </p>
+
+                <div className="space-y-2 border rounded-md p-3 max-h-64 overflow-y-auto">
+                  {roles.map((role) => (
+                    <label
+                      key={role.id}
+                      className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
                     >
-                      {status.label}
-                    </button>
+                      <input
+                        type="checkbox"
+                        checked={formData.assignedRoles.includes(role.id)}
+                        onChange={() => toggleRole(role.id)}
+                        disabled={isSaving}
+                        className="rounded"
+                      />
+                      <div className="flex items-center gap-2 flex-1">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: role.color }}
+                        />
+                        <span className="font-medium">{role.name}</span>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {role.permissions?.length || 0} perms
+                      </Badge>
+                    </label>
                   ))}
                 </div>
-              </div>
 
-              {/* Rôles */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Rôles dans l'association
-                </label>
-                <div className="space-y-2">
-                  {ROLE_OPTIONS.map((role) => {
-                    const Icon = role.icon;
-                    const isSelected = editedData.roles.includes(role.value);
-                    const isAdminLastOne =
-                      role.value === "admin_association" &&
-                      isSelected &&
-                      !hasOtherAdmins;
-
-                    return (
-                      <div
-                        key={role.value}
-                        className={`flex items-center justify-between p-3 border-2 rounded-lg transition-colors ${
-                          isSelected
-                            ? "border-blue-300 bg-blue-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Icon className={`h-4 w-4 ${role.color}`} />
-                          <span className="font-medium">{role.label}</span>
-                          {isAdminLastOne && (
-                            <div className="flex items-center gap-1">
-                              <AlertTriangle className="h-4 w-4 text-amber-500" />
-                              <span className="text-xs text-amber-600">
-                                Seul admin
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRoleToggle(role.value)}
-                          disabled={isAdminLastOne}
-                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                            isSelected
-                              ? "bg-blue-500 border-blue-500"
-                              : "border-gray-300 hover:border-gray-400"
-                          } ${isAdminLastOne ? "opacity-50 cursor-not-allowed" : ""}`}
-                        >
-                          {isSelected && (
-                            <div className="w-2 h-2 bg-white rounded-full" />
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                {errors.roles && (
-                  <p className="text-red-500 text-sm mt-1">{errors.roles}</p>
+                {formData.assignedRoles.length === 0 && (
+                  <p className="text-xs text-red-600 mt-2">
+                    {t("errors.rolesRequired")}
+                  </p>
                 )}
               </div>
 
-              {/* Cotisation (lecture seule) */}
+              {/* Cotisation */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cotisation mensuelle (€)
+                  <DollarSign className="inline h-4 w-4 mr-1" />
+                  {t("fields.cotisationAmount")}
                 </label>
-                <div className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-600">
-                  {editedData.cotisationAmount}€/mois
-                </div>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.cotisationAmount}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      cotisationAmount: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  disabled={isSaving}
+                />
                 <p className="text-xs text-gray-500 mt-1">
-                  Déterminée automatiquement par le type de membre sélectionné
+                  {t("fields.cotisationHelp")}
                 </p>
               </div>
 
-              {errors.submit && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-red-700 text-sm">{errors.submit}</p>
+              {/* Warning admin */}
+              {member?.isAdmin && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                    <div className="text-sm text-yellow-700">
+                      <p className="font-medium">{t("warnings.adminTitle")}</p>
+                      <p className="text-xs mt-1">{t("warnings.adminMessage")}</p>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Membre introuvable</p>
-            </div>
+            </>
           )}
         </div>
 
         {/* Footer */}
-        {member && (
-          <div className="flex items-center justify-end gap-3 p-6 border-t">
-            <Button variant="outline" onClick={onClose} disabled={isSaving}>
-              Annuler
+        {!isLoading && !showSuccess && (
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+            <Button variant="outline" onClick={handleClose} disabled={isSaving}>
+              {tCommon("cancel")}
             </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center gap-2"
-            >
-              {isSaving && <LoadingSpinner size="sm" />}
-              <Save className="h-4 w-4" />
-              Sauvegarder
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  {tCommon("saving")}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {tCommon("save")}
+                </>
+              )}
             </Button>
           </div>
         )}

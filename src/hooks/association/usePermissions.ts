@@ -11,8 +11,8 @@ import { useRoles } from './useRoles';
  * ```tsx
  * const { hasPermission, effectivePermissions, canManageRoles } = usePermissions(associationId);
  * 
- * if (hasPermission('validate_expenses')) {
- *   return <ApproveButton />;
+ * if (hasPermission('membres.manage_members')) {
+ *   return <AddMemberButton />;
  * }
  * 
  * if (canManageRoles) {
@@ -21,7 +21,7 @@ import { useRoles } from './useRoles';
  * ```
  */
 export function usePermissions(associationId: number) {
-  const { currentMembership, isAdmin } = useAssociation(associationId);
+  const { currentMembership, isAdmin, association } = useAssociation(associationId);
   const { roles, availablePermissions } = useRoles(associationId);
 
   /**
@@ -31,14 +31,14 @@ export function usePermissions(associationId: number) {
   const effectivePermissions = useMemo(() => {
     if (!currentMembership) return [];
 
-    // Admin a toutes les permissions
+    // ✅ Admin a toutes les permissions
     if (currentMembership.isAdmin) {
       return availablePermissions.map((p) => p.id);
     }
 
     const permissions = new Set<string>();
 
-    // 1. Permissions des rôles assignés
+    // 1️⃣ Permissions des rôles assignés
     const assignedRoleIds = currentMembership.assignedRoles || [];
     assignedRoleIds.forEach((roleId) => {
       const role = roles.find((r) => r.id === roleId);
@@ -47,11 +47,11 @@ export function usePermissions(associationId: number) {
       }
     });
 
-    // 2. Ajouter custom granted
+    // 2️⃣ Ajouter custom granted
     const customGranted = currentMembership.customPermissions?.granted || [];
     customGranted.forEach((p) => permissions.add(p));
 
-    // 3. Retirer custom revoked
+    // 3️⃣ Retirer custom revoked
     const customRevoked = currentMembership.customPermissions?.revoked || [];
     customRevoked.forEach((p) => permissions.delete(p));
 
@@ -61,24 +61,74 @@ export function usePermissions(associationId: number) {
   /**
    * ✅ Vérifier si le membre a une permission
    */
-  const hasPermission = useCallback((permission: string): boolean => {
-    if (!currentMembership) return false;
-    return effectivePermissions.includes(permission);
-  }, [currentMembership, effectivePermissions]);
+  const hasPermission = useCallback(
+    (permission: string): boolean => {
+      if (!currentMembership) return false;
+
+      // Admin a tout
+      if (currentMembership.isAdmin) return true;
+
+      return effectivePermissions.includes(permission);
+    },
+    [currentMembership, effectivePermissions]
+  );
 
   /**
    * ✅ Vérifier si le membre a AU MOINS UNE des permissions
    */
-  const hasAnyPermission = useCallback((...permissions: string[]): boolean => {
-    return permissions.some((p) => hasPermission(p));
-  }, [hasPermission]);
+  const hasAnyPermission = useCallback(
+    (...permissions: string[]): boolean => {
+      return permissions.some((p) => hasPermission(p));
+    },
+    [hasPermission]
+  );
 
   /**
    * ✅ Vérifier si le membre a TOUTES les permissions
    */
-  const hasAllPermissions = useCallback((...permissions: string[]): boolean => {
-    return permissions.every((p) => hasPermission(p));
-  }, [hasPermission]);
+  const hasAllPermissions = useCallback(
+    (...permissions: string[]): boolean => {
+      return permissions.every((p) => hasPermission(p));
+    },
+    [hasPermission]
+  );
+
+  /**
+   * ✅ Vérifier si le membre a un rôle spécifique
+   */
+  const hasRole = useCallback(
+    (roleId: string): boolean => {
+      if (!currentMembership) return false;
+      return currentMembership.assignedRoles?.includes(roleId) || false;
+    },
+    [currentMembership]
+  );
+
+  /**
+   * ✅ Vérifier si le membre a AU MOINS UN des rôles
+   */
+  const hasAnyRole = useCallback(
+    (...roleIds: string[]): boolean => {
+      if (!currentMembership) return false;
+      return roleIds.some((roleId) =>
+        currentMembership.assignedRoles?.includes(roleId)
+      );
+    },
+    [currentMembership]
+  );
+
+  /**
+   * ✅ Vérifier si le membre a TOUS les rôles
+   */
+  const hasAllRoles = useCallback(
+    (...roleIds: string[]): boolean => {
+      if (!currentMembership) return false;
+      return roleIds.every((roleId) =>
+        currentMembership.assignedRoles?.includes(roleId)
+      );
+    },
+    [currentMembership]
+  );
 
   /**
    * 📋 Permissions par catégorie
@@ -89,7 +139,7 @@ export function usePermissions(associationId: number) {
       membres: [],
       administration: [],
       documents: [],
-      evenements: []
+      evenements: [],
     };
 
     effectivePermissions.forEach((permId) => {
@@ -106,97 +156,61 @@ export function usePermissions(associationId: number) {
   }, [effectivePermissions, availablePermissions]);
 
   /**
-   * 🎯 Permissions spécifiques métier (helpers)
-   * ✅ FIX: Vérification directe des customPermissions.granted pour éviter race conditions
+   * 📊 Détails des rôles assignés
    */
-  
-  // ✅ FIX CRITIQUE: canManageRoles vérifie customPermissions.granted directement
-  const canManageRoles = useMemo(() => {
-    if (isAdmin) {
-      console.log('🔐 canManageRoles: TRUE (isAdmin)');
-      return true;
-    }
-    
-    // Vérifier si manage_roles est dans customPermissions.granted DIRECTEMENT
-    const customGranted = currentMembership?.customPermissions?.granted || [];
-    if (customGranted.includes('manage_roles')) {
-      console.log('🔐 canManageRoles: TRUE (customPermissions.granted)', customGranted);
-      return true;
-    }
-    
-    // Sinon vérifier via effectivePermissions (rôles assignés)
-    const hasViaEffective = effectivePermissions.includes('manage_roles');
-    console.log('🔐 canManageRoles:', hasViaEffective, {
-      effectivePermissions,
-      customGranted,
-      isAdmin
-    });
-    return hasViaEffective;
-  }, [isAdmin, currentMembership, effectivePermissions]);
+  const assignedRoleDetails = useMemo(() => {
+    if (!currentMembership) return [];
 
-  const canManageFinances = useMemo(
-    () => hasAnyPermission('validate_expenses', 'manage_budgets', 'view_finances'),
-    [hasAnyPermission]
-  );
-
-  const canManageMembers = useMemo(
-    () => hasPermission('manage_members'),
-    [hasPermission]
-  );
-
-  const canViewFinances = useMemo(
-    () => hasPermission('view_finances'),
-    [hasPermission]
-  );
-
-  const canValidateExpenses = useMemo(
-    () => hasPermission('validate_expenses'),
-    [hasPermission]
-  );
-
-  const canCreateEvents = useMemo(
-    () => hasPermission('create_events'),
-    [hasPermission]
-  );
-
-  const canManageDocuments = useMemo(
-    () => hasPermission('manage_documents'),
-    [hasPermission]
-  );
-
-  // ✅ FIX APPLIQUÉ AUSSI: canModifySettings vérifie customPermissions.granted directement
-  const canModifySettings = useMemo(() => {
-    if (isAdmin) return true;
-    
-    const customGranted = currentMembership?.customPermissions?.granted || [];
-    if (customGranted.includes('modify_settings')) return true;
-    
-    return effectivePermissions.includes('modify_settings');
-  }, [isAdmin, currentMembership, effectivePermissions]);
+    const assignedRoleIds = currentMembership.assignedRoles || [];
+    return assignedRoleIds
+      .map((roleId) => roles.find((r) => r.id === roleId))
+      .filter((role): role is NonNullable<typeof role> => role !== undefined);
+  }, [currentMembership, roles]);
 
   return {
     // État
+    currentMembership,
     effectivePermissions,
     permissionsByCategory,
-    isAdmin,
+    assignedRoleDetails,
 
-    // Vérifications génériques
+    // Vérification permissions
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
 
-    // Helpers métier
-    canManageFinances,
-    canManageMembers,
-    canManageRoles,
-    canViewFinances,
-    canValidateExpenses,
-    canCreateEvents,
-    canManageDocuments,
-    canModifySettings,
+    // Vérification rôles
+    hasRole,
+    hasAnyRole,
+    hasAllRoles,
 
-    // Info
-    totalPermissions: effectivePermissions.length,
-    hasAnyPermissions: effectivePermissions.length > 0
+    // Flags rapides
+    isAdmin: currentMembership?.isAdmin || false,
+    isMember: !!currentMembership,
+
+    // ✅ NOUVEAUX RACCOURCIS - Permissions communes
+    canViewMembers: hasPermission('membres.view_list'),
+    canManageMembers: hasPermission('membres.manage_members'),
+    canApproveMembers: hasPermission('membres.approve_members'),
+    canViewDetails: hasPermission('membres.view_details'),
+    
+    canViewFinances: hasPermission('finances.view_treasury'),
+    canManageBudgets: hasPermission('finances.manage_budgets'),
+    canValidateExpenses: hasPermission('finances.validate_expenses'),
+    canCreateIncome: hasPermission('finances.create_income'),
+    canExportFinancialData: hasPermission('finances.export_data'),
+    
+    canManageRoles: hasPermission('administration.manage_roles'),
+    canModifySettings: hasPermission('administration.modify_settings'),
+    canViewReports: hasPermission('administration.view_reports'),
+    canManageSections: hasPermission('administration.manage_sections'),
+    
+    canUploadDocuments: hasPermission('documents.upload'),
+    canManageDocuments: hasPermission('documents.manage'),
+    canValidateDocuments: hasPermission('documents.validate'),
+    
+    canCreateEvents: hasPermission('evenements.create'),
+    canManageEvents: hasPermission('evenements.manage'),
+    canViewAttendance: hasPermission('evenements.view_attendance'),
   };
 }

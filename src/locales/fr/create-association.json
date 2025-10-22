@@ -7,6 +7,7 @@
     "basic": "Informations de base",
     "roles": "Rôles et permissions",
     "memberTypes": "Types de membres",
+    "adminStatus": "Statut administrateur",
     "documents": "Documents",
     "finalization": "Finalisation"
   },
@@ -75,6 +76,10 @@
     "selectAll": "Tout sélectionner",
     "deselectAll": "Tout désélectionner",
     "color": "Couleur",
+    "isUnique": "Rôle unique",
+    "isUniqueHelp": "Une seule personne peut avoir ce rôle",
+    "isRequired": "Rôle obligatoire",
+    "isRequiredHelp": "Ce rôle doit toujours être attribué",
     "minimumRoles": "Créez au moins 3 rôles (recommandé: Membre, Coordinateur, Administrateur)",
     "roleNameRequired": "Nom du rôle requis",
     "roleDescRequired": "Description requise",
@@ -98,22 +103,41 @@
     "subtitle": "Définissez les catégories de membres et leurs cotisations",
     "addType": "Ajouter un type",
     "typeName": "Nom du type",
-    "typeNamePlaceholder": "Ex: Membre actif, Bélier, Lion...",
+    "typeNamePlaceholder": "Ex: Membre actif, CDI, Étudiant...",
     "amount": "Cotisation mensuelle (€)",
     "amountPlaceholder": "0.00",
     "description": "Description",
     "descriptionPlaceholder": "Avantages et privilèges de ce type...",
-    "defaultRole": "Rôle attribué automatiquement",
-    "selectRole": "Sélectionner un rôle...",
-    "roleHelp": "Les nouveaux membres de ce type hériteront automatiquement de ce rôle et de ses permissions",
     "deleteType": "Supprimer ce type",
     "typeNameRequired": "Nom du type requis",
     "amountPositive": "Montant doit être positif",
-    "roleRequired": "Rôle par défaut requis",
     "minimumTypes": "Créez au moins un type de membre",
     "typeCount": "{count} type(s) de membre(s)",
     "noTypes": "Aucun type de membre",
-    "permissionsCount": "{count} perms"
+    "info": "Les rôles seront attribués individuellement à chaque membre, pas au type."
+  },
+  
+  "adminStatus": {
+    "title": "Votre statut d'administrateur",
+    "subtitle": "Définissez si vous êtes membre de l'association ou simple gestionnaire",
+    "question": "Faites-vous partie des membres de cette association ?",
+    "yesMember": "Oui, je suis membre",
+    "yesMemberDesc": "Vous aurez un profil membre avec cotisations et rôles",
+    "noMember": "Non, gestionnaire externe",
+    "noMemberDesc": "Vous aurez uniquement les droits administrateur",
+    "configureProfile": "Configuration de votre profil membre",
+    "selectMemberType": "Sélectionnez votre type de membre",
+    "selectMemberTypePlaceholder": "Choisir un type...",
+    "selectRoles": "Sélectionnez vos rôles",
+    "multiRolesInfo": "Vous pouvez cumuler plusieurs rôles",
+    "memberTypeRequired": "Type de membre requis",
+    "rolesRequired": "Sélectionnez au moins un rôle",
+    "summary": "Récapitulatif",
+    "summaryText": "Vous serez enregistré comme {memberType} avec les rôles : {roles}",
+    "externalAdminInfo": "Mode gestionnaire externe",
+    "externalAdminPoint1": "Vous aurez accès complet à l'administration",
+    "externalAdminPoint2": "Vous ne paierez pas de cotisation",
+    "externalAdminPoint3": "Vous pourrez ajouter les membres ensuite"
   },
   
   "documents": {
@@ -137,7 +161,11 @@
     "rolesCreated": "Rôles créés ({count})",
     "memberTypesCreated": "Types de membres ({count})",
     "perMonth": "{amount}€/mois",
-    "withRole": "avec rôle {role}",
+    "adminStatus": "Statut administrateur",
+    "adminAsMember": "Membre de l'association",
+    "adminExternal": "Gestionnaire externe (non membre)",
+    "memberType": "Type de membre",
+    "roles": "Rôles",
     "nextStepsTitle": "Prochaines étapes après création",
     "nextSteps": [
       "Vous serez automatiquement administrateur de cette association",
@@ -169,6 +197,11 @@
   "success": {
     "created": "Association créée avec succès !",
     "redirecting": "Redirection en cours..."
+  },
+  
+  "common": {
+    "yes": "Oui",
+    "no": "Non"
   },
   
   "colors": {

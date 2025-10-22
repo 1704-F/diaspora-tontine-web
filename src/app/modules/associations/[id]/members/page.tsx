@@ -1,15 +1,17 @@
 // src/app/modules/associations/[id]/members/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAuthStore } from "@/stores/authStore";
+import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { EditMemberModal } from "@/components/modules/associations/EditMemberModal";
-import { MemberDetailsModal } from '@/components/modules/associations/MemberDetailsModal'
+import { MemberDetailsModal } from "@/components/modules/associations/MemberDetailsModal";
 import {
   ArrowLeft,
   Users,
@@ -21,611 +23,590 @@ import {
   CheckCircle,
   Clock,
   Phone,
-  Upload,
-  X,
+  Shield,
+  Crown,
+  XCircle,
 } from "lucide-react";
 
-interface Member {
-  id: number;
-  userId: number;
-  user: {
-    id: number;
-    firstName: string;
-    lastName: string;
-    phoneNumber: string;
-    email?: string;
-  };
-  memberType: string;
-  status: "active" | "pending" | "suspended" | "inactive";
-  joinDate: string;
-  sectionId?: number;
-  section?: {
-    id: number;
-    name: string;
-    country: string;
-    city: string;
-  };
-  roles: string[];
-  cotisationAmount: number;
-  totalContributed: string;
-  contributionStatus: "uptodate" | "late" | "very_late";
-  ancienneteTotal: number;
-}
+// ✅ IMPORTS TYPES
+import type { AssociationMember } from "@/types/association/member";
+import type { Association } from "@/types/association/association";
 
-interface Association {
-  id: number;
-  name: string;
-  isMultiSection: boolean;
-  memberTypes: Array<{
-    name: string;
-    cotisationAmount: number;
-    description: string;
-  }>;
-}
+// ✅ IMPORTS HOOKS
+import { useAssociation } from "@/hooks/association/useAssociation";
+import { useAssociationMembers } from "@/hooks/association/useAssociationMembers";
+import { usePermissions } from "@/hooks/association/usePermissions";
+
+// ============================================
+// INTERFACES LOCALES
+// ============================================
 
 interface MemberFilters {
   search: string;
   status: string;
   memberType: string;
-  contributionStatus: string;
 }
+
+// ============================================
+// COMPOSANT PRINCIPAL
+// ============================================
 
 export default function MembersPage() {
   const params = useParams();
   const router = useRouter();
-  const { token } = useAuthStore();
-  const [association, setAssociation] = useState<Association | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("members");
+  const tCommon = useTranslations("common");
+
+  const associationId = parseInt(params.id as string);
+
+  // ✅ HOOKS
+  const {
+    association,
+    currentMembership,
+    loading: assocLoading,
+  } = useAssociation(associationId);
+  const {
+    membersWithRoleDetails,
+    loading: membersLoading,
+    fetchMembers,
+  } = useAssociationMembers(associationId);
+  const { hasPermission } = usePermissions(associationId);
+
+  // ✅ ÉTATS LOCAUX
   const [filters, setFilters] = useState<MemberFilters>({
     search: "",
     status: "all",
     memberType: "all",
-    contributionStatus: "all",
   });
-
   const [editingMember, setEditingMember] = useState<number | null>(null);
   const [viewingMember, setViewingMember] = useState<number | null>(null);
 
-  const associationId = params.id as string;
+  // ✅ PERMISSIONS
+  const canViewMembers = hasPermission("membres.view_list");
+  const canManageMembers = hasPermission("membres.manage_members");
+  const canViewDetails = hasPermission("membres.view_details");
+
+  // ✅ LOADING GLOBAL
+  const isLoading = assocLoading || membersLoading;
+
+  // ============================================
+  // FILTRAGE MEMBRES
+  // ============================================
+
+  const filteredMembers = useMemo(() => {
+    return membersWithRoleDetails.filter((member) => {
+      // Filtre recherche
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const fullName =
+          `${member.user?.firstName} ${member.user?.lastName}`.toLowerCase();
+        const phone = member.user?.phoneNumber?.toLowerCase() || "";
+
+        if (!fullName.includes(searchLower) && !phone.includes(searchLower)) {
+          return false;
+        }
+      }
+
+      // Filtre statut
+      if (filters.status !== "all" && member.status !== filters.status) {
+        return false;
+      }
+
+      // Filtre type de membre
+      if (
+        filters.memberType !== "all" &&
+        member.memberType !== filters.memberType
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [membersWithRoleDetails, filters]);
+
+  // ============================================
+  // STATISTIQUES
+  // ============================================
+
+  const stats = useMemo(() => {
+    return {
+      total: membersWithRoleDetails.length,
+      active: membersWithRoleDetails.filter((m) => m.status === "active")
+        .length,
+      pending: membersWithRoleDetails.filter((m) => m.status === "pending")
+        .length,
+      admins: membersWithRoleDetails.filter((m) => m.isAdmin).length,
+    };
+  }, [membersWithRoleDetails]);
+
+  // ============================================
+  // OPTIONS FILTRES
+  // ============================================
 
   const statusOptions = [
-    { key: "all", label: "Tous les statuts" },
-    { key: "active", label: "Actifs" },
-    { key: "pending", label: "En attente" },
-    { key: "suspended", label: "Suspendus" },
-    { key: "inactive", label: "Inactifs" },
+    { key: "all", label: t("filters.allStatuses") },
+    { key: "active", label: t("filters.active") },
+    { key: "pending", label: t("filters.pending") },
+    { key: "suspended", label: t("filters.suspended") },
+    { key: "inactive", label: t("filters.inactive") },
   ];
 
-  const contributionStatusOptions = [
-    { key: "all", label: "Tous les états" },
-    { key: "uptodate", label: "À jour" },
-    { key: "late", label: "En retard" },
-    { key: "very_late", label: "Très en retard" },
-  ];
+  const memberTypeOptions = useMemo(() => {
+    if (!association?.memberTypes)
+      return [{ key: "all", label: t("filters.allTypes") }];
 
-  useEffect(() => {
-    fetchData();
-  }, [associationId, token]);
+    return [
+      { key: "all", label: t("filters.allTypes") },
+      ...association.memberTypes.map((type) => ({
+        key: type.name,
+        label: type.name,
+      })),
+    ];
+  }, [association, t]);
 
-  const fetchData = async () => {
-    if (!associationId || !token) return;
+  // ============================================
+  // HELPERS BADGES
+  // ============================================
 
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const assocResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (assocResponse.ok) {
-        const assocResult = await assocResponse.json();
-        setAssociation(assocResult.data.association);
-      }
-
-      const membersResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (membersResponse.ok) {
-        const membersResult = await membersResponse.json();
-        setMembers(membersResult.data.members || []);
-      }
-    } catch (error) {
-      console.error("Erreur chargement données:", error);
-      setError("Erreur lors du chargement des données");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
+  const getStatusBadge = (status: AssociationMember["status"]) => {
+    const config = {
       active: {
-        color: "bg-green-100 text-green-700",
+        variant: "success" as const,
         icon: CheckCircle,
-        label: "Actif",
+        label: t("status.active"),
       },
       pending: {
-        color: "bg-yellow-100 text-yellow-700",
+        variant: "warning" as const,
         icon: Clock,
-        label: "En attente",
+        label: t("status.pending"),
       },
       suspended: {
-        color: "bg-red-100 text-red-700",
-        icon: AlertCircle,
-        label: "Suspendu",
+        variant: "danger" as const,
+        icon: XCircle,
+        label: t("status.suspended"),
       },
       inactive: {
-        color: "bg-gray-100 text-gray-700",
+        variant: "secondary" as const,
         icon: AlertCircle,
-        label: "Inactif",
+        label: t("status.inactive"),
       },
     };
 
-    const config = statusConfig[status as keyof typeof statusConfig];
-    if (!config)
-      return <Badge className="bg-gray-100 text-gray-700">{status}</Badge>;
+    const { variant, icon: Icon, label } = config[status] || config.inactive;
 
-    const Icon = config.icon;
     return (
-      <Badge className={config.color}>
-        <Icon className="h-3 w-3 mr-1" />
-        {config.label}
+      <Badge variant={variant} className="flex items-center gap-1">
+        <Icon className="h-3 w-3" />
+        {label}
       </Badge>
     );
   };
 
-  const getRoleBadges = (roles: string[]) => {
-    const roleConfig = {
-      admin_association: {
-        color: "bg-purple-100 text-purple-700",
-        label: "Admin",
-      },
-      president: { color: "bg-amber-100 text-amber-700", label: "Président" },
-      tresorier: { color: "bg-green-100 text-green-700", label: "Trésorier" },
-      secretaire: { color: "bg-blue-100 text-blue-700", label: "Secrétaire" },
-      responsable_section: {
-        color: "bg-indigo-100 text-indigo-700",
-        label: "Resp. Section",
-      },
-      secretaire_section: {
-        color: "bg-cyan-100 text-cyan-700",
-        label: "Sec. Section",
-      },
-      tresorier_section: {
-        color: "bg-teal-100 text-teal-700",
-        label: "Tré. Section",
-      },
-    };
-
-    return roles.map((role) => {
-      const config = roleConfig[role as keyof typeof roleConfig];
-      return (
-        <Badge
-          key={role}
-          className={config ? config.color : "bg-gray-100 text-gray-700"}
-        >
-          {config ? config.label : role}
-        </Badge>
-      );
-    });
+  const getRoleBadge = (role: { id: string; name: string; color: string }) => {
+    return (
+      <Badge
+        key={role.id}
+        style={{ backgroundColor: role.color + "20", color: role.color }}
+        className="text-xs font-medium"
+      >
+        {role.name}
+      </Badge>
+    );
   };
 
-  const filteredMembers = members.filter((member) => {
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const firstName = (member.user.firstName || "").toLowerCase();
-      const lastName = (member.user.lastName || "").toLowerCase();
-      const phoneNumber = (member.user.phoneNumber || "").toLowerCase();
+  // ============================================
+  // GESTION PERMISSIONS - ACCÈS REFUSÉ
+  // ============================================
 
-      if (
-        !firstName.includes(searchLower) &&
-        !lastName.includes(searchLower) &&
-        !phoneNumber.includes(searchLower)
-      ) {
-        return false;
-      }
-    }
+  if (!isLoading && !canViewMembers) {
+    return (
+      <ProtectedRoute requiredModule="associations">
+        <div className="max-w-7xl mx-auto p-6">
+          <Card className="border-red-200">
+            <CardContent className="p-6 text-center">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                {t("errors.accessDenied")}
+              </h2>
+              <p className="text-gray-600 mb-4">{t("errors.noPermission")}</p>
+              <Button variant="outline" onClick={() => router.back()}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                {tCommon("back")}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </ProtectedRoute>
+    );
+  }
 
-    if (filters.status !== "all" && member.status !== filters.status)
-      return false;
-    if (
-      filters.memberType !== "all" &&
-      member.memberType !== filters.memberType
-    )
-      return false;
-    if (
-      filters.contributionStatus !== "all" &&
-      member.contributionStatus !== filters.contributionStatus
-    )
-      return false;
-
-    return true;
-  });
-
-  const clearFilters = () => {
-    setFilters({
-      search: "",
-      status: "all",
-      memberType: "all",
-      contributionStatus: "all",
-    });
-  };
-
-  const hasActiveFilters =
-    filters.search ||
-    filters.status !== "all" ||
-    filters.memberType !== "all" ||
-    filters.contributionStatus !== "all";
+  // ============================================
+  // LOADING STATE
+  // ============================================
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p>Chargement des membres...</p>
+      <ProtectedRoute requiredModule="associations">
+        <div className="max-w-7xl mx-auto p-6 flex items-center justify-center min-h-screen">
+          <LoadingSpinner size="lg" />
         </div>
-      </div>
+      </ProtectedRoute>
     );
   }
 
-  if (error) {
-    return (
-      <div className="text-center py-12">
-        <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">{error}</h2>
-        <Button onClick={() => fetchData()}>Réessayer</Button>
-      </div>
-    );
-  }
-
-  if (!association) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          Association introuvable
-        </h2>
-        <Button onClick={() => router.back()}>Retour</Button>
-      </div>
-    );
-  }
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            onClick={() => router.back()}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Membres - {association.name}
-            </h1>
-            <p className="text-gray-600">
-              {filteredMembers.length} membre
-              {filteredMembers.length > 1 ? "s" : ""}
-              {hasActiveFilters ? ` (${members.length} total)` : ""}
-            </p>
+    <ProtectedRoute requiredModule="associations">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{t("title")}</h1>
+              <p className="text-gray-600">
+                {association?.name} • {stats.total} {t("members")}
+              </p>
+            </div>
           </div>
+
+          {canManageMembers && (
+            <Button
+              onClick={() =>
+                router.push(
+                  `/modules/associations/${associationId}/members/add`
+                )
+              }
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              {t("addMember")}
+            </Button>
+          )}
         </div>
 
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              /* TODO: Import */
-            }}
-            className="flex items-center gap-2"
-          >
-            <Upload className="h-4 w-4" />
-            Importer
-          </Button>
+        {/* Statistiques */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <Users className="h-8 w-8 mx-auto mb-2 text-gray-600" />
+              <div className="text-2xl font-bold text-gray-900">
+                {stats.total}
+              </div>
+              <div className="text-sm text-gray-600">
+                {t("stats.totalMembers")}
+              </div>
+            </CardContent>
+          </Card>
 
-          <Button
-            onClick={() =>
-              router.push(`/modules/associations/${associationId}/members/add`)
-            }
-            className="flex items-center gap-2"
-          >
-            <UserPlus className="h-4 w-4" />
-            Ajouter un membre
-          </Button>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
+              <div className="text-2xl font-bold text-green-600">
+                {stats.active}
+              </div>
+              <div className="text-sm text-gray-600">
+                {t("stats.activeMembers")}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 text-center">
+              <Clock className="h-8 w-8 mx-auto mb-2 text-yellow-600" />
+              <div className="text-2xl font-bold text-yellow-600">
+                {stats.pending}
+              </div>
+              <div className="text-sm text-gray-600">
+                {t("stats.pendingMembers")}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 text-center">
+              <Crown className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+              <div className="text-2xl font-bold text-blue-600">
+                {stats.admins}
+              </div>
+              <div className="text-sm text-gray-600">
+                {t("stats.adminMembers")}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </div>
 
-      {/* Filtres */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-64">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Rechercher par nom, prénom ou téléphone..."
-                  value={filters.search}
+        {/* Filtres */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              {t("filters.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Recherche */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("filters.search")}
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    value={filters.search}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        search: e.target.value,
+                      }))
+                    }
+                    placeholder={t("filters.searchPlaceholder")}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Filtre statut */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("filters.status")}
+                </label>
+                <select
+                  value={filters.status}
                   onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, search: e.target.value }))
+                    setFilters((prev) => ({ ...prev, status: e.target.value }))
                   }
-                  className="pl-10"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  {statusOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtre type membre */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("filters.memberType")}
+                </label>
+                <select
+                  value={filters.memberType}
+                  onChange={(e) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      memberType: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  {memberTypeOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <select
-              value={filters.status}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, status: e.target.value }))
-              }
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={filters.memberType}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, memberType: e.target.value }))
-              }
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Tous les types</option>
-              {association.memberTypes.map((type) => (
-                <option key={type.name} value={type.name}>
-                  {type.name} ({type.cotisationAmount}€/mois)
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={filters.contributionStatus}
-              onChange={(e) =>
-                setFilters((prev) => ({
-                  ...prev,
-                  contributionStatus: e.target.value,
-                }))
-              }
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {contributionStatusOptions.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-
-            {hasActiveFilters && (
-              <Button
-                variant="outline"
-                onClick={clearFilters}
-                className="flex items-center gap-2"
-              >
-                <X className="h-4 w-4" />
-                Effacer filtres
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-600">
-              {members.filter((m) => m.status === "active").length}
-            </div>
-            <div className="text-sm text-gray-600">Membres actifs</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">
-              {
-                members.filter((m) => m.contributionStatus === "uptodate")
-                  .length
-              }
-            </div>
-            <div className="text-sm text-gray-600">À jour cotisations</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-orange-600">
-              {members.filter((m) => m.contributionStatus === "late").length}
-            </div>
-            <div className="text-sm text-gray-600">En retard</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-purple-600">
-              {members
-                .reduce(
-                  (sum, m) => sum + parseFloat(m.totalContributed || "0"),
-                  0
-                )
-                .toFixed(0)}
-              €
-            </div>
-            <div className="text-sm text-gray-600">Total cotisé</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tableau des membres */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Liste des membres ({filteredMembers.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredMembers.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
-              {members.length === 0 ? (
-                <>
-                  <p>Aucun membre dans cette association</p>
-                  <p className="text-sm">Commencez par ajouter des membres</p>
-                </>
-              ) : (
-                <>
-                  <p>Aucun membre trouvé</p>
-                  <p className="text-sm">Essayez de modifier vos filtres</p>
-                </>
+            {/* Résultats filtres */}
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="text-gray-600">
+                {filteredMembers.length} {t("filters.results")}
+              </span>
+              {(filters.search ||
+                filters.status !== "all" ||
+                filters.memberType !== "all") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setFilters({ search: "", status: "all", memberType: "all" })
+                  }
+                >
+                  {t("filters.reset")}
+                </Button>
               )}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Nom
-                    </th>
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Prénom
-                    </th>
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Téléphone
-                    </th>
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Type
-                    </th>
-                    {association.isMultiSection && (
+          </CardContent>
+        </Card>
+
+        {/* Liste des membres */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              {t("list.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredMembers.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>{t("list.noMembers")}</p>
+                <p className="text-sm">{t("list.noMembersHint")}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
                       <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        Section
+                        {t("table.name")}
                       </th>
-                    )}
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Statut
-                    </th>
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Rôles
-                    </th>
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMembers.map((member) => (
-                    <tr
-                      key={member.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
-                    >
-                      <td className="py-3 px-2">
-                        <span className="font-medium text-gray-900">
-                          {member.user.lastName || "N/A"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2">
-                        <span className="text-gray-900">
-                          {member.user.firstName || "N/A"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2">
-                        <span className="flex items-center gap-1 text-gray-600">
-                          <Phone className="h-3 w-3" />
-                          {member.user.phoneNumber || "N/A"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2">
-                        <span className="text-sm">
-                          {member.memberType} ({member.cotisationAmount}€/mois)
-                        </span>
-                      </td>
-                      {association.isMultiSection && (
-                        <td className="py-3 px-2">
-                          {member.section ? (
-                            <span className="text-sm text-gray-600">
-                              {member.section.name}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 text-sm">-</span>
-                          )}
-                        </td>
+                      <th className="text-left py-3 px-2 font-medium text-gray-900">
+                        {t("table.contact")}
+                      </th>
+                      <th className="text-left py-3 px-2 font-medium text-gray-900">
+                        {t("table.memberType")}
+                      </th>
+                      {association?.isMultiSection && (
+                        <th className="text-left py-3 px-2 font-medium text-gray-900">
+                          {t("table.section")}
+                        </th>
                       )}
-                      <td className="py-3 px-2">
-                        {getStatusBadge(member.status)}
-                      </td>
-                      <td className="py-3 px-2">
-                        <div className="flex flex-wrap gap-1">
-                          {member.roles.length > 0 ? (
-                            getRoleBadges(member.roles)
-                          ) : (
-                            <span className="text-gray-400 text-sm">
-                              Membre
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-2">
-                        <div className="flex gap-1">
-                          <Button
-  size="sm"
-  variant="outline"
-  onClick={() => setViewingMember(member.id)}
-  className="h-8 w-8 p-0"
->
-  <Eye className="h-4 w-4" />
-</Button>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditingMember(member.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
+                      <th className="text-left py-3 px-2 font-medium text-gray-900">
+                        {t("table.status")}
+                      </th>
+                      <th className="text-left py-3 px-2 font-medium text-gray-900">
+                        {t("table.roles")}
+                      </th>
+                      <th className="text-left py-3 px-2 font-medium text-gray-900">
+                        {t("table.actions")}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {filteredMembers.map((member) => (
+                      <tr
+                        key={member.id}
+                        className="border-b border-gray-100 hover:bg-gray-50"
+                      >
+                        {/* Nom */}
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">
+                              {member.user?.firstName} {member.user?.lastName}
+                            </span>
 
+                            {member.isAdmin && (
+                              <span title={t("admin")}>
+                                <Crown className="h-4 w-4 text-yellow-500" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Contact */}
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-1 text-gray-600 text-sm">
+                            <Phone className="h-3 w-3" />
+                            {member.user?.phoneNumber || "N/A"}
+                          </div>
+                        </td>
+
+                        {/* Type membre */}
+                        <td className="py-3 px-2">
+                          <span className="text-sm">
+                            {member.memberType || "N/A"}
+                          </span>
+                        </td>
+
+                        {/* Section (si multi-sections) */}
+                        {association?.isMultiSection && (
+                          <td className="py-3 px-2">
+                            {member.section ? (
+                              <span className="text-sm text-gray-600">
+                                {member.section.name}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-sm">-</span>
+                            )}
+                          </td>
+                        )}
+
+                        {/* Statut */}
+                        <td className="py-3 px-2">
+                          {getStatusBadge(member.status)}
+                        </td>
+
+                        {/* Rôles */}
+                        <td className="py-3 px-2">
+                          <div className="flex flex-wrap gap-1">
+                            {member.roleDetails &&
+                            member.roleDetails.length > 0 ? (
+                              member.roleDetails.map((role) =>
+                                getRoleBadge(role)
+                              )
+                            ) : (
+                              <span className="text-gray-400 text-sm">
+                                {t("table.noRoles")}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-2">
+                            {canViewDetails && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setViewingMember(member.id)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
+
+                            {canManageMembers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingMember(member.id)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Modales */}
+        {editingMember && (
           <EditMemberModal
-            isOpen={editingMember !== null}
-            onClose={() => setEditingMember(null)}
-            memberId={editingMember || 0}
-            associationId={associationId}
-            onMemberUpdated={() => {
-              // Recharger la liste des membres
-              window.location.reload(); // Solution simple
+            isOpen={!!editingMember}
+            onClose={() => {
               setEditingMember(null);
+              fetchMembers();
             }}
+            associationId={associationId}
+            memberId={editingMember}
           />
+        )}
 
+        {viewingMember && (
           <MemberDetailsModal
-  isOpen={viewingMember !== null}
-  onClose={() => setViewingMember(null)}
-  memberId={viewingMember || 0}
-  associationId={associationId}
-/>
-
-
-        </CardContent>
-      </Card>
-    </div>
+            isOpen={!!viewingMember}
+            onClose={() => setViewingMember(null)}
+            associationId={associationId}
+            memberId={viewingMember}
+          />
+        )}
+      </div>
+    </ProtectedRoute>
   );
 }
