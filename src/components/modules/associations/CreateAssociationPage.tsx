@@ -61,14 +61,14 @@ interface FormData {
   isMultiSection: boolean;
   currency: string;
 
-  // Étape 2: Rôles
+  // Étape 2: Statut administrateur
+  adminStatus: AdminStatusFormData;
+
+  // Étape 3: Rôles (skippée si admin externe)
   roles: RoleFormData[];
 
-  // Étape 3: Types de membres
+  // Étape 4: Types de membres (skippée si admin externe)
   memberTypes: MemberTypeConfig[];
-
-  // Étape 4: Statut administrateur
-  adminStatus: AdminStatusFormData;
 
   // Étape 5: Documents
   documents: Record<string, File | null>;
@@ -257,13 +257,13 @@ export default function CreateAssociationPage() {
     registrationNumber: "",
     isMultiSection: false,
     currency: "EUR",
-    roles: [],
-    memberTypes: [],
     adminStatus: {
       isMember: true,
       memberType: "",
       assignedRoles: [],
     },
+    roles: [],
+    memberTypes: [],
     documents: {
       statuts: null,
       receipisse: null,
@@ -282,48 +282,47 @@ export default function CreateAssociationPage() {
     switch (step) {
       case 1:
         if (!formData.name.trim()) newErrors.name = t("basicInfo.nameRequired");
-        if (formData.name.length < 3)
-          newErrors.name = t("validation.nameTooShort");
-        if (!formData.domiciliationCountry)
-          newErrors.country = t("basicInfo.countryRequired");
-        if (!formData.domiciliationCity.trim())
-          newErrors.city = t("basicInfo.cityRequired");
+        if (!formData.domiciliationCountry) newErrors.country = t("basicInfo.countryRequired");
+        if (!formData.domiciliationCity.trim()) newErrors.city = t("basicInfo.cityRequired");
+        if (!formData.currency) newErrors.currency = t("basicInfo.currencyRequired");
         break;
 
       case 2:
-        if (formData.roles.length === 0) {
-          newErrors.roles = t("validation.atLeastOneRole");
+        // Validation du statut admin
+        if (formData.adminStatus.isMember) {
+          if (!formData.adminStatus.memberType) {
+            newErrors.memberType = t("adminStatus.memberTypeRequired");
+          }
+          if (formData.adminStatus.assignedRoles.length === 0) {
+            newErrors.roles = t("adminStatus.rolesRequired");
+          }
         }
-        formData.roles.forEach((role, index) => {
-          if (!role.name.trim())
-            newErrors[`role_${index}_name`] = t("roles.roleNameRequired");
-          if (!role.description.trim())
-            newErrors[`role_${index}_desc`] = t("roles.roleDescRequired");
-          if (role.permissions.length === 0)
-            newErrors[`role_${index}_perms`] = t("roles.minPermissions");
-        });
         break;
 
       case 3:
-        if (formData.memberTypes.length === 0) {
-          newErrors.memberTypes = t("validation.atLeastOneMemberType");
+        // Validation des rôles (seulement si admin membre)
+        if (formData.adminStatus.isMember && formData.roles.length === 0) {
+          newErrors.roles = t("validation.atLeastOneRole");
         }
-        formData.memberTypes.forEach((type, index) => {
-          if (!type.name.trim())
-            newErrors[`type_${index}_name`] = t("memberTypes.typeNameRequired");
-          if (type.cotisationAmount < 0)
-            newErrors[`type_${index}_amount`] = t("memberTypes.amountPositive");
-        });
         break;
 
       case 4:
+        // Validation des types de membres (seulement si admin membre)
+        if (formData.adminStatus.isMember && formData.memberTypes.length === 0) {
+          newErrors.memberTypes = t("validation.atLeastOneMemberType");
+        }
+        break;
+
+      case 5:
+        // Documents optionnels - pas de validation
+        break;
+
+      case 6:
+        // Finalisation - validation globale
+        if (!formData.name.trim()) newErrors.name = t("basicInfo.nameRequired");
         if (formData.adminStatus.isMember) {
-          if (!formData.adminStatus.memberType) {
-            newErrors.adminMemberType = t("adminStatus.memberTypeRequired");
-          }
-          if (formData.adminStatus.assignedRoles.length === 0) {
-            newErrors.adminRoles = t("adminStatus.rolesRequired");
-          }
+          if (formData.roles.length === 0) newErrors.roles = t("validation.atLeastOneRole");
+          if (formData.memberTypes.length === 0) newErrors.memberTypes = t("validation.atLeastOneMemberType");
         }
         break;
     }
@@ -332,14 +331,181 @@ export default function CreateAssociationPage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  // ============================================
+  // NAVIGATION
+  // ============================================
+
+  const getNextStep = (current: Step): Step => {
+    // Si admin externe, on saute les étapes 3 et 4
+    if (!formData.adminStatus.isMember) {
+      if (current === 2) return 5 as Step; // Sauter directement aux documents
+      if (current === 5) return 6 as Step;
+    }
+    
+    // Navigation normale pour admin membre
+    if (current < 6) return (current + 1) as Step;
+    return current;
+  };
+
+  const getPreviousStep = (current: Step): Step => {
+    // Si admin externe, on saute les étapes 3 et 4 dans l'autre sens
+    if (!formData.adminStatus.isMember) {
+      if (current === 5) return 2 as Step; // Revenir au statut admin
+      if (current === 6) return 5 as Step;
+    }
+    
+    // Navigation normale pour admin membre
+    if (current > 1) return (current - 1) as Step;
+    return current;
+  };
+
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep((prev) => Math.min(prev + 1, 6) as Step);
+      setCurrentStep(getNextStep(currentStep));
     }
   };
 
   const handlePrevious = () => {
-    setCurrentStep((prev) => Math.max(prev - 1, 1) as Step);
+    setCurrentStep(getPreviousStep(currentStep));
+  };
+
+  // ============================================
+  // GESTION RÔLES
+  // ============================================
+
+  const addRole = () => {
+    setFormData((prev) => ({
+      ...prev,
+      roles: [
+        ...prev.roles,
+        {
+          name: "",
+          description: "",
+          permissions: [],
+          color: PRESET_COLORS[prev.roles.length % PRESET_COLORS.length].value,
+          iconName: "shield",
+          isUnique: false,
+          isRequired: false,
+        },
+      ],
+    }));
+  };
+
+  const updateRole = (index: number, field: keyof RoleFormData, value: string | string[] | boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      roles: prev.roles.map((role, i) =>
+        i === index ? { ...role, [field]: value } : role
+      ),
+    }));
+  };
+
+  const deleteRole = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      roles: prev.roles.filter((_, i) => i !== index),
+    }));
+  };
+
+  const togglePermission = (roleIndex: number, permissionId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      roles: prev.roles.map((role, i) => {
+        if (i === roleIndex) {
+          const newPermissions = role.permissions.includes(permissionId)
+            ? role.permissions.filter((p) => p !== permissionId)
+            : [...role.permissions, permissionId];
+          return { ...role, permissions: newPermissions };
+        }
+        return role;
+      }),
+    }));
+  };
+
+  const toggleAllPermissions = (roleIndex: number, category: string, select: boolean) => {
+    const categoryPermissions = GROUPED_PERMISSIONS[category].map((p) => p.id);
+
+    setFormData((prev) => ({
+      ...prev,
+      roles: prev.roles.map((role, i) => {
+        if (i === roleIndex) {
+          const otherPermissions = role.permissions.filter(
+            (p) => !categoryPermissions.includes(p)
+          );
+          return {
+            ...role,
+            permissions: select
+              ? [...otherPermissions, ...categoryPermissions]
+              : otherPermissions,
+          };
+        }
+        return role;
+      }),
+    }));
+  };
+
+  // ============================================
+  // GESTION TYPES DE MEMBRES
+  // ============================================
+
+  const addMemberType = () => {
+    setFormData((prev) => ({
+      ...prev,
+      memberTypes: [
+        ...prev.memberTypes,
+        {
+          name: "",
+          cotisationAmount: 0,
+          description: "",
+        },
+      ],
+    }));
+  };
+
+  const updateMemberType = (index: number, field: keyof MemberTypeConfig, value: string | number) => {
+    setFormData((prev) => ({
+      ...prev,
+      memberTypes: prev.memberTypes.map((type, i) =>
+        i === index ? { ...type, [field]: value } : type
+      ),
+    }));
+  };
+
+  const deleteMemberType = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      memberTypes: prev.memberTypes.filter((_, i) => i !== index),
+    }));
+  };
+
+  // ============================================
+  // GESTION DOCUMENTS
+  // ============================================
+
+  const handleDocumentChange = (type: string, file: File | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: {
+        ...prev.documents,
+        [type]: file,
+      },
+    }));
+  };
+
+  // ============================================
+  // GESTION RÔLES ADMIN (multi-sélection)
+  // ============================================
+
+  const toggleAdminRole = (roleIndex: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      adminStatus: {
+        ...prev.adminStatus,
+        assignedRoles: prev.adminStatus.assignedRoles.includes(roleIndex)
+          ? prev.adminStatus.assignedRoles.filter((r) => r !== roleIndex)
+          : [...prev.adminStatus.assignedRoles, roleIndex],
+      },
+    }));
   };
 
   // ============================================
@@ -374,46 +540,46 @@ export default function CreateAssociationPage() {
 
       const associationId = createResponse.data.association.id;
 
-      // 2️⃣ Créer les rôles
+      // 2️⃣ Si admin membre : créer les rôles
       const createdRoles: Array<{ tempId: string; realId: string }> = [];
 
-      for (const role of formData.roles) {
-        const roleResponse = await rolesApi.create(associationId, {
-          name: role.name,
-          description: role.description,
-          permissions: role.permissions,
-          color: role.color,
-          iconName: role.iconName,
-          isUnique: role.isUnique || false,
-          isRequired: role.isRequired || false, // ✅ AJOUTÉ
-        });
-
-        if (roleResponse.success) {
-          const tempId = formData.roles.indexOf(role).toString();
-          createdRoles.push({
-            tempId,
-            realId: roleResponse.data.role.id,
-          });
-        }
-      }
-
-      // 3️⃣ Configurer les types de membres (SANS defaultRole)
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            memberTypes: formData.memberTypes,
-          }),
-        }
-      );
-
-      // 4️⃣ Ajouter l'admin comme membre (SI isMember = true)
       if (formData.adminStatus.isMember) {
+        for (const role of formData.roles) {
+          const roleResponse = await rolesApi.create(associationId, {
+            name: role.name,
+            description: role.description,
+            permissions: role.permissions,
+            color: role.color,
+            iconName: role.iconName,
+            isUnique: role.isUnique || false,
+            isRequired: role.isRequired || false,
+          });
+
+          if (roleResponse.success) {
+            const tempId = formData.roles.indexOf(role).toString();
+            createdRoles.push({
+              tempId,
+              realId: roleResponse.data.role.id,
+            });
+          }
+        }
+
+        // 3️⃣ Configurer les types de membres
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              memberTypes: formData.memberTypes,
+            }),
+          }
+        );
+
+        // 4️⃣ Ajouter l'admin comme membre
         const adminRoleIds = formData.adminStatus.assignedRoles.map((tempId) => {
           const mapping = createdRoles.find((r) => r.tempId === tempId);
           return mapping?.realId || tempId;
@@ -471,7 +637,7 @@ export default function CreateAssociationPage() {
     } catch (error) {
       console.error("❌ Erreur création association:", error);
       const errorMessage =
-        error instanceof Error ? error.message : t("errors.connectionError");
+        error instanceof Error ? error.message : t("errors.createFailed");
       setErrors({ submit: errorMessage });
       toast.error(errorMessage);
     } finally {
@@ -480,159 +646,22 @@ export default function CreateAssociationPage() {
   };
 
   // ============================================
-  // GESTION RÔLES
-  // ============================================
-
-  const addRole = () => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: [
-        ...prev.roles,
-        {
-          name: "",
-          description: "",
-          permissions: [],
-          color: PRESET_COLORS[prev.roles.length % PRESET_COLORS.length].value,
-          isUnique: false,
-          isRequired: false,
-        },
-      ],
-    }));
-  };
-
-  const deleteRole = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: prev.roles.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateRole = (
-    index: number,
-    field: keyof RoleFormData,
-    value: string | string[] | boolean
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: prev.roles.map((role, i) =>
-        i === index ? { ...role, [field]: value } : role
-      ),
-    }));
-  };
-
-  const togglePermission = (roleIndex: number, permissionId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: prev.roles.map((role, i) => {
-        if (i !== roleIndex) return role;
-        const perms = role.permissions.includes(permissionId)
-          ? role.permissions.filter((p) => p !== permissionId)
-          : [...role.permissions, permissionId];
-        return { ...role, permissions: perms };
-      }),
-    }));
-  };
-
-  const selectAllPermissions = (roleIndex: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: prev.roles.map((role, i) =>
-        i === roleIndex
-          ? { ...role, permissions: AVAILABLE_PERMISSIONS.map((p) => p.id) }
-          : role
-      ),
-    }));
-  };
-
-  const deselectAllPermissions = (roleIndex: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: prev.roles.map((role, i) =>
-        i === roleIndex ? { ...role, permissions: [] } : role
-      ),
-    }));
-  };
-
-  // ============================================
-  // GESTION TYPES DE MEMBRES
-  // ============================================
-
-  const addMemberType = () => {
-    setFormData((prev) => ({
-      ...prev,
-      memberTypes: [
-        ...prev.memberTypes,
-        {
-          name: "",
-          cotisationAmount: 0,
-          description: "",
-        },
-      ],
-    }));
-  };
-
-  const deleteMemberType = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      memberTypes: prev.memberTypes.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateMemberType = (
-    index: number,
-    field: keyof MemberTypeConfig,
-    value: string | number
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      memberTypes: prev.memberTypes.map((type, i) =>
-        i === index ? { ...type, [field]: value } : type
-      ),
-    }));
-  };
-
-  // ============================================
-  // GESTION DOCUMENTS
-  // ============================================
-
-  const handleDocumentChange = (type: string, file: File | null) => {
-    setFormData((prev) => ({
-      ...prev,
-      documents: {
-        ...prev.documents,
-        [type]: file,
-      },
-    }));
-  };
-
-  // ============================================
-  // GESTION RÔLES ADMIN (multi-sélection)
-  // ============================================
-
-  const toggleAdminRole = (roleIndex: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      adminStatus: {
-        ...prev.adminStatus,
-        assignedRoles: prev.adminStatus.assignedRoles.includes(roleIndex)
-          ? prev.adminStatus.assignedRoles.filter((r) => r !== roleIndex)
-          : [...prev.adminStatus.assignedRoles, roleIndex],
-      },
-    }));
-  };
-
-  // ============================================
   // RENDER
   // ============================================
 
   const steps = [
     { id: 1, label: t("steps.basic"), icon: Building2 },
-    { id: 2, label: t("steps.roles"), icon: Shield },
-    { id: 3, label: t("steps.memberTypes"), icon: Users },
-    { id: 4, label: t("steps.adminStatus"), icon: UserCog },
+    { id: 2, label: t("steps.adminStatus"), icon: UserCog },
+    { id: 3, label: t("steps.roles"), icon: Shield },
+    { id: 4, label: t("steps.memberTypes"), icon: Users },
     { id: 5, label: t("steps.documents"), icon: FileText },
     { id: 6, label: t("steps.finalization"), icon: Check },
   ];
+
+  // Filtrer les étapes à afficher selon le statut admin
+  const visibleSteps = formData.adminStatus.isMember
+    ? steps
+    : steps.filter((s) => s.id !== 3 && s.id !== 4);
 
   return (
     <ProtectedRoute requiredModule="associations">
@@ -655,7 +684,7 @@ export default function CreateAssociationPage() {
 
         {/* Stepper */}
         <div className="flex items-center justify-between overflow-x-auto">
-          {steps.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const Icon = step.icon;
             const isActive = currentStep === step.id;
             const isCompleted = currentStep > step.id;
@@ -675,65 +704,72 @@ export default function CreateAssociationPage() {
                 `}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="font-medium text-sm hidden md:block truncate">
+                  <span className="text-sm font-medium truncate">
                     {step.label}
                   </span>
-                  {isCompleted && <Check className="h-3 w-3 flex-shrink-0" />}
                 </div>
-                {index < steps.length - 1 && (
-                  <div className="w-full h-px bg-gray-200 mx-1 flex-shrink-0" />
+
+                {index < visibleSteps.length - 1 && (
+                  <ArrowRight className="h-4 w-4 mx-2 text-gray-300 flex-shrink-0" />
                 )}
               </div>
             );
           })}
         </div>
 
-        {/* Contenu */}
+        {/* Formulaire */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {React.createElement(steps[currentStep - 1].icon, {
-                className: "h-5 w-5",
-              })}
-              {steps[currentStep - 1].label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* ÉTAPE 1: Informations + Structure */}
+          <CardContent className="pt-6">
+            {/* ÉTAPE 1: Informations de base */}
             {currentStep === 1 && (
               <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium">{t("basicInfo.title")}</h3>
+                </div>
+
                 <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      {t("basicInfo.name")} <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      placeholder={t("basicInfo.namePlaceholder")}
+                    />
+                    {errors.name && (
+                      <p className="text-sm text-red-600 mt-1">{errors.name}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      {t("basicInfo.description")}
+                    </label>
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({ ...formData, description: e.target.value })
+                      }
+                      placeholder={t("basicInfo.descriptionPlaceholder")}
+                      rows={4}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("basicInfo.name")} *
-                      </label>
-                      <Input
-                        value={formData.name}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            name: e.target.value,
-                          }))
-                        }
-                        placeholder={t("basicInfo.namePlaceholder")}
-                        error={errors.name}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("basicInfo.legalStatus")} *
+                      <label className="block text-sm font-medium mb-1">
+                        {t("basicInfo.legalStatus")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
                         value={formData.legalStatus}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            legalStatus: e.target.value,
-                          }))
+                          setFormData({ ...formData, legalStatus: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       >
                         <option value="association_1901">
                           {t("legalStatus.association_1901")}
@@ -745,87 +781,18 @@ export default function CreateAssociationPage() {
                         <option value="other">{t("legalStatus.other")}</option>
                       </select>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {t("basicInfo.description")}
-                    </label>
-                    <Textarea
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
-                      placeholder={t("basicInfo.descriptionPlaceholder")}
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("basicInfo.country")} *
+                      <label className="block text-sm font-medium mb-1">
+                        {t("basicInfo.currency")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <select
-                        value={formData.domiciliationCountry}
-                        onChange={(e) => {
-                          const country = e.target.value;
-                          setFormData((prev) => ({
-                            ...prev,
-                            domiciliationCountry: country,
-                            currency:
-                              CURRENCIES.find((c) =>
-                                c.countries.includes(country)
-                              )?.code || "EUR",
-                          }));
-                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="FR">{t("countries.FR")}</option>
-                        <option value="BE">{t("countries.BE")}</option>
-                        <option value="SN">{t("countries.SN")}</option>
-                        <option value="IT">{t("countries.IT")}</option>
-                        <option value="ES">{t("countries.ES")}</option>
-                        <option value="US">{t("countries.US")}</option>
-                        <option value="CA">{t("countries.CA")}</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("basicInfo.city")} *
-                      </label>
-                      <Input
-                        value={formData.domiciliationCity}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            domiciliationCity: e.target.value,
-                          }))
-                        }
-                        placeholder={t("basicInfo.cityPlaceholder")}
-                        error={errors.city}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("basicInfo.currency")} *
-                      </label>
-                      <select
                         value={formData.currency}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            currency: e.target.value,
-                          }))
+                          setFormData({ ...formData, currency: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       >
                         {CURRENCIES.map((curr) => (
                           <option key={curr.code} value={curr.code}>
@@ -833,105 +800,365 @@ export default function CreateAssociationPage() {
                           </option>
                         ))}
                       </select>
+                      {errors.currency && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.currency}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {t("basicInfo.country")}{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        value={formData.domiciliationCountry}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            domiciliationCountry: e.target.value,
+                          })
+                        }
+                      >
+                        {Object.keys(COUNTRY_CODE_TO_NAME).map((code) => (
+                          <option key={code} value={code}>
+                            {t(`countries.${code}`)}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.country && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.country}
+                        </p>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("basicInfo.registrationNumber")}
+                      <label className="block text-sm font-medium mb-1">
+                        {t("basicInfo.city")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <Input
-                        value={formData.registrationNumber}
+                        value={formData.domiciliationCity}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            registrationNumber: e.target.value,
-                          }))
+                          setFormData({
+                            ...formData,
+                            domiciliationCity: e.target.value,
+                          })
                         }
-                        placeholder={t(
-                          "basicInfo.registrationNumberPlaceholder"
-                        )}
+                        placeholder={t("basicInfo.cityPlaceholder")}
                       />
+                      {errors.city && (
+                        <p className="text-sm text-red-600 mt-1">{errors.city}</p>
+                      )}
                     </div>
                   </div>
-                </div>
 
-                {/* Type d'organisation */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">
-                    {t("structure.title")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card
-                      className={`p-4 cursor-pointer border-2 transition-colors ${
-                        !formData.isMultiSection
-                          ? "border-primary-500 bg-primary-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          isMultiSection: false,
-                        }))
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      {t("basicInfo.registrationNumber")}
+                    </label>
+                    <Input
+                      value={formData.registrationNumber}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          registrationNumber: e.target.value,
+                        })
                       }
-                    >
-                      <div className="flex items-start gap-3">
-                        <Building2 className="h-6 w-6 text-primary-600 mt-1" />
-                        <div>
-                          <h4 className="font-medium">
-                            {t("structure.simple.title")}
-                          </h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {t("structure.simple.description")}
-                          </p>
-                          <Badge variant="secondary" className="mt-2">
+                      placeholder={t("basicInfo.registrationNumberPlaceholder")}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      {t("structure.title")}
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card
+                        className={`p-4 cursor-pointer transition-all ${
+                          !formData.isMultiSection
+                            ? "border-2 border-primary-500 bg-primary-50"
+                            : "border border-gray-200 hover:border-gray-300"
+                        }`}
+                        onClick={() =>
+                          setFormData({ ...formData, isMultiSection: false })
+                        }
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-medium">
+                              {t("structure.simple.title")}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {t("structure.simple.description")}
+                            </p>
+                          </div>
+                          <Badge variant="default">
                             {t("structure.simple.badge")}
                           </Badge>
                         </div>
-                      </div>
-                    </Card>
+                      </Card>
 
-                    <Card
-                      className={`p-4 cursor-pointer border-2 transition-colors ${
-                        formData.isMultiSection
-                          ? "border-primary-500 bg-primary-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          isMultiSection: true,
-                        }))
-                      }
-                    >
-                      <div className="flex items-start gap-3">
-                        <Globe className="h-6 w-6 text-primary-600 mt-1" />
-                        <div>
-                          <h4 className="font-medium">
-                            {t("structure.multiSection.title")}
-                          </h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {t("structure.multiSection.description")}
-                          </p>
-                          <Badge variant="outline" className="mt-2">
+                      <Card
+                        className={`p-4 cursor-pointer transition-all ${
+                          formData.isMultiSection
+                            ? "border-2 border-primary-500 bg-primary-50"
+                            : "border border-gray-200 hover:border-gray-300"
+                        }`}
+                        onClick={() =>
+                          setFormData({ ...formData, isMultiSection: true })
+                        }
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-medium">
+                              {t("structure.multiSection.title")}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {t("structure.multiSection.description")}
+                            </p>
+                          </div>
+                          <Badge variant="outline">
                             {t("structure.multiSection.badge")}
                           </Badge>
                         </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ÉTAPE 2: Rôles RBAC */}
+            {/* ÉTAPE 2: Statut administrateur */}
             {currentStep === 2 && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium">
+                    {t("adminStatus.title")}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {t("adminStatus.subtitle")}
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-3">
+                      {t("adminStatus.question")}
+                    </label>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card
+                        className={`p-4 cursor-pointer transition-all ${
+                          formData.adminStatus.isMember
+                            ? "border-2 border-primary-500 bg-primary-50"
+                            : "border border-gray-200 hover:border-gray-300"
+                        }`}
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            adminStatus: {
+                              ...formData.adminStatus,
+                              isMember: true,
+                            },
+                          })
+                        }
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                              formData.adminStatus.isMember
+                                ? "border-primary-500 bg-primary-500"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            {formData.adminStatus.isMember && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="font-medium">
+                              {t("adminStatus.yesMember")}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {t("adminStatus.yesMemberDesc")}
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+
+                      <Card
+                        className={`p-4 cursor-pointer transition-all ${
+                          !formData.adminStatus.isMember
+                            ? "border-2 border-primary-500 bg-primary-50"
+                            : "border border-gray-200 hover:border-gray-300"
+                        }`}
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            adminStatus: {
+                              isMember: false,
+                              memberType: "",
+                              assignedRoles: [],
+                            },
+                          })
+                        }
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                              !formData.adminStatus.isMember
+                                ? "border-primary-500 bg-primary-500"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            {!formData.adminStatus.isMember && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="font-medium">
+                              {t("adminStatus.noMember")}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {t("adminStatus.noMemberDesc")}
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+                  </div>
+
+                  {formData.adminStatus.isMember && formData.roles.length > 0 && formData.memberTypes.length > 0 && (
+                    <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
+                      <h4 className="font-medium text-blue-900">
+                        {t("adminStatus.configureProfile")}
+                      </h4>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          {t("adminStatus.selectMemberType")}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={formData.adminStatus.memberType}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              adminStatus: {
+                                ...formData.adminStatus,
+                                memberType: e.target.value,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">
+                            {t("adminStatus.selectMemberTypePlaceholder")}
+                          </option>
+                          {formData.memberTypes.map((type, index) => (
+                            <option key={index} value={type.name}>
+                              {type.name} ({type.cotisationAmount}€/mois)
+                            </option>
+                          ))}
+                        </select>
+                        {errors.memberType && (
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.memberType}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          {t("adminStatus.selectRoles")}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <p className="text-xs text-gray-600 mb-2">
+                          {t("adminStatus.multiRolesInfo")}
+                        </p>
+
+                        <div className="space-y-2">
+                          {formData.roles.map((role, index) => (
+                            <label
+                              key={index}
+                              className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.adminStatus.assignedRoles.includes(
+                                  index.toString()
+                                )}
+                                onChange={() => toggleAdminRole(index.toString())}
+                                className="rounded"
+                              />
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: role.color }}
+                              />
+                              <span className="text-sm">{role.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {errors.roles && (
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.roles}
+                          </p>
+                        )}
+                      </div>
+
+                      {formData.adminStatus.memberType &&
+                        formData.adminStatus.assignedRoles.length > 0 && (
+                          <div className="mt-3 p-3 bg-white border border-blue-300 rounded text-sm">
+                            <p className="font-medium text-blue-900 mb-1">
+                              {t("adminStatus.summary")}
+                            </p>
+                            <p className="text-gray-700">
+                              {t("adminStatus.summaryText", {
+                                memberType: formData.adminStatus.memberType,
+                                roles: formData.adminStatus.assignedRoles
+                                  .map((idx) => formData.roles[parseInt(idx)]?.name)
+                                  .join(", "),
+                              })}
+                            </p>
+                          </div>
+                        )}
+                    </div>
+                  )}
+
+                  {!formData.adminStatus.isMember && (
+                    <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-gray-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-gray-700">
+                          <p className="font-medium">
+                            {t("adminStatus.externalAdminInfo")}
+                          </p>
+                          <ul className="mt-2 space-y-1 list-disc list-inside">
+                            <li>{t("adminStatus.externalAdminPoint1")}</li>
+                            <li>{t("adminStatus.externalAdminPoint2")}</li>
+                            <li>{t("adminStatus.externalAdminPoint3")}</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ÉTAPE 3: Rôles (seulement si admin membre) */}
+            {currentStep === 3 && formData.adminStatus.isMember && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-medium">{t("roles.title")}</h3>
-                    <p className="text-sm text-gray-600">
-                      {t("roles.subtitle")}
-                    </p>
+                    <p className="text-sm text-gray-600">{t("roles.subtitle")}</p>
                   </div>
                   <Button onClick={addRole} className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
@@ -939,69 +1166,86 @@ export default function CreateAssociationPage() {
                   </Button>
                 </div>
 
-                {errors.roles && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
-                    {errors.roles}
+                {formData.roles.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Shield className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>{t("roles.noRoles")}</p>
                   </div>
                 )}
 
                 <div className="space-y-4">
                   {formData.roles.map((role, roleIndex) => (
-                    <Card key={roleIndex} className="p-4 border-2">
+                    <Card key={roleIndex} className="p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-medium">
+                          {t("roles.roleNumber", { number: roleIndex + 1 })}
+                        </h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteRole(roleIndex)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
                       <div className="space-y-4">
-                        <div className="flex justify-between items-start">
-                          <h4 className="font-medium">
-                            {t("roles.roleNumber", { number: roleIndex + 1 })}
-                          </h4>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => deleteRole(roleIndex)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("roles.roleName")}{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              value={role.name}
+                              onChange={(e) =>
+                                updateRole(roleIndex, "name", e.target.value)
+                              }
+                              placeholder={t("roles.roleNamePlaceholder")}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("roles.color")}
+                            </label>
+                            <div className="flex gap-2">
+                              {PRESET_COLORS.map((color) => (
+                                <button
+                                  key={color.value}
+                                  type="button"
+                                  className={`w-8 h-8 rounded-full border-2 transition-all ${
+                                    role.color === color.value
+                                      ? "border-gray-900 scale-110"
+                                      : "border-transparent hover:scale-105"
+                                  }`}
+                                  style={{ backgroundColor: color.value }}
+                                  onClick={() =>
+                                    updateRole(roleIndex, "color", color.value)
+                                  }
+                                />
+                              ))}
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Nom & Couleur */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <Input
-                            value={role.name}
+                        <div>
+                          <label className="block text-sm font-medium mb-1">
+                            {t("roles.roleDescription")}
+                          </label>
+                          <Textarea
+                            value={role.description}
                             onChange={(e) =>
-                              updateRole(roleIndex, "name", e.target.value)
+                              updateRole(roleIndex, "description", e.target.value)
                             }
-                            placeholder={t("roles.roleNamePlaceholder")}
-                            error={errors[`role_${roleIndex}_name`]}
+                            placeholder={t("roles.roleDescriptionPlaceholder")}
+                            rows={2}
                           />
-                          <select
-                            value={role.color}
-                            onChange={(e) =>
-                              updateRole(roleIndex, "color", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          >
-                            {PRESET_COLORS.map((color) => (
-                              <option key={color.value} value={color.value}>
-                                {t(`colors.${color.label}`)}
-                              </option>
-                            ))}
-                          </select>
                         </div>
 
-                        {/* Description */}
-                        <Textarea
-                          value={role.description}
-                          onChange={(e) =>
-                            updateRole(roleIndex, "description", e.target.value)
-                          }
-                          placeholder={t("roles.roleDescriptionPlaceholder")}
-                          rows={2}
-                          error={errors[`role_${roleIndex}_desc`]}
-                        />
-
-                        {/* ✅ NOUVEAU : Checkboxes isUnique et isRequired */}
-                        <div className="flex flex-wrap gap-4 p-3 bg-gray-50 rounded-md">
-                          <label className="flex items-center gap-2 cursor-pointer">
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
                               checked={role.isUnique || false}
@@ -1010,79 +1254,84 @@ export default function CreateAssociationPage() {
                               }
                               className="rounded"
                             />
-                            <span className="text-sm font-medium">
-                              {t("roles.isUnique")}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {t("roles.isUniqueHelp")}
-                            </span>
+                            <span className="text-sm">{t("roles.isUnique")}</span>
                           </label>
 
-                          <label className="flex items-center gap-2 cursor-pointer">
+                          <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
                               checked={role.isRequired || false}
                               onChange={(e) =>
-                                updateRole(roleIndex, "isRequired", e.target.checked)
+                                updateRole(
+                                  roleIndex,
+                                  "isRequired",
+                                  e.target.checked
+                                )
                               }
                               className="rounded"
                             />
-                            <span className="text-sm font-medium">
+                            <span className="text-sm">
                               {t("roles.isRequired")}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {t("roles.isRequiredHelp")}
                             </span>
                           </label>
                         </div>
 
-                        {/* Permissions */}
                         <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="text-sm font-medium">
-                              {t("roles.permissions")} (
-                              {role.permissions.length})
-                            </label>
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => selectAllPermissions(roleIndex)}
-                              >
-                                {t("roles.selectAll")}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  deselectAllPermissions(roleIndex)
-                                }
-                              >
-                                {t("roles.deselectAll")}
-                              </Button>
-                            </div>
-                          </div>
+                          <label className="block text-sm font-medium mb-2">
+                            {t("roles.permissions")}
+                          </label>
+                          <p className="text-xs text-gray-600 mb-3">
+                            {t("roles.permissionsSubtitle")}
+                          </p>
 
-                          {errors[`role_${roleIndex}_perms`] && (
-                            <p className="text-sm text-red-600 mb-2">
-                              {errors[`role_${roleIndex}_perms`]}
-                            </p>
-                          )}
-
-                          <div className="space-y-3 max-h-96 overflow-y-auto border rounded-md p-3">
+                          <div className="space-y-4">
                             {Object.entries(GROUPED_PERMISSIONS).map(
                               ([category, perms]) => (
-                                <div key={category}>
-                                  <h5 className="font-medium text-sm mb-2">
-                                    {t(`permissionCategories.${category}`)}
-                                  </h5>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                                <div
+                                  key={category}
+                                  className="border border-gray-200 rounded-lg p-3"
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h5 className="font-medium text-sm">
+                                      {t(`permissionCategories.${category}`)}
+                                    </h5>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                          toggleAllPermissions(
+                                            roleIndex,
+                                            category,
+                                            true
+                                          )
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {t("roles.selectAll")}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                          toggleAllPermissions(
+                                            roleIndex,
+                                            category,
+                                            false
+                                          )
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {t("roles.deselectAll")}
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-2">
                                     {perms.map((perm) => (
                                       <label
                                         key={perm.id}
-                                        className="flex items-center gap-2 cursor-pointer"
+                                        className="flex items-start gap-2 text-sm cursor-pointer hover:bg-gray-50 p-2 rounded"
                                       >
                                         <input
                                           type="checkbox"
@@ -1092,11 +1341,16 @@ export default function CreateAssociationPage() {
                                           onChange={() =>
                                             togglePermission(roleIndex, perm.id)
                                           }
-                                          className="rounded"
+                                          className="mt-0.5 rounded"
                                         />
-                                        <span className="text-sm">
-                                          {perm.name}
-                                        </span>
+                                        <div>
+                                          <div className="font-medium">
+                                            {perm.name}
+                                          </div>
+                                          <div className="text-xs text-gray-600">
+                                            {perm.description}
+                                          </div>
+                                        </div>
                                       </label>
                                     ))}
                                   </div>
@@ -1108,21 +1362,18 @@ export default function CreateAssociationPage() {
                       </div>
                     </Card>
                   ))}
-
-                  {formData.roles.length === 0 && (
-                    <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
-                      <Shield className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                      <p>{t("roles.noRoles")}</p>
-                    </div>
-                  )}
                 </div>
+
+                {errors.roles && (
+                  <p className="text-sm text-red-600">{errors.roles}</p>
+                )}
               </div>
             )}
 
-            {/* ÉTAPE 3: Types de membres (SANS defaultRole) */}
-            {currentStep === 3 && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
+            {/* ÉTAPE 4: Types de membres (seulement si admin membre) */}
+            {currentStep === 4 && formData.adminStatus.isMember && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-medium">
                       {t("memberTypes.title")}
@@ -1140,49 +1391,77 @@ export default function CreateAssociationPage() {
                   </Button>
                 </div>
 
-                {errors.memberTypes && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
-                    {errors.memberTypes}
+                {formData.memberTypes.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>{t("memberTypes.noTypes")}</p>
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  {formData.memberTypes.map((type, typeIndex) => (
-                    <Card key={typeIndex} className="p-4">
-                      <div className="flex gap-4">
-                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <Input
-                            value={type.name}
-                            onChange={(e) =>
-                              updateMemberType(
-                                typeIndex,
-                                "name",
-                                e.target.value
-                              )
-                            }
-                            placeholder={t("memberTypes.typeNamePlaceholder")}
-                            error={errors[`type_${typeIndex}_name`]}
-                          />
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={type.cotisationAmount}
-                            onChange={(e) =>
-                              updateMemberType(
-                                typeIndex,
-                                "cotisationAmount",
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            placeholder={t("memberTypes.amountPlaceholder")}
-                            error={errors[`type_${typeIndex}_amount`]}
-                          />
-                          <Input
+                <div className="space-y-4">
+                  {formData.memberTypes.map((type, index) => (
+                    <Card key={index} className="p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-medium">
+                          {t("memberTypes.typeCount", { count: index + 1 })}
+                        </h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteMemberType(index)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("memberTypes.typeName")}{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              value={type.name}
+                              onChange={(e) =>
+                                updateMemberType(index, "name", e.target.value)
+                              }
+                              placeholder={t("memberTypes.typeNamePlaceholder")}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("memberTypes.amount")}{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={type.cotisationAmount}
+                              onChange={(e) =>
+                                updateMemberType(
+                                  index,
+                                  "cotisationAmount",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              placeholder={t("memberTypes.amountPlaceholder")}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium mb-1">
+                            {t("memberTypes.description")}
+                          </label>
+                          <Textarea
                             value={type.description || ""}
                             onChange={(e) =>
                               updateMemberType(
-                                typeIndex,
+                                index,
                                 "description",
                                 e.target.value
                               )
@@ -1190,251 +1469,22 @@ export default function CreateAssociationPage() {
                             placeholder={t(
                               "memberTypes.descriptionPlaceholder"
                             )}
+                            rows={2}
                           />
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deleteMemberType(typeIndex)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     </Card>
                   ))}
-
-                  {formData.memberTypes.length === 0 && (
-                    <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
-                      <Users className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                      <p>{t("memberTypes.noTypes")}</p>
-                    </div>
-                  )}
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-                    <p className="text-sm text-blue-700">
-                      {t("memberTypes.info")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ÉTAPE 4: Statut Administrateur (NOUVEAU) */}
-            {currentStep === 4 && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium">
-                    {t("adminStatus.title")}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {t("adminStatus.subtitle")}
-                  </p>
-                </div>
-
-                {/* Question principale */}
-                <div className="space-y-4">
-                  <label className="block text-sm font-medium text-gray-700">
-                    {t("adminStatus.question")}
-                  </label>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card
-                      className={`p-4 cursor-pointer border-2 transition-colors ${
-                        formData.adminStatus.isMember
-                          ? "border-primary-500 bg-primary-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          adminStatus: {
-                            ...prev.adminStatus,
-                            isMember: true,
-                          },
-                        }))
-                      }
-                    >
-                      <div className="flex items-start gap-3">
-                        <Check className="h-6 w-6 text-primary-600 mt-1" />
-                        <div>
-                          <h4 className="font-medium">
-                            {t("adminStatus.yesMember")}
-                          </h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {t("adminStatus.yesMemberDesc")}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-
-                    <Card
-                      className={`p-4 cursor-pointer border-2 transition-colors ${
-                        !formData.adminStatus.isMember
-                          ? "border-primary-500 bg-primary-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          adminStatus: {
-                            isMember: false,
-                            memberType: "",
-                            assignedRoles: [],
-                          },
-                        }))
-                      }
-                    >
-                      <div className="flex items-start gap-3">
-                        <X className="h-6 w-6 text-gray-600 mt-1" />
-                        <div>
-                          <h4 className="font-medium">
-                            {t("adminStatus.noMember")}
-                          </h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {t("adminStatus.noMemberDesc")}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-                  </div>
-                </div>
-
-                {/* Si OUI: Configuration membre */}
-                {formData.adminStatus.isMember && (
-                  <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-                    <h4 className="font-medium">
-                      {t("adminStatus.configureProfile")}
-                    </h4>
-
-                    {/* Sélection type de membre */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("adminStatus.selectMemberType")} *
-                      </label>
-                      <select
-                        value={formData.adminStatus.memberType}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            adminStatus: {
-                              ...prev.adminStatus,
-                              memberType: e.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">
-                          {t("adminStatus.selectMemberTypePlaceholder")}
-                        </option>
-                        {formData.memberTypes.map((type, index) => (
-                          <option key={index} value={type.name}>
-                            {type.name} ({type.cotisationAmount}€/mois)
-                          </option>
-                        ))}
-                      </select>
-                      {errors.adminMemberType && (
-                        <p className="text-sm text-red-600 mt-1">
-                          {errors.adminMemberType}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Sélection rôles (multi) */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t("adminStatus.selectRoles")} *
-                      </label>
-                      <p className="text-xs text-gray-500 mb-2">
-                        {t("adminStatus.multiRolesInfo")}
-                      </p>
-
-                      <div className="space-y-2 border rounded-md p-3 max-h-64 overflow-y-auto">
-                        {formData.roles.map((role, roleIndex) => (
-                          <label
-                            key={roleIndex}
-                            className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={formData.adminStatus.assignedRoles.includes(
-                                roleIndex.toString()
-                              )}
-                              onChange={() =>
-                                toggleAdminRole(roleIndex.toString())
-                              }
-                              className="rounded"
-                            />
-                            <div className="flex items-center gap-2 flex-1">
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: role.color }}
-                              />
-                              <span className="font-medium">{role.name}</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {role.permissions.length} perms
-                            </Badge>
-                          </label>
-                        ))}
-                      </div>
-
-                      {errors.adminRoles && (
-                        <p className="text-sm text-red-600 mt-1">
-                          {errors.adminRoles}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Récapitulatif */}
-                    {formData.adminStatus.memberType &&
-                      formData.adminStatus.assignedRoles.length > 0 && (
-                        <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                          <div className="flex items-start gap-2">
-                            <Check className="h-4 w-4 text-green-600 mt-0.5" />
-                            <div className="text-sm text-green-700">
-                              <p className="font-medium">
-                                {t("adminStatus.summary")}
-                              </p>
-                              <p className="mt-1">
-                                {t("adminStatus.summaryText", {
-                                  memberType: formData.adminStatus.memberType,
-                                  roles: formData.adminStatus.assignedRoles
-                                    .map(
-                                      (idx) => formData.roles[parseInt(idx)]?.name
-                                    )
-                                    .join(", "),
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                  </div>
+                {errors.memberTypes && (
+                  <p className="text-sm text-red-600">{errors.memberTypes}</p>
                 )}
 
-                {/* Si NON: Info admin externe */}
-                {!formData.adminStatus.isMember && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                    <div className="flex items-start gap-3">
-                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                      <div className="text-sm text-blue-700">
-                        <p className="font-medium">
-                          {t("adminStatus.externalAdminInfo")}
-                        </p>
-                        <ul className="mt-2 space-y-1 list-disc list-inside">
-                          <li>{t("adminStatus.externalAdminPoint1")}</li>
-                          <li>{t("adminStatus.externalAdminPoint2")}</li>
-                          <li>{t("adminStatus.externalAdminPoint3")}</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+                  <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-blue-900">{t("memberTypes.info")}</p>
+                </div>
               </div>
             )}
 
@@ -1542,50 +1592,54 @@ export default function CreateAssociationPage() {
                     </div>
                   </Card>
 
-                  {/* Rôles */}
+                  {/* Rôles (seulement si admin membre) */}
+                  {formData.adminStatus.isMember && (
+                    <Card className="p-4">
+                      <h4 className="font-medium mb-3">
+                        {t("finalization.rolesCreated", {
+                          count: formData.roles.length,
+                        })}
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        {formData.roles.map((role, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: role.color }}
+                            />
+                            <span>{role.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {role.permissions.length} perms
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Types de membres (seulement si admin membre) */}
+                {formData.adminStatus.isMember && (
                   <Card className="p-4">
                     <h4 className="font-medium mb-3">
-                      {t("finalization.rolesCreated", {
-                        count: formData.roles.length,
+                      {t("finalization.memberTypesCreated", {
+                        count: formData.memberTypes.length,
                       })}
                     </h4>
                     <div className="space-y-2 text-sm">
-                      {formData.roles.map((role, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: role.color }}
-                          />
-                          <span>{role.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {role.permissions.length} perms
-                          </Badge>
+                      {formData.memberTypes.map((type, index) => (
+                        <div key={index} className="flex justify-between">
+                          <span>{type.name}</span>
+                          <span>
+                            {t("finalization.perMonth", {
+                              amount: type.cotisationAmount,
+                            })}
+                          </span>
                         </div>
                       ))}
                     </div>
                   </Card>
-                </div>
-
-                {/* Types de membres */}
-                <Card className="p-4">
-                  <h4 className="font-medium mb-3">
-                    {t("finalization.memberTypesCreated", {
-                      count: formData.memberTypes.length,
-                    })}
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    {formData.memberTypes.map((type, index) => (
-                      <div key={index} className="flex justify-between">
-                        <span>{type.name}</span>
-                        <span>
-                          {t("finalization.perMonth", {
-                            amount: type.cotisationAmount,
-                          })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
+                )}
 
                 {/* Statut admin */}
                 <Card className="p-4">
