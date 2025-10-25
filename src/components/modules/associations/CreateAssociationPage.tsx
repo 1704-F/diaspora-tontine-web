@@ -288,15 +288,7 @@ export default function CreateAssociationPage() {
         break;
 
       case 2:
-        // Validation du statut admin
-        if (formData.adminStatus.isMember) {
-          if (!formData.adminStatus.memberType) {
-            newErrors.memberType = t("adminStatus.memberTypeRequired");
-          }
-          if (formData.adminStatus.assignedRoles.length === 0) {
-            newErrors.roles = t("adminStatus.rolesRequired");
-          }
-        }
+     
         break;
 
       case 3:
