@@ -1,0 +1,164 @@
+{
+  "title": "Créer une nouvelle section",
+  "description": "Ajoutez une section géographique à votre association pour mieux organiser vos membres",
+  "breadcrumb": {
+    "associations": "Associations",
+    "sections": "Sections",
+    "create": "Créer une section"
+  },
+  "form": {
+    "name": {
+      "label": "Nom de la section",
+      "placeholder": "Ex: Section Paris, Section Lyon...",
+      "helper": "Nom identifiant la section géographique",
+      "error": {
+        "required": "Le nom de la section est obligatoire",
+        "minLength": "Le nom doit contenir au moins 3 caractères",
+        "maxLength": "Le nom ne peut pas dépasser 100 caractères"
+      }
+    },
+    "country": {
+      "label": "Pays",
+      "placeholder": "Sélectionnez un pays",
+      "helper": "Pays où se situe cette section",
+      "error": {
+        "required": "Le pays est obligatoire"
+      }
+    },
+    "city": {
+      "label": "Ville",
+      "placeholder": "Ex: Paris, Lyon, Marseille...",
+      "helper": "Ville principale de la section",
+      "error": {
+        "required": "La ville est obligatoire",
+        "minLength": "La ville doit contenir au moins 2 caractères"
+      }
+    },
+    "region": {
+      "label": "Région (optionnel)",
+      "placeholder": "Ex: Île-de-France, Provence-Alpes-Côte d'Azur...",
+      "helper": "Région administrative"
+    },
+    "currency": {
+      "label": "Devise",
+      "placeholder": "Sélectionnez une devise",
+      "helper": "Devise utilisée pour les transactions de cette section",
+      "error": {
+        "required": "La devise est obligatoire"
+      }
+    },
+    "language": {
+      "label": "Langue",
+      "placeholder": "Sélectionnez une langue",
+      "helper": "Langue principale de communication de la section",
+      "error": {
+        "required": "La langue est obligatoire"
+      }
+    },
+    "timezone": {
+      "label": "Fuseau horaire",
+      "placeholder": "Sélectionnez un fuseau horaire",
+      "helper": "Fuseau horaire de la section pour les événements",
+      "error": {
+        "required": "Le fuseau horaire est obligatoire"
+      }
+    },
+    "contactPhone": {
+      "label": "Téléphone de contact (optionnel)",
+      "placeholder": "+33 1 23 45 67 89",
+      "helper": "Numéro de téléphone du responsable de la section"
+    },
+    "contactEmail": {
+      "label": "Email de contact (optionnel)",
+      "placeholder": "section@association.fr",
+      "helper": "Adresse email du responsable de la section",
+      "error": {
+        "invalid": "Format d'email invalide"
+      }
+    },
+    "description": {
+      "label": "Description (optionnel)",
+      "placeholder": "Décrivez brièvement cette section...",
+      "helper": "Informations supplémentaires sur la section"
+    }
+  },
+  "countries": {
+    "FR": "France",
+    "BE": "Belgique",
+    "SN": "Sénégal",
+    "IT": "Italie",
+    "ES": "Espagne",
+    "US": "États-Unis",
+    "CA": "Canada",
+    "DE": "Allemagne",
+    "CH": "Suisse",
+    "ML": "Mali",
+    "CI": "Côte d'Ivoire",
+    "TG": "Togo",
+    "BF": "Burkina Faso",
+    "NE": "Niger",
+    "GN": "Guinée",
+    "CM": "Cameroun",
+    "CD": "RD Congo"
+  },
+  "currencies": {
+    "EUR": "Euro (€)",
+    "USD": "Dollar US ($)",
+    "GBP": "Livre Sterling (£)",
+    "CAD": "Dollar Canadien (CAD)",
+    "CHF": "Franc Suisse (CHF)",
+    "XOF": "Franc CFA (CFA)"
+  },
+  "languages": {
+    "fr": "Français",
+    "en": "English",
+    "it": "Italiano",
+    "es": "Español",
+    "de": "Deutsch"
+  },
+  "timezones": {
+    "europeParis": "Europe/Paris (GMT+1)",
+    "europeBrussels": "Europe/Brussels (GMT+1)",
+    "europeRome": "Europe/Rome (GMT+1)",
+    "europeMadrid": "Europe/Madrid (GMT+1)",
+    "europeBerlin": "Europe/Berlin (GMT+1)",
+    "europeZurich": "Europe/Zurich (GMT+1)",
+    "americaNewYork": "America/New York (GMT-5)",
+    "americaToronto": "America/Toronto (GMT-5)",
+    "africaDakar": "Africa/Dakar (GMT+0)",
+    "africaBamako": "Africa/Bamako (GMT+0)",
+    "africaAbidjan": "Africa/Abidjan (GMT+0)",
+    "africaLome": "Africa/Lomé (GMT+0)",
+    "africaOuagadougou": "Africa/Ouagadougou (GMT+0)",
+    "africaNiamey": "Africa/Niamey (GMT+1)",
+    "africaConakry": "Africa/Conakry (GMT+0)",
+    "africaDouala": "Africa/Douala (GMT+1)",
+    "africaKinshasa": "Africa/Kinshasa (GMT+1)"
+  },
+  "validation": {
+    "checkingLimits": "Vérification des limites...",
+    "sectionLimitReached": "Limite de sections atteinte",
+    "sectionLimitMessage": "Votre association a atteint la limite de {{max}} sections. Veuillez mettre à niveau votre plan pour créer plus de sections."
+  },
+  "buttons": {
+    "cancel": "Annuler",
+    "create": "Créer la section",
+    "creating": "Création en cours..."
+  },
+  "success": {
+    "title": "Section créée avec succès !",
+    "message": "La section {{name}} a été créée",
+    "redirect": "Redirection vers la section..."
+  },
+  "errors": {
+    "loadAssociation": "Erreur lors du chargement de l'association",
+    "createSection": "Erreur lors de la création de la section",
+    "generic": "Une erreur est survenue",
+    "tryAgain": "Veuillez réessayer"
+  },
+  "info": {
+    "multiSectionRequired": "Association multi-sections requise",
+    "multiSectionMessage": "Votre association doit être configurée en mode multi-sections pour créer des sections géographiques.",
+    "contactAdmin": "Contactez un administrateur pour activer cette fonctionnalité."
+  }
+}

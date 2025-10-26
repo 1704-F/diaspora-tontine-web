@@ -22,7 +22,7 @@ type Messages = Record<string, Record<string, string | Record<string, string>>>
 
 async function getMessages(locale: string = 'fr'): Promise<Messages> {
   try {
-    const [common, associations, roles, settings, createAssociation,editMember, memberDetails, members, sections] = await Promise.all([
+    const [common, associations, roles, settings, createAssociation,editMember, memberDetails, members, sections, createSection] = await Promise.all([
       import(`../locales/${locale}/common.json`).then(m => m.default),
       import(`../locales/${locale}/associations.json`).then(m => m.default),
       import(`../locales/${locale}/roles.json`).then(m => m.default),
@@ -32,6 +32,7 @@ async function getMessages(locale: string = 'fr'): Promise<Messages> {
       import(`../locales/${locale}/member-details.json`).then(m => m.default),
       import(`../locales/${locale}/members.json`).then(m => m.default),
       import(`../locales/${locale}/sections.json`).then(m => m.default),
+      import(`../locales/${locale}/create-section.json`).then(m => m.default),
     ]);
     
     return {
@@ -44,6 +45,7 @@ async function getMessages(locale: string = 'fr'): Promise<Messages> {
       memberDetails,
       members,
       sections,
+      createSection
 
     };
   } catch (error) {
@@ -57,7 +59,8 @@ async function getMessages(locale: string = 'fr'): Promise<Messages> {
       editMember:{},
       memberDetails:{},
       members:{},
-      sections:{}
+      sections:{},
+      createSection: {},
     };
   }
 }

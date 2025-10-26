@@ -8,6 +8,9 @@
   "connectionError": "Erreur de connexion",
   "migrateConfirm": "Cette action créera automatiquement une première section avec vos membres actuels. L'opération est irréversible. Continuer ?",
   "migrateError": "Erreur lors de la migration",
+  "dismiss": "Fermer",
+   "cancel": "Annuler",
+   "save": "Enregistrer",
   
   "status": {
     "active": "Active",

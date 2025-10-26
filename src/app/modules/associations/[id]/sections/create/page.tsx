@@ -1,509 +1,471 @@
-// src/app/modules/associations/[id]/sections/create/page.tsx
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { useAuthStore } from '@/stores/authStore'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
-import { 
-  ArrowLeft, 
-  Building2,
-  MapPin,
-  Globe,
-  DollarSign,
-  Users,
-  Save,
-  AlertCircle,
-  CheckCircle
-} from 'lucide-react'
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { ArrowLeft, MapPin, Building2, Globe, DollarSign, Languages, Clock, Phone, Mail, FileText, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
-interface Association {
-  id: number
-  name: string
-  isMultiSection: boolean
-  features: {
-    maxSections: number
-  }
-  sectionsCount: number
-}
+// ✅ Imports depuis l'architecture centralisée
+import { useAssociation } from '@/hooks/association/useAssociation';
+import { sectionsApi } from '@/lib/api/association/sections';
+import type { CreateSectionPayload } from '@/types/association/section';
+import { COUNTRIES, CURRENCIES, LANGUAGES, TIMEZONES } from '@/lib/constants/countries';
 
-interface SectionFormData {
-  name: string
-  country: string
-  city: string
-  currency: string
-  language: string
-  description: string
-}
-
-const COUNTRIES = [
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
-  { code: 'IT', name: 'Italie', flag: '🇮🇹' },
-  { code: 'ES', name: 'Espagne', flag: '🇪🇸' },
-  { code: 'BE', name: 'Belgique', flag: '🇧🇪' },
-  { code: 'DE', name: 'Allemagne', flag: '🇩🇪' },
-  { code: 'CH', name: 'Suisse', flag: '🇨🇭' },
-  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-  { code: 'US', name: 'États-Unis', flag: '🇺🇸' }
-]
-
-const CURRENCIES = [
-  { code: 'EUR', name: 'Euro', symbol: '€' },
-  { code: 'USD', name: 'Dollar US', symbol: '$' },
-  { code: 'GBP', name: 'Livre Sterling', symbol: '£' },
-  { code: 'CAD', name: 'Dollar Canadien', symbol: 'CAD' },
-  { code: 'CHF', name: 'Franc Suisse', symbol: 'CHF' }
-]
-
-const LANGUAGES = [
-  { code: 'fr', name: 'Français' },
-  { code: 'en', name: 'English' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'es', name: 'Español' },
-  { code: 'de', name: 'Deutsch' }
-]
+// ✅ Components UI
+import { Button } from '@/components/ui/Button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Label } from '@/components/ui/Label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { Textarea } from '@/components/ui/Textarea';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function CreateSectionPage() {
-  const params = useParams()
-  const router = useRouter()
-  const { token } = useAuthStore()
-  
-  const [association, setAssociation] = useState<Association | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  
-  const [formData, setFormData] = useState<SectionFormData>({
+  const params = useParams();
+  const router = useRouter();
+  const t = useTranslations('createSection');
+  const associationId = params.id as string;
+
+  // ✅ Utilisation du hook centralisé
+  const { association, loading: associationLoading, error: associationError } = useAssociation(Number(associationId));
+
+  // États locaux (uniquement pour le formulaire)
+  const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState<CreateSectionPayload>({
     name: '',
-    country: 'FR',
+    country: '',
     city: '',
-    currency: 'EUR',
+    region: '',
+    currency: '',
     language: 'fr',
-    description: ''
-  })
+    timezone: 'Europe/Paris',
+    contactPhone: '',
+    contactEmail: '',
+    description: '',
+  });
 
-  const associationId = params.id as string
-
+  // Vérification si association est multi-sections
   useEffect(() => {
-    fetchAssociation()
-  }, [associationId, token])
-
-  const fetchAssociation = async () => {
-    if (!associationId || !token) return
-    
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
-      
-      if (response.ok) {
-        const result = await response.json()
-        setAssociation(result.data.association)
-        
-        // Pré-remplir le nom avec le pays sélectionné
-        const selectedCountry = COUNTRIES.find(c => c.code === formData.country)
-        if (selectedCountry && result.data.association.name) {
-          setFormData(prev => ({
-            ...prev,
-            name: `Section ${selectedCountry.name}`
-          }))
-        }
-      } else {
-        setErrors({ general: 'Association introuvable' })
-      }
-    } catch (error) {
-      console.error('Erreur chargement association:', error)
-      setErrors({ general: 'Erreur de connexion' })
-    } finally {
-      setIsLoading(false)
+    if (association && !association.isMultiSection) {
+      toast.error(t('info.multiSectionRequired'), {
+        description: t('info.multiSectionMessage'),
+      });
+      router.push(`/modules/associations/${associationId}/sections`);
     }
-  }
+  }, [association, associationId, router, t]);
 
+  // Validation du formulaire
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Le nom de la section est requis'
-    } else if (formData.name.length < 3) {
-      newErrors.name = 'Le nom doit contenir au moins 3 caractères'
+    if (!formData.name || formData.name.trim().length < 3) {
+      newErrors.name = t('form.name.error.required');
     }
 
     if (!formData.country) {
-      newErrors.country = 'Le pays est requis'
+      newErrors.country = t('form.country.error.required');
     }
 
-    if (!formData.city.trim()) {
-      newErrors.city = 'La ville est requise'
+    if (!formData.city || formData.city.trim().length < 2) {
+      newErrors.city = t('form.city.error.required');
     }
 
     if (!formData.currency) {
-      newErrors.currency = 'La devise est requise'
+      newErrors.currency = t('form.currency.error.required');
     }
 
     if (!formData.language) {
-      newErrors.language = 'La langue est requise'
+      newErrors.language = t('form.language.error.required');
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    if (!formData.timezone) {
+      newErrors.timezone = t('form.timezone.error.required');
+    }
 
+    if (formData.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail)) {
+      newErrors.contactEmail = t('form.contactEmail.error.invalid');
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Gestion de la soumission
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!validateForm() || !token) return
+    e.preventDefault();
 
-    setIsSaving(true)
+    if (!validateForm()) {
+      toast.error(t('errors.generic'), {
+        description: t('errors.tryAgain'),
+      });
+      return;
+    }
+
+    setIsSaving(true);
+
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(formData)
-        }
-      )
+      // ✅ Nettoyer les champs vides avant envoi
+      const cleanedData: CreateSectionPayload = {
+        name: formData.name,
+        country: formData.country,
+        city: formData.city,
+        currency: formData.currency,
+        language: formData.language,
+        timezone: formData.timezone,
+      };
 
-      if (response.ok) {
-        const result = await response.json()
-        // Rediriger vers la page de la section créée
-        router.push(`/modules/associations/${associationId}/sections/${result.data.section.id}`)
-      } else {
-        const error = await response.json()
-        setErrors({ general: error.message || 'Erreur lors de la création' })
+      // Ajouter les champs optionnels uniquement s'ils sont remplis
+      if (formData.region?.trim()) {
+        cleanedData.region = formData.region.trim();
+      }
+      if (formData.contactPhone?.trim()) {
+        cleanedData.contactPhone = formData.contactPhone.trim();
+      }
+      if (formData.contactEmail?.trim()) {
+        cleanedData.contactEmail = formData.contactEmail.trim();
+      }
+      if (formData.description?.trim()) {
+        cleanedData.description = formData.description.trim();
+      }
+
+      // ✅ Utilisation de l'API client centralisé
+      const result = await sectionsApi.createSection(
+        Number(associationId),
+        cleanedData
+      );
+
+      if (result.success) {
+        toast.success(t('success.title'), {
+          description: t('success.message', { name: formData.name }),
+        });
+
+        // Redirection vers la section créée
+        router.push(`/modules/associations/${associationId}/sections/${result.data.section.id}`);
       }
     } catch (error) {
-      console.error('Erreur création section:', error)
-      setErrors({ general: 'Erreur de connexion' })
+      console.error('Erreur création section:', error);
+      toast.error(t('errors.createSection'), {
+        description: t('errors.tryAgain'),
+      });
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
-  const updateFormData = (field: keyof SectionFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    
+  // Mise à jour du formulaire
+  const updateFormData = (field: keyof CreateSectionPayload, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
     // Effacer l'erreur du champ modifié
     if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[field]
-        return newErrors
-      })
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
+  };
 
-    // Mise à jour automatique du nom quand le pays change
-    if (field === 'country' && association) {
-      const selectedCountry = COUNTRIES.find(c => c.code === value)
-      if (selectedCountry) {
-        setFormData(prev => ({
-          ...prev,
-          name: `Section ${selectedCountry.name}`
-        }))
-      }
-    }
+  // États de chargement
+  if (associationLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
   }
 
-  if (isLoading) {
+  if (associationError || !association) {
     return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="flex items-center justify-center min-h-screen">
-          <LoadingSpinner size="lg" />
-        </div>
-      </ProtectedRoute>
-    )
-  }
-
-  if (!association) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-4xl mx-auto p-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Association introuvable</h1>
-            <Button onClick={() => router.back()}>Retour</Button>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
-  }
-
-  if (!association.isMultiSection) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-4xl mx-auto p-6">
-          <div className="text-center">
-            <AlertCircle className="h-16 w-16 text-yellow-400 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Association simple</h1>
-            <p className="text-gray-600 mb-4">
-              Cette association n'utilise pas de sections géographiques.
-            </p>
-            <Button onClick={() => router.push(`/modules/associations/${associationId}/settings`)}>
-              Configurer multi-sections
-            </Button>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
-  }
-
-  const canCreateMore = association.sectionsCount < association.features.maxSections
-
-  if (!canCreateMore) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-4xl mx-auto p-6">
-          <div className="text-center">
-            <AlertCircle className="h-16 w-16 text-yellow-400 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Limite atteinte</h1>
-            <p className="text-gray-600 mb-4">
-              Vous avez atteint le nombre maximum de sections autorisées ({association.features.maxSections}).
-            </p>
-            <Button onClick={() => router.back()}>Retour</Button>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
+      <div className="container mx-auto px-4 py-8">
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-red-900">{t('errors.loadAssociation')}</h3>
+                <p className="text-sm text-red-700 mt-1">{t('errors.tryAgain')}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
-    <ProtectedRoute requiredModule="associations">
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
-            onClick={() => router.back()}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Créer une nouvelle section
-            </h1>
-            <p className="text-gray-600">
-              {association.name} - Section {association.sectionsCount + 1}/{association.features.maxSections}
-            </p>
-          </div>
-        </div>
-
-        {/* Formulaire */}
-        <form onSubmit={handleSubmit}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Informations de la section
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              
-              {/* Erreur générale */}
-              {errors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                  <p className="text-red-700 text-sm">{errors.general}</p>
-                </div>
-              )}
-
-              {/* Nom et pays */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nom de la section *
-                  </label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => updateFormData('name', e.target.value)}
-                    placeholder="Ex: Section France"
-                    error={errors.name}
-                  />
-                  {errors.name && (
-                    <p className="text-xs text-red-600 mt-1">{errors.name}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Pays *
-                  </label>
-                  <select
-                    value={formData.country}
-                    onChange={(e) => updateFormData('country', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                      errors.country ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  >
-                    {COUNTRIES.map(country => (
-                      <option key={country.code} value={country.code}>
-                        {country.flag} {country.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.country && (
-                    <p className="text-xs text-red-600 mt-1">{errors.country}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Ville et devise */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ville principale *
-                  </label>
-                  <Input
-                    value={formData.city}
-                    onChange={(e) => updateFormData('city', e.target.value)}
-                    placeholder="Ex: Paris, Rome, Madrid..."
-                    error={errors.city}
-                  />
-                  {errors.city && (
-                    <p className="text-xs text-red-600 mt-1">{errors.city}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Devise *
-                  </label>
-                  <select
-                    value={formData.currency}
-                    onChange={(e) => updateFormData('currency', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                      errors.currency ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  >
-                    {CURRENCIES.map(currency => (
-                      <option key={currency.code} value={currency.code}>
-                        {currency.symbol} {currency.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.currency && (
-                    <p className="text-xs text-red-600 mt-1">{errors.currency}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Langue et description */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Langue interface *
-                  </label>
-                  <select
-                    value={formData.language}
-                    onChange={(e) => updateFormData('language', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                      errors.language ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  >
-                    {LANGUAGES.map(language => (
-                      <option key={language.code} value={language.code}>
-                        {language.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.language && (
-                    <p className="text-xs text-red-600 mt-1">{errors.language}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description (optionnelle)
-                  </label>
-                  <Input
-                    value={formData.description}
-                    onChange={(e) => updateFormData('description', e.target.value)}
-                    placeholder="Spécificités de cette section..."
-                  />
-                </div>
-              </div>
-
-              {/* Aperçu */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Aperçu de la section</h3>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="font-medium text-gray-900">{formData.name || 'Nom de la section'}</h4>
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {formData.city || 'Ville'}, {COUNTRIES.find(c => c.code === formData.country)?.name}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
-                          {CURRENCIES.find(c => c.code === formData.currency)?.symbol}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Globe className="h-3 w-3" />
-                          {LANGUAGES.find(l => l.code === formData.language)?.name}
-                        </span>
-                      </div>
-                      {formData.description && (
-                        <p className="text-sm text-gray-600 mt-2">{formData.description}</p>
-                      )}
-                    </div>
-                    <Badge variant="secondary" className="text-xs">
-                      <Users className="h-3 w-3 mr-1" />
-                      0 membres
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              {/* Informations importantes */}
-              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                <div className="text-sm text-blue-700">
-                  <h4 className="font-medium text-blue-800 mb-2">Après création</h4>
-                  <ul className="space-y-1 text-xs">
-                    <li>• Vous pourrez configurer le bureau de section (responsable, secrétaire, trésorier)</li>
-                    <li>• Les cotisations pourront être adaptées selon le coût de la vie local</li>
-                    <li>• Le bureau section pourra valider les aides inférieures à 500€</li>
-                    <li>• Les membres pourront être transférés entre sections</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <div className="flex justify-between pt-6">
-            <Button 
-              type="button"
-              variant="outline" 
-              onClick={() => router.back()}
-            >
-              Annuler
-            </Button>
-            
-            <Button 
-              type="submit"
-              disabled={isSaving}
-              className="flex items-center gap-2"
-            >
-              {isSaving ? (
-                <LoadingSpinner size="sm" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {isSaving ? 'Création...' : 'Créer la section'}
-            </Button>
-          </div>
-        </form>
+    <div className="container mx-auto px-4 py-8 max-w-5xl">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
+        <button 
+          onClick={() => router.push('/modules/associations')}
+          className="hover:text-foreground cursor-pointer"
+        >
+          {t('breadcrumb.associations')}
+        </button>
+        <span>/</span>
+        <button 
+          onClick={() => router.push(`/modules/associations/${associationId}`)}
+          className="hover:text-foreground cursor-pointer"
+        >
+          {association.name}
+        </button>
+        <span>/</span>
+        <button 
+          onClick={() => router.push(`/modules/associations/${associationId}/sections`)}
+          className="hover:text-foreground cursor-pointer"
+        >
+          {t('breadcrumb.sections')}
+        </button>
+        <span>/</span>
+        <span className="text-foreground">{t('breadcrumb.create')}</span>
       </div>
-    </ProtectedRoute>
-  )
+
+      {/* Bouton retour */}
+      <Button
+        variant="ghost"
+        onClick={() => router.push(`/modules/associations/${associationId}/sections`)}
+        className="mb-6"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        {t('buttons.cancel')}
+      </Button>
+
+      {/* Titre */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">{t('title')}</h1>
+        <p className="text-muted-foreground">{t('description')}</p>
+      </div>
+
+      {/* Formulaire */}
+      <form onSubmit={handleSubmit}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              {t('title')}
+            </CardTitle>
+            <CardDescription>{t('description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Grille 2 colonnes sur desktop */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Nom de la section */}
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="name" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  {t('form.name.label')}
+                </Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => updateFormData('name', e.target.value)}
+                  placeholder={t('form.name.placeholder')}
+                  className={errors.name ? 'border-red-500' : ''}
+                />
+                {errors.name && (
+                  <p className="text-sm text-red-500">{errors.name}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.name.helper')}</p>
+              </div>
+
+              {/* Pays */}
+              <div className="space-y-2">
+                <Label htmlFor="country" className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  {t('form.country.label')}
+                </Label>
+                <Select value={formData.country} onValueChange={(value) => updateFormData('country', value)}>
+                  <SelectTrigger className={errors.country ? 'border-red-500' : ''}>
+                    <SelectValue placeholder={t('form.country.placeholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((country) => (
+                      <SelectItem key={country.code} value={country.code}>
+                        {country.flag} {t(country.name)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.country && (
+                  <p className="text-sm text-red-500">{errors.country}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.country.helper')}</p>
+              </div>
+
+              {/* Ville */}
+              <div className="space-y-2">
+                <Label htmlFor="city" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  {t('form.city.label')}
+                </Label>
+                <Input
+                  id="city"
+                  value={formData.city}
+                  onChange={(e) => updateFormData('city', e.target.value)}
+                  placeholder={t('form.city.placeholder')}
+                  className={errors.city ? 'border-red-500' : ''}
+                />
+                {errors.city && (
+                  <p className="text-sm text-red-500">{errors.city}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.city.helper')}</p>
+              </div>
+
+              {/* Région (optionnel) - Pleine largeur */}
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="region">{t('form.region.label')}</Label>
+                <Input
+                  id="region"
+                  value={formData.region || ''}
+                  onChange={(e) => updateFormData('region', e.target.value)}
+                  placeholder={t('form.region.placeholder')}
+                />
+                <p className="text-sm text-muted-foreground">{t('form.region.helper')}</p>
+              </div>
+
+              {/* Devise */}
+              <div className="space-y-2">
+                <Label htmlFor="currency" className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  {t('form.currency.label')}
+                </Label>
+                <Select value={formData.currency} onValueChange={(value) => updateFormData('currency', value)}>
+                  <SelectTrigger className={errors.currency ? 'border-red-500' : ''}>
+                    <SelectValue placeholder={t('form.currency.placeholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCIES.map((currency) => (
+                      <SelectItem key={currency.code} value={currency.code}>
+                        {currency.symbol} {t(currency.name)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.currency && (
+                  <p className="text-sm text-red-500">{errors.currency}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.currency.helper')}</p>
+              </div>
+
+              {/* Langue */}
+              <div className="space-y-2">
+                <Label htmlFor="language" className="flex items-center gap-2">
+                  <Languages className="h-4 w-4" />
+                  {t('form.language.label')}
+                </Label>
+                <Select value={formData.language} onValueChange={(value) => updateFormData('language', value)}>
+                  <SelectTrigger className={errors.language ? 'border-red-500' : ''}>
+                    <SelectValue placeholder={t('form.language.placeholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGES.map((language) => (
+                      <SelectItem key={language.code} value={language.code}>
+                        {language.nativeName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.language && (
+                  <p className="text-sm text-red-500">{errors.language}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.language.helper')}</p>
+              </div>
+
+              {/* Fuseau horaire - Pleine largeur */}
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="timezone" className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  {t('form.timezone.label')}
+                </Label>
+                <Select value={formData.timezone} onValueChange={(value) => updateFormData('timezone', value)}>
+                  <SelectTrigger className={errors.timezone ? 'border-red-500' : ''}>
+                    <SelectValue placeholder={t('form.timezone.placeholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIMEZONES.map((timezone) => (
+                      <SelectItem key={timezone.value} value={timezone.value}>
+                        {t(timezone.label)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.timezone && (
+                  <p className="text-sm text-red-500">{errors.timezone}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.timezone.helper')}</p>
+              </div>
+
+              {/* Téléphone de contact (optionnel) */}
+              <div className="space-y-2">
+                <Label htmlFor="contactPhone" className="flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  {t('form.contactPhone.label')}
+                </Label>
+                <Input
+                  id="contactPhone"
+                  value={formData.contactPhone || ''}
+                  onChange={(e) => updateFormData('contactPhone', e.target.value)}
+                  placeholder={t('form.contactPhone.placeholder')}
+                />
+                <p className="text-sm text-muted-foreground">{t('form.contactPhone.helper')}</p>
+              </div>
+
+              {/* Email de contact (optionnel) */}
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail" className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  {t('form.contactEmail.label')}
+                </Label>
+                <Input
+                  id="contactEmail"
+                  type="email"
+                  value={formData.contactEmail || ''}
+                  onChange={(e) => updateFormData('contactEmail', e.target.value)}
+                  placeholder={t('form.contactEmail.placeholder')}
+                  className={errors.contactEmail ? 'border-red-500' : ''}
+                />
+                {errors.contactEmail && (
+                  <p className="text-sm text-red-500">{errors.contactEmail}</p>
+                )}
+                <p className="text-sm text-muted-foreground">{t('form.contactEmail.helper')}</p>
+              </div>
+            </div>
+
+            {/* Description (optionnel) - En dehors de la grille */}
+            <div className="space-y-2">
+              <Label htmlFor="description" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                {t('form.description.label')}
+              </Label>
+              <Textarea
+                id="description"
+                value={formData.description || ''}
+                onChange={(e) => updateFormData('description', e.target.value)}
+                placeholder={t('form.description.placeholder')}
+                rows={4}
+              />
+              <p className="text-sm text-muted-foreground">{t('form.description.helper')}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Boutons d'action */}
+        <div className="flex justify-end gap-4 mt-6">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push(`/modules/associations/${associationId}/sections`)}
+            disabled={isSaving}
+          >
+            {t('buttons.cancel')}
+          </Button>
+          <Button type="submit" disabled={isSaving}>
+            {isSaving ? t('buttons.creating') : t('buttons.create')}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
 }

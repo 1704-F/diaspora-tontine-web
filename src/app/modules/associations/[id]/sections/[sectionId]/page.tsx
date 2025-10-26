@@ -45,7 +45,8 @@ export default function SectionDetailPage() {
   const sectionId = parseInt(params.sectionId as string);
 
   // ✅ CORRECT : Utiliser les hooks centralisés
-  const { association, loading: associationLoading } = useAssociation(associationId);
+  const { association, loading: associationLoading } =
+    useAssociation(associationId);
   const {
     section,
     stats,
@@ -237,10 +238,15 @@ export default function SectionDetailPage() {
                   <label className="text-sm font-medium text-gray-600">
                     {t("createdAt")}
                   </label>
+
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-500" />
                     <span className="text-gray-900">
-                      {new Date(section.createdAt).toLocaleDateString("fr-FR")}
+                      {section.created_at
+                        ? new Date(section.created_at).toLocaleDateString(
+                            "fr-FR"
+                          )
+                        : "Date non disponible"}
                     </span>
                   </div>
                 </div>
@@ -293,25 +299,32 @@ export default function SectionDetailPage() {
                   <div className="text-3xl font-bold text-green-600">
                     {stats.activeMembers}
                   </div>
-                  <div className="text-sm text-gray-600">{t("activeMembers")}</div>
+                  <div className="text-sm text-gray-600">
+                    {t("activeMembers")}
+                  </div>
                 </div>
               )}
 
-              {stats?.pendingMembers !== undefined && stats.pendingMembers > 0 && (
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-yellow-600">
-                    {stats.pendingMembers}
+              {stats?.pendingMembers !== undefined &&
+                stats.pendingMembers > 0 && (
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-yellow-600">
+                      {stats.pendingMembers}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {t("pendingMembers")}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600">{t("pendingMembers")}</div>
-                </div>
-              )}
+                )}
 
               {stats?.monthlyRevenue !== undefined && (
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
                     {stats.monthlyRevenue}€
                   </div>
-                  <div className="text-sm text-gray-600">{t("monthlyRevenue")}</div>
+                  <div className="text-sm text-gray-600">
+                    {t("monthlyRevenue")}
+                  </div>
                 </div>
               )}
             </CardContent>

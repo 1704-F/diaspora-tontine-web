@@ -13,7 +13,7 @@ import type {
   SectionSortOptions
 } from '@/types/association/section';
 
-const BASE_PATH = '/api/associations';
+const BASE_PATH = '/associations';
 
 /**
  * 🏗️ API Sections - Gestion des sections géographiques
