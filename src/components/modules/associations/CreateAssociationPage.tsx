@@ -39,10 +39,13 @@ import { toast } from "sonner";
 // ============================================
 import type { CreateRolePayload, Permission } from "@/types/association/role";
 import type { MemberTypeConfig, AdminStatusFormData } from "@/types/association/member";
+import type { SectionFormData } from "@/types/association/section";
 
 // ============================================
 // INTERFACES LOCALES (spécifiques au formulaire)
 // ============================================
+
+
 
 interface RoleFormData extends Omit<CreateRolePayload, "permissions"> {
   permissions: string[];
@@ -70,11 +73,15 @@ interface FormData {
   // Étape 4: Types de membres (skippée si admin externe)
   memberTypes: MemberTypeConfig[];
 
-  // Étape 5: Documents
+  // Étape 5: Sections (seulement si isMultiSection && isMember)
+  sections: SectionFormData[];
+  adminSectionIndex: number | null;
+
+  // Étape 6: Documents
   documents: Record<string, File | null>;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 // ============================================
 // CONSTANTES
@@ -264,6 +271,8 @@ export default function CreateAssociationPage() {
     },
     roles: [],
     memberTypes: [],
+    sections: [],
+    adminSectionIndex: null,
     documents: {
       statuts: null,
       receipisse: null,
@@ -306,15 +315,62 @@ export default function CreateAssociationPage() {
         break;
 
       case 5:
-        // Documents optionnels - pas de validation
+        // Validation des sections (seulement si multi-sections ET admin membre)
+        if (formData.isMultiSection && formData.adminStatus.isMember) {
+          if (formData.sections.length === 0) {
+            newErrors.sections = t("sections.minimumSections");
+          }
+          
+          // Vérifier que chaque section a les champs obligatoires
+          formData.sections.forEach((section, index) => {
+            if (!section.name.trim()) {
+              newErrors[`section_${index}_name`] = t("sections.sectionNameRequired");
+            }
+            if (!section.country) {
+              newErrors[`section_${index}_country`] = t("sections.countryRequired");
+            }
+            if (!section.city.trim()) {
+              newErrors[`section_${index}_city`] = t("basicInfo.cityRequired");
+            }
+            // Validation email si fourni
+            if (section.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(section.contactEmail)) {
+              newErrors[`section_${index}_email`] = t("sections.contactEmailInvalid");
+            }
+          });
+          
+          // Vérifier que l'admin a sélectionné sa section
+          if (formData.adminSectionIndex === null) {
+            newErrors.adminSection = t("sections.adminSectionRequired");
+          }
+        }
         break;
 
       case 6:
+        // Documents optionnels - pas de validation
+        break;
+
+      case 7:
         // Finalisation - validation globale
         if (!formData.name.trim()) newErrors.name = t("basicInfo.nameRequired");
         if (formData.adminStatus.isMember) {
           if (formData.roles.length === 0) newErrors.roles = t("validation.atLeastOneRole");
           if (formData.memberTypes.length === 0) newErrors.memberTypes = t("validation.atLeastOneMemberType");
+          
+          // Validation sections si multi-sections
+          if (formData.isMultiSection && formData.sections.length === 0) {
+            newErrors.sections = t("sections.minimumSections");
+          }
+          if (formData.isMultiSection && formData.adminSectionIndex === null) {
+            newErrors.adminSection = t("sections.adminSectionRequired");
+          }
+          
+          // ✅ Vérifier que l'admin a configuré son profil
+          if (!formData.adminStatus.memberType) {
+            newErrors.memberType = t("validation.memberTypeMissing");
+          }
+          if (formData.adminStatus.assignedRoles.length === 0) {
+            newErrors.roles = t("validation.rolesMissing");
+          }
         }
         break;
     }
@@ -328,25 +384,37 @@ export default function CreateAssociationPage() {
   // ============================================
 
   const getNextStep = (current: Step): Step => {
-    // Si admin externe, on saute les étapes 3 et 4
+    // Si admin externe, on saute les étapes 3, 4 et 5
     if (!formData.adminStatus.isMember) {
-      if (current === 2) return 5 as Step; // Sauter directement aux documents
-      if (current === 5) return 6 as Step;
+      if (current === 2) return 6 as Step; // Sauter directement aux documents
+      if (current === 6) return 7 as Step;
     }
     
-    // Navigation normale pour admin membre
-    if (current < 6) return (current + 1) as Step;
+    // Si admin membre mais pas multi-sections, on saute l'étape 5 (sections)
+    if (formData.adminStatus.isMember && !formData.isMultiSection) {
+      if (current === 4) return 6 as Step; // Sauter l'étape sections
+      if (current === 6) return 7 as Step;
+    }
+    
+    // Navigation normale pour admin membre multi-sections
+    if (current < 7) return (current + 1) as Step;
     return current;
   };
 
   const getPreviousStep = (current: Step): Step => {
-    // Si admin externe, on saute les étapes 3 et 4 dans l'autre sens
+    // Si admin externe, on saute les étapes 3, 4 et 5 dans l'autre sens
     if (!formData.adminStatus.isMember) {
-      if (current === 5) return 2 as Step; // Revenir au statut admin
-      if (current === 6) return 5 as Step;
+      if (current === 6) return 2 as Step; // Revenir au statut admin
+      if (current === 7) return 6 as Step;
     }
     
-    // Navigation normale pour admin membre
+    // Si admin membre mais pas multi-sections, on saute l'étape 5 dans l'autre sens
+    if (formData.adminStatus.isMember && !formData.isMultiSection) {
+      if (current === 6) return 4 as Step; // Revenir aux types de membres
+      if (current === 7) return 6 as Step;
+    }
+    
+    // Navigation normale pour admin membre multi-sections
     if (current > 1) return (current - 1) as Step;
     return current;
   };
@@ -471,6 +539,63 @@ export default function CreateAssociationPage() {
   };
 
   // ============================================
+  // GESTION SECTIONS
+  // ============================================
+
+  const addSection = () => {
+    setFormData((prev) => ({
+      ...prev,
+      sections: [
+        ...prev.sections,
+        {
+          name: "",
+          description: "",
+          country: prev.domiciliationCountry,
+          city: "",
+          address: "",
+          postalCode: "",
+        },
+      ],
+    }));
+  };
+
+  const updateSection = (index: number, field: keyof SectionFormData, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      sections: prev.sections.map((section, i) =>
+        i === index ? { ...section, [field]: value } : section
+      ),
+    }));
+  };
+
+  const deleteSection = (index: number) => {
+    setFormData((prev) => {
+      const newSections = prev.sections.filter((_, i) => i !== index);
+      
+      // Ajuster adminSectionIndex si nécessaire
+      let newAdminSectionIndex = prev.adminSectionIndex;
+      if (prev.adminSectionIndex === index) {
+        newAdminSectionIndex = null; // L'admin a supprimé sa section
+      } else if (prev.adminSectionIndex !== null && prev.adminSectionIndex > index) {
+        newAdminSectionIndex = prev.adminSectionIndex - 1; // Ajuster l'index
+      }
+      
+      return {
+        ...prev,
+        sections: newSections,
+        adminSectionIndex: newAdminSectionIndex,
+      };
+    });
+  };
+
+  const selectAdminSection = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      adminSectionIndex: index,
+    }));
+  };
+
+  // ============================================
   // GESTION DOCUMENTS
   // ============================================
 
@@ -557,7 +682,11 @@ export default function CreateAssociationPage() {
         }
 
         // 3️⃣ Configurer les types de membres
-        await fetch(
+        console.log("📝 Configuration des types de membres...", {
+          memberTypes: formData.memberTypes,
+        });
+
+        const configResponse = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
           {
             method: "PUT",
@@ -571,7 +700,20 @@ export default function CreateAssociationPage() {
           }
         );
 
-        // 4️⃣ Ajouter l'admin comme membre
+        if (!configResponse.ok) {
+          const errorData = await configResponse.json();
+          console.error("❌ Erreur configuration types membres:", errorData);
+          throw new Error(
+            errorData.error || "Erreur lors de la configuration des types de membres"
+          );
+        }
+
+        const configData = await configResponse.json();
+        console.log("✅ Types de membres configurés:", {
+          memberTypes: configData.data?.association?.memberTypes,
+        });
+
+        // 4️⃣ Ajouter l'admin comme membre (conversion admin externe → interne)
         const adminRoleIds = formData.adminStatus.assignedRoles.map((tempId) => {
           const mapping = createdRoles.find((r) => r.tempId === tempId);
           return mapping?.realId || tempId;
@@ -581,7 +723,15 @@ export default function CreateAssociationPage() {
           (t) => t.name === formData.adminStatus.memberType
         );
 
-        await fetch(
+        console.log("🔄 Conversion admin en membre interne...", {
+          memberType: formData.adminStatus.memberType,
+          assignedRoles: adminRoleIds,
+          cotisationAmount: memberType?.cotisationAmount,
+        });
+
+        // ✅ Le backend utilisera automatiquement req.user.id comme targetUser
+        // et détectera le membership admin existant pour le convertir
+        const addMemberResponse = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`,
           {
             method: "POST",
@@ -597,9 +747,88 @@ export default function CreateAssociationPage() {
             }),
           }
         );
+
+        if (!addMemberResponse.ok) {
+          const errorData = await addMemberResponse.json();
+          console.error("❌ Erreur conversion admin en membre:", errorData);
+          throw new Error(
+            errorData.error || "Erreur lors de la conversion en membre"
+          );
+        }
+
+        const addMemberData = await addMemberResponse.json();
+        console.log("✅ Admin converti en membre interne avec succès:", {
+          memberId: addMemberData.data?.member?.id,
+          memberType: addMemberData.data?.member?.memberType,
+          assignedRoles: addMemberData.data?.member?.assignedRoles,
+        });
       }
 
-      // 5️⃣ Upload documents (si présents)
+      // 5️⃣ Créer les sections (si multi-sections)
+      if (formData.isMultiSection && formData.sections.length > 0) {
+        console.log("🏗️ Création des sections...", {
+          sectionsCount: formData.sections.length,
+          adminSectionIndex: formData.adminSectionIndex,
+        });
+
+        const createdSections: number[] = [];
+
+        for (const section of formData.sections) {
+          const sectionResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/sections`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                name: section.name,
+                description: section.description,
+                country: section.country,
+                city: section.city,
+                address: section.address,
+                postalCode: section.postalCode,
+                contactPhone: section.contactPhone,
+                contactEmail: section.contactEmail,
+              }),
+            }
+          );
+
+          if (!sectionResponse.ok) {
+            const errorData = await sectionResponse.json();
+            console.error("❌ Erreur création section:", errorData);
+            throw new Error(
+              errorData.error || `Erreur lors de la création de la section ${section.name}`
+            );
+          }
+
+          const sectionData = await sectionResponse.json();
+          createdSections.push(sectionData.data?.section?.id);
+          console.log("✅ Section créée:", {
+            sectionId: sectionData.data?.section?.id,
+            sectionName: section.name,
+          });
+        }
+
+        // Si l'admin a sélectionné une section, on met à jour son profil membre avec la section
+        if (
+          formData.adminSectionIndex !== null &&
+          createdSections[formData.adminSectionIndex]
+        ) {
+          const adminSectionId = createdSections[formData.adminSectionIndex];
+          console.log("🔗 Attribution section admin...", {
+            sectionId: adminSectionId,
+            sectionName: formData.sections[formData.adminSectionIndex].name,
+          });
+
+          // TODO: Mettre à jour le membre admin avec sectionId
+          // Cela nécessite un endpoint PUT /associations/:id/members/:memberId
+          // avec body: { sectionId: adminSectionId }
+        }
+      }
+
+      // 6️⃣ Upload documents (si présents)
       if (Object.values(formData.documents).some((doc) => doc !== null)) {
         for (const [type, file] of Object.entries(formData.documents)) {
           if (file) {
@@ -646,14 +875,24 @@ export default function CreateAssociationPage() {
     { id: 2, label: t("steps.adminStatus"), icon: UserCog },
     { id: 3, label: t("steps.roles"), icon: Shield },
     { id: 4, label: t("steps.memberTypes"), icon: Users },
-    { id: 5, label: t("steps.documents"), icon: FileText },
-    { id: 6, label: t("steps.finalization"), icon: Check },
+    { id: 5, label: t("steps.sections"), icon: Globe },
+    { id: 6, label: t("steps.documents"), icon: FileText },
+    { id: 7, label: t("steps.finalization"), icon: Check },
   ];
 
-  // Filtrer les étapes à afficher selon le statut admin
-  const visibleSteps = formData.adminStatus.isMember
-    ? steps
-    : steps.filter((s) => s.id !== 3 && s.id !== 4);
+  // Filtrer les étapes à afficher selon le statut admin et type d'organisation
+  const visibleSteps = (() => {
+    if (!formData.adminStatus.isMember) {
+      // Admin externe : sauter étapes 3, 4, 5
+      return steps.filter((s) => s.id !== 3 && s.id !== 4 && s.id !== 5);
+    }
+    if (!formData.isMultiSection) {
+      // Admin membre mais pas multi-sections : sauter étape 5
+      return steps.filter((s) => s.id !== 5);
+    }
+    // Admin membre multi-sections : toutes les étapes
+    return steps;
+  })();
 
   return (
     <ProtectedRoute requiredModule="associations">
@@ -1026,100 +1265,19 @@ export default function CreateAssociationPage() {
                     </div>
                   </div>
 
-                  {formData.adminStatus.isMember && formData.roles.length > 0 && formData.memberTypes.length > 0 && (
-                    <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
-                      <h4 className="font-medium text-blue-900">
-                        {t("adminStatus.configureProfile")}
-                      </h4>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          {t("adminStatus.selectMemberType")}{" "}
-                          <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          value={formData.adminStatus.memberType}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              adminStatus: {
-                                ...formData.adminStatus,
-                                memberType: e.target.value,
-                              },
-                            })
-                          }
-                        >
-                          <option value="">
-                            {t("adminStatus.selectMemberTypePlaceholder")}
-                          </option>
-                          {formData.memberTypes.map((type, index) => (
-                            <option key={index} value={type.name}>
-                              {type.name} ({type.cotisationAmount}€/mois)
-                            </option>
-                          ))}
-                        </select>
-                        {errors.memberType && (
-                          <p className="text-sm text-red-600 mt-1">
-                            {errors.memberType}
+                  {formData.adminStatus.isMember && (
+                    <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-900">
+                          <p className="font-medium">
+                            {t("adminStatus.configureProfile")}
                           </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          {t("adminStatus.selectRoles")}{" "}
-                          <span className="text-red-500">*</span>
-                        </label>
-                        <p className="text-xs text-gray-600 mb-2">
-                          {t("adminStatus.multiRolesInfo")}
-                        </p>
-
-                        <div className="space-y-2">
-                          {formData.roles.map((role, index) => (
-                            <label
-                              key={index}
-                              className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={formData.adminStatus.assignedRoles.includes(
-                                  index.toString()
-                                )}
-                                onChange={() => toggleAdminRole(index.toString())}
-                                className="rounded"
-                              />
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: role.color }}
-                              />
-                              <span className="text-sm">{role.name}</span>
-                            </label>
-                          ))}
+                          <p className="mt-1 text-blue-700">
+                            {t("adminStatus.configureProfileInfo")}
+                          </p>
                         </div>
-                        {errors.roles && (
-                          <p className="text-sm text-red-600 mt-1">
-                            {errors.roles}
-                          </p>
-                        )}
                       </div>
-
-                      {formData.adminStatus.memberType &&
-                        formData.adminStatus.assignedRoles.length > 0 && (
-                          <div className="mt-3 p-3 bg-white border border-blue-300 rounded text-sm">
-                            <p className="font-medium text-blue-900 mb-1">
-                              {t("adminStatus.summary")}
-                            </p>
-                            <p className="text-gray-700">
-                              {t("adminStatus.summaryText", {
-                                memberType: formData.adminStatus.memberType,
-                                roles: formData.adminStatus.assignedRoles
-                                  .map((idx) => formData.roles[parseInt(idx)]?.name)
-                                  .join(", "),
-                              })}
-                            </p>
-                          </div>
-                        )}
                     </div>
                   )}
 
@@ -1480,8 +1638,246 @@ export default function CreateAssociationPage() {
               </div>
             )}
 
-            {/* ÉTAPE 5: Documents */}
-            {currentStep === 5 && (
+            {/* ÉTAPE 5: Sections géographiques */}
+            {currentStep === 5 && formData.adminStatus.isMember && formData.isMultiSection && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium">
+                    {t("sections.title")}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {t("sections.subtitle")}
+                  </p>
+                </div>
+
+                <Button onClick={addSection} className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  {t("sections.addSection")}
+                </Button>
+
+                {formData.sections.length === 0 && (
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                    <Globe className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {t("sections.noSections")}
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  {formData.sections.map((section, index) => (
+                    <Card key={index} className="p-4 relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <Globe className="h-4 w-4" />
+                          {t("sections.sectionNumber", { number: index + 1 })}
+                        </h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteSection(index)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="space-y-4">
+                        {/* Nom de la section */}
+                        <div>
+                          <label className="block text-sm font-medium mb-1">
+                            {t("sections.sectionName")}{" "}
+                            <span className="text-red-500">*</span>
+                          </label>
+                          <Input
+                            value={section.name}
+                            onChange={(e) =>
+                              updateSection(index, "name", e.target.value)
+                            }
+                            placeholder={t("sections.sectionNamePlaceholder")}
+                          />
+                          {errors[`section_${index}_name`] && (
+                            <p className="text-sm text-red-600 mt-1">
+                              {errors[`section_${index}_name`]}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <label className="block text-sm font-medium mb-1">
+                            {t("memberTypes.description")}
+                          </label>
+                          <Textarea
+                            value={section.description || ""}
+                            onChange={(e) =>
+                              updateSection(index, "description", e.target.value)
+                            }
+                            placeholder={t("memberTypes.descriptionPlaceholder")}
+                            rows={2}
+                          />
+                        </div>
+
+                        {/* Pays et Ville */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("sections.country")}{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={section.country}
+                              onChange={(e) =>
+                                updateSection(index, "country", e.target.value)
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            >
+                              {Object.entries(COUNTRY_CODE_TO_NAME).map(
+                                ([code, name]) => (
+                                  <option key={code} value={code}>
+                                    {t(`countries.${code}`)}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                            {errors[`section_${index}_country`] && (
+                              <p className="text-sm text-red-600 mt-1">
+                                {errors[`section_${index}_country`]}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("sections.city")}{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              value={section.city}
+                              onChange={(e) =>
+                                updateSection(index, "city", e.target.value)
+                              }
+                              placeholder={t("sections.cityPlaceholder")}
+                            />
+                            {errors[`section_${index}_city`] && (
+                              <p className="text-sm text-red-600 mt-1">
+                                {errors[`section_${index}_city`]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Adresse et Code postal */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("basicInfo.city")}
+                            </label>
+                            <Input
+                              value={section.address || ""}
+                              onChange={(e) =>
+                                updateSection(index, "address", e.target.value)
+                              }
+                              placeholder="123 rue de la République"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("sections.code")}
+                            </label>
+                            <Input
+                              value={section.postalCode || ""}
+                              onChange={(e) =>
+                                updateSection(index, "postalCode", e.target.value)
+                              }
+                              placeholder={t("sections.codePlaceholder")}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Contact */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("sections.contactPhone")}
+                            </label>
+                            <Input
+                              value={section.contactPhone || ""}
+                              onChange={(e) =>
+                                updateSection(index, "contactPhone", e.target.value)
+                              }
+                              placeholder={t("sections.contactPhonePlaceholder")}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              {t("sections.contactEmail")}
+                            </label>
+                            <Input
+                              type="email"
+                              value={section.contactEmail || ""}
+                              onChange={(e) =>
+                                updateSection(index, "contactEmail", e.target.value)
+                              }
+                              placeholder={t("sections.contactEmailPlaceholder")}
+                            />
+                            {errors[`section_${index}_email`] && (
+                              <p className="text-sm text-red-600 mt-1">
+                                {errors[`section_${index}_email`]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Sélection section admin */}
+                        <div className="pt-3 border-t border-gray-200">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="adminSection"
+                              checked={formData.adminSectionIndex === index}
+                              onChange={() => selectAdminSection(index)}
+                              className="rounded-full"
+                            />
+                            <span className="text-sm font-medium">
+                              {t("sections.adminSection")}
+                            </span>
+                          </label>
+                          <p className="text-xs text-gray-600 ml-6 mt-1">
+                            {t("sections.adminSectionHelp")}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                {errors.sections && (
+                  <p className="text-sm text-red-600">{errors.sections}</p>
+                )}
+                {errors.adminSection && (
+                  <p className="text-sm text-red-600">{errors.adminSection}</p>
+                )}
+
+                {formData.sections.length > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-900">
+                      <strong>{t("sections.sectionCount", { count: formData.sections.length })}</strong>
+                      {formData.adminSectionIndex !== null && (
+                        <span className="ml-2">
+                          • {t("sections.adminSection")} : <strong>{formData.sections[formData.adminSectionIndex].name}</strong>
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ÉTAPE 6: Documents */}
+            {currentStep === 6 && (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-lg font-medium">
@@ -1550,8 +1946,8 @@ export default function CreateAssociationPage() {
               </div>
             )}
 
-            {/* ÉTAPE 6: Finalisation */}
-            {currentStep === 6 && (
+            {/* ÉTAPE 7: Finalisation */}
+            {currentStep === 7 && (
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium">
@@ -1561,6 +1957,117 @@ export default function CreateAssociationPage() {
                     {t("finalization.subtitle")}
                   </p>
                 </div>
+
+                {/* ✅ NOUVEAU : Configuration admin si membre interne */}
+                {formData.adminStatus.isMember && (
+                  <Card className="p-4 border-2 border-primary-500 bg-primary-50">
+                    <h4 className="font-medium text-primary-900 mb-4 flex items-center gap-2">
+                      <UserCog className="h-5 w-5" />
+                      {t("adminStatus.configureYourProfile")}
+                    </h4>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          {t("adminStatus.selectMemberType")}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                          value={formData.adminStatus.memberType}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              adminStatus: {
+                                ...formData.adminStatus,
+                                memberType: e.target.value,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">
+                            {t("adminStatus.selectTypePlaceholder")}
+                          </option>
+                          {formData.memberTypes.map((type, index) => (
+                            <option key={index} value={type.name}>
+                              {type.name} ({type.cotisationAmount}€/mois)
+                            </option>
+                          ))}
+                        </select>
+                        {errors.memberType && (
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.memberType}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          {t("finalization.roles")}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <p className="text-xs text-gray-600 mb-2">
+                          {t("adminStatus.multiRolesHelp")}
+                        </p>
+
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {formData.roles.map((role, index) => (
+                            <label
+                              key={index}
+                              className="flex items-center gap-2 p-2 border rounded hover:bg-white cursor-pointer bg-white/50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.adminStatus.assignedRoles.includes(
+                                  index.toString()
+                                )}
+                                onChange={() => toggleAdminRole(index.toString())}
+                                className="rounded"
+                              />
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: role.color }}
+                              />
+                              <div className="flex-1">
+                                <span className="text-sm font-medium">
+                                  {role.name}
+                                </span>
+                                <p className="text-xs text-gray-600">
+                                  {role.permissions.length} {t("common.permissions")}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        {errors.roles && (
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.roles}
+                          </p>
+                        )}
+                      </div>
+
+                      {formData.adminStatus.memberType &&
+                        formData.adminStatus.assignedRoles.length > 0 && (
+                          <div className="mt-3 p-3 bg-white border border-primary-300 rounded text-sm">
+                            <p className="font-medium text-primary-900 mb-1">
+                              ✅ {t("adminStatus.profileWillBe")}
+                            </p>
+                            <p className="text-gray-700">
+                              {t("adminStatus.typeLabel")}{" "}
+                              <strong>{formData.adminStatus.memberType}</strong>
+                              <br />
+                              {t("adminStatus.rolesLabel")}{" "}
+                              <strong>
+                                {formData.adminStatus.assignedRoles
+                                  .map((idx) => formData.roles[parseInt(idx)]?.name)
+                                  .join(", ")}
+                              </strong>
+                            </p>
+                          </div>
+                        )}
+                    </div>
+                  </Card>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Infos générales */}
@@ -1633,6 +2140,38 @@ export default function CreateAssociationPage() {
                   </Card>
                 )}
 
+                {/* Sections (seulement si multi-sections) */}
+                {formData.isMultiSection && formData.sections.length > 0 && (
+                  <Card className="p-4">
+                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      {t("sections.sectionCount", { count: formData.sections.length })}
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      {formData.sections.map((section, index) => (
+                        <div 
+                          key={index} 
+                          className={`flex items-center justify-between p-2 rounded ${
+                            formData.adminSectionIndex === index ? 'bg-primary-50' : ''
+                          }`}
+                        >
+                          <div>
+                            <span className="font-medium">{section.name}</span>
+                            <span className="text-gray-600 ml-2">
+                              ({t(`countries.${section.country}`)}, {section.city})
+                            </span>
+                            {formData.adminSectionIndex === index && (
+                              <Badge variant="default" className="ml-2 text-xs">
+                                {t("sections.adminSection")}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+
                 {/* Statut admin */}
                 <Card className="p-4">
                   <h4 className="font-medium mb-3">
@@ -1647,13 +2186,23 @@ export default function CreateAssociationPage() {
                         </p>
                         <p>
                           <strong>{t("finalization.memberType")}:</strong>{" "}
-                          {formData.adminStatus.memberType}
+                          {formData.adminStatus.memberType || (
+                            <span className="text-red-600">
+                              ⚠️ {t("adminStatus.notConfigured")}
+                            </span>
+                          )}
                         </p>
                         <p>
                           <strong>{t("finalization.roles")}:</strong>{" "}
-                          {formData.adminStatus.assignedRoles
-                            .map((idx) => formData.roles[parseInt(idx)]?.name)
-                            .join(", ")}
+                          {formData.adminStatus.assignedRoles.length > 0 ? (
+                            formData.adminStatus.assignedRoles
+                              .map((idx) => formData.roles[parseInt(idx)]?.name)
+                              .join(", ")
+                          ) : (
+                            <span className="text-red-600">
+                              ⚠️ {t("adminStatus.notConfigured")}
+                            </span>
+                          )}
                         </p>
                       </div>
                     ) : (
@@ -1683,7 +2232,7 @@ export default function CreateAssociationPage() {
             {t("navigation.previous")}
           </Button>
 
-          {currentStep < 6 ? (
+          {currentStep < 7 ? (
             <Button onClick={handleNext}>
               {t("navigation.next")}
               <ArrowRight className="h-4 w-4 ml-2" />

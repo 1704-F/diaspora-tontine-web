@@ -8,6 +8,7 @@
     "roles": "Rôles et permissions",
     "memberTypes": "Types de membres",
     "adminStatus": "Statut administrateur",
+    "sections": "Sections géographiques",
     "documents": "Documents",
     "finalization": "Finalisation"
   },
@@ -126,18 +127,59 @@
     "noMember": "Non, gestionnaire externe",
     "noMemberDesc": "Vous aurez uniquement les droits administrateur",
     "configureProfile": "Configuration de votre profil membre",
+    "configureYourProfile": "Configuration de votre profil de membre",
     "selectMemberType": "Sélectionnez votre type de membre",
     "selectMemberTypePlaceholder": "Choisir un type...",
+    "selectTypePlaceholder": "-- Sélectionnez un type --",
     "selectRoles": "Sélectionnez vos rôles",
     "multiRolesInfo": "Vous pouvez cumuler plusieurs rôles",
+    "multiRolesHelp": "Vous pouvez sélectionner plusieurs rôles",
     "memberTypeRequired": "Type de membre requis",
     "rolesRequired": "Sélectionnez au moins un rôle",
     "summary": "Récapitulatif",
     "summaryText": "Vous serez enregistré comme {memberType} avec les rôles : {roles}",
+    "profileWillBe": "Votre profil sera configuré comme :",
+    "typeLabel": "Type :",
+    "rolesLabel": "Rôles :",
+    "notConfigured": "Non configuré",
     "externalAdminInfo": "Mode gestionnaire externe",
     "externalAdminPoint1": "Vous aurez accès complet à l'administration",
     "externalAdminPoint2": "Vous ne paierez pas de cotisation",
-    "externalAdminPoint3": "Vous pourrez ajouter les membres ensuite"
+    "externalAdminPoint3": "Vous pourrez ajouter les membres ensuite",
+    "configureProfileInfo": "Vous pourrez choisir votre type de membre et vos rôles à l'étape de finalisation, une fois que vous aurez créé les rôles et types de membres.",
+    "adminMemberRequired": "Vous devez sélectionner votre type de membre",
+    "adminRolesRequired": "Vous devez sélectionner au moins un rôle pour votre profil"
+  },
+
+  "sections": {
+    "title": "Sections géographiques",
+    "subtitle": "Créez les sections de votre association multi-sections",
+    "addSection": "Ajouter une section",
+    "sectionName": "Nom de la section",
+    "sectionNamePlaceholder": "Ex: Section France, Section Italie...",
+    "sectionNameRequired": "Nom de la section requis",
+    "country": "Pays",
+    "countryRequired": "Pays requis",
+    "city": "Ville principale",
+    "cityPlaceholder": "Ex: Paris, Rome...",
+    "code": "Code court (optionnel)",
+    "codePlaceholder": "Ex: FR, IT...",
+    "language": "Langue",
+    "contactPhone": "Téléphone de contact (optionnel)",
+    "contactPhonePlaceholder": "+33 6 12 34 56 78",
+    "contactEmail": "Email de contact (optionnel)",
+    "contactEmailPlaceholder": "section@association.fr",
+    "contactEmailInvalid": "Format d'email invalide",
+    "deleteSection": "Supprimer cette section",
+    "minimumSections": "Créez au moins une section pour votre association multi-sections",
+    "sectionCount": "{count} section(s) créée(s)",
+    "sectionNumber": "Section {number}",
+    "noSections": "Aucune section créée",
+    "adminSection": "Ma section",
+    "adminSectionHelp": "Sélectionnez la section dans laquelle vous serez membre",
+    "adminSectionRequired": "Vous devez sélectionner votre section",
+    "selectSection": "-- Sélectionnez une section --",
+    "adminSectionInfo": "En tant que membre, vous serez rattaché à une section spécifique"
   },
   
   "documents": {
@@ -160,12 +202,15 @@
     "city": "Ville",
     "rolesCreated": "Rôles créés ({count})",
     "memberTypesCreated": "Types de membres ({count})",
+    "sectionsCreated": "Sections créées ({count})",
     "perMonth": "{amount}€/mois",
     "adminStatus": "Statut administrateur",
     "adminAsMember": "Membre de l'association",
     "adminExternal": "Gestionnaire externe (non membre)",
     "memberType": "Type de membre",
     "roles": "Rôles",
+    "section": "Section",
+    "notConfiguredWarning": "Non configuré",
     "nextStepsTitle": "Prochaines étapes après création",
     "nextSteps": [
       "Vous serez automatiquement administrateur de cette association",
@@ -184,7 +229,11 @@
   "validation": {
     "nameTooShort": "Nom trop court (minimum 3 caractères)",
     "atLeastOneRole": "Créez au moins un rôle",
-    "atLeastOneMemberType": "Créez au moins un type de membre"
+    "atLeastOneMemberType": "Créez au moins un type de membre",
+    "atLeastOneSection": "Créez au moins une section pour votre association multi-sections",
+    "memberTypeMissing": "Vous devez sélectionner votre type de membre",
+    "rolesMissing": "Vous devez sélectionner au moins un rôle pour votre profil",
+    "sectionMissing": "Vous devez sélectionner votre section"
   },
   
   "errors": {
@@ -201,7 +250,8 @@
   
   "common": {
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "permissions": "permission(s)"
   },
   
   "colors": {

@@ -1,0 +1,89 @@
+
+{
+  "notFound": "Section introuvable",
+  "deleteConfirm": "Êtes-vous sûr de vouloir supprimer la section \"{name}\" ?",
+  "deleteConfirmWithMembers": "Attention : Cette section contient {count} membre(s). La suppression déplacera ces membres vers la section principale. Continuer ?",
+  "deleteError": "Erreur lors de la suppression de la section",
+  "loadError": "Erreur lors du chargement des sections",
+  "connectionError": "Erreur de connexion",
+  "migrateConfirm": "Cette action créera automatiquement une première section avec vos membres actuels. L'opération est irréversible. Continuer ?",
+  "migrateError": "Erreur lors de la migration",
+  
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "suspended": "Suspendue"
+  },
+  
+  "generalInfo": "Informations générales",
+  "location": "Localisation",
+  "region": "Région",
+  "code": "Code section",
+  "currency": "Devise",
+  "language": "Langue",
+  "createdAt": "Créée le",
+  "description": "Description",
+  "contact": "Contact",
+  
+  "statistics": "Statistiques",
+  "totalMembers": "Total membres",
+  "activeMembers": "Membres actifs",
+  "pendingMembers": "En attente",
+  "monthlyRevenue": "Revenus/mois",
+  "balance": "Solde",
+  
+  "rbacTitle": "Gestion des rôles",
+  "rbacDescription": "Cette association utilise un système de rôles et permissions flexible. Les membres de cette section peuvent avoir différents rôles définis au niveau de l'association, avec des permissions spécifiques pour chaque rôle. Pour gérer les rôles et permissions, rendez-vous dans les paramètres de l'association.",
+  "manageRoles": "Gérer les rôles",
+  
+  "manageMembers": "Gérer les membres ({count})",
+  "sectionSettings": "Paramètres section",
+  "viewAllSections": "Voir toutes les sections",
+  "manage": "Gérer",
+  "members": "Membres",
+  
+  "rolesSystemTitle": "À propos du système de rôles",
+  "rolesSystemDescription": "Flexibilité totale pour organiser votre section :",
+  "rolesSystemPoint1": "Créez des rôles personnalisés adaptés à votre communauté (Coordinateur, Trésorier, Secrétaire, etc.)",
+  "rolesSystemPoint2": "Définissez les permissions de chaque rôle de manière granulaire",
+  "rolesSystemPoint3": "Assignez plusieurs rôles à un même membre",
+  "rolesSystemPoint4": "Les rôles sont configurables à tout moment depuis les paramètres de l'association",
+  
+  "structureTitle": "Structure association",
+  "simpleAssociationTitle": "Association simple",
+  "simpleAssociationDescription": "Cette association n'utilise pas de sections géographiques. Vous pouvez évoluer vers une structure multi-sections à tout moment.",
+  "migrationWarningTitle": "Migration vers multi-sections",
+  "migrationWarningDescription": "Cette action créera automatiquement une première section avec vos membres actuels. L'opération est irréversible.",
+  "migrateToMultiSections": "Migrer vers multi-sections",
+  
+  "managementTitle": "Gestion des sections ({count}/{max})",
+  "managementDescription": "Organisez vos membres par zones géographiques",
+  "createSection": "Créer une section",
+  "noSections": "Aucune section créée",
+  "noSectionsDescription": "Créez votre première section géographique pour organiser vos membres",
+  "createFirstSection": "Créer la première section",
+  
+  "activeSections": "Sections actives",
+  "activeStatus": "Statut actif",
+  
+  "pageTitle": "Sections",
+  "pageDescription": "Gestion des sections géographiques",
+  
+  "countries": {
+    "FR": "France",
+    "BE": "Belgique",
+    "SN": "Sénégal",
+    "IT": "Italie",
+    "ES": "Espagne",
+    "US": "États-Unis",
+    "CA": "Canada",
+    "ML": "Mali",
+    "CI": "Côte d'Ivoire",
+    "TG": "Togo",
+    "BF": "Burkina Faso",
+    "NE": "Niger",
+    "GN": "Guinée",
+    "CM": "Cameroun",
+    "CD": "RD Congo"
+  }
+}
