@@ -1,29 +1,119 @@
 {
   "title": "Modifier le membre",
+  "description": "Modifiez les informations du membre",
+   
   
   "sections": {
-    "memberInfo": "Informations du membre"
+    "personalInfo": "Informations personnelles",
+    "membershipInfo": "Informations d'adhésion",
+    "rolesInfo": "Rôles et permissions",
+    "addressInfo": "Adresse",
+    "additionalInfo": "Informations complémentaires"
   },
 
   "fields": {
-    "phone": "Téléphone",
-    "email": "Email",
-    "memberType": "Type de membre",
-    "selectMemberType": "Sélectionner un type...",
-    "status": "Statut",
-    "section": "Section",
-    "noSection": "Aucune section",
-    "roles": "Rôles",
-    "rolesHelp": "Sélectionnez un ou plusieurs rôles pour ce membre",
-    "cotisationAmount": "Montant cotisation (€/mois)",
-    "cotisationHelp": "Modifié automatiquement si vous changez le type de membre"
+    "firstName": {
+      "label": "Prénom",
+      "error": {
+        "required": "Le prénom est obligatoire"
+      }
+    },
+    "lastName": {
+      "label": "Nom",
+      "error": {
+        "required": "Le nom est obligatoire"
+      }
+    },
+    "phone": {
+      "label": "Téléphone",
+      "helper": "Format international recommandé",
+      "error": {
+        "required": "Le numéro de téléphone est obligatoire"
+      }
+    },
+    "email": {
+      "label": "Email",
+      "helper": "Pour les notifications et communications",
+      "error": {
+        "invalid": "Format d'email invalide"
+      }
+    },
+    "memberType": {
+      "label": "Type de membre",
+      "placeholder": "Sélectionner un type",
+      "helper": "Détermine les droits et cotisations",
+      "error": {
+        "required": "Le type de membre est obligatoire"
+      }
+    },
+    "section": {
+      "label": "Section",
+      "placeholder": "Sélectionner une section",
+      "noSection": "Aucune section"
+    },
+    "status": {
+      "label": "Statut",
+      "active": "Actif",
+      "pending": "En attente",
+      "suspended": "Suspendu",
+      "inactive": "Inactif"
+    },
+    "roles": {
+      "label": "Rôles",
+      "helper": "Un membre peut avoir plusieurs rôles",
+      "noRoles": "Aucun rôle disponible",
+      "selectRoles": "Sélectionnez un ou plusieurs rôles"
+    },
+    "country": {
+      "label": "Pays",
+      "placeholder": "Sélectionnez un pays",
+      "error": {
+        "required": "Le pays est obligatoire"
+      }
+    },
+    "city": {
+      "label": "Ville",
+      "placeholder": "Ex: Paris",
+      "error": {
+        "required": "La ville est obligatoire"
+      }
+    },
+    "address": {
+      "label": "Adresse",
+      "placeholder": "Ex: 123 rue de la Paix",
+      "helper": "Adresse complète du membre"
+    },
+    "dateOfBirth": {
+      "label": "Date de naissance",
+      "placeholder": "JJ/MM/AAAA",
+      "helper": "Pour les statistiques d'âge"
+    },
+    "profession": {
+      "label": "Profession",
+      "placeholder": "Ex: Ingénieur, Médecin...",
+      "helper": "Profession ou domaine d'activité"
+    },
+    "emergencyContact": {
+      "label": "Contact d'urgence",
+      "placeholder": "+33 6 12 34 56 78",
+      "helper": "Numéro à contacter en cas d'urgence"
+    },
+    "notes": {
+      "label": "Notes",
+      "placeholder": "Informations supplémentaires...",
+      "helper": "Notes internes visibles uniquement par les administrateurs"
+    },
+    "cotisationAmount": {
+      "label": "Montant cotisation (€/mois)",
+      "helper": "Modifié automatiquement si vous changez le type de membre"
+    }
   },
 
-  "status": {
-    "active": "Actif",
-    "pending": "En attente",
-    "suspended": "Suspendu",
-    "inactive": "Inactif"
+  "roleCard": {
+    "uniqueRole": "Rôle unique",
+    "permissions": "({count}) permissions",
+    "alreadyAssigned": "Déjà attribué",
+    "alreadyAssignedTo": "Ce rôle unique est déjà attribué à {memberName}"
   },
 
   "warnings": {
@@ -31,15 +121,23 @@
     "adminMessage": "Ce membre est administrateur de l'association. Certaines actions peuvent nécessiter des permissions spéciales."
   },
 
-  "errors": {
-    "loadFailed": "Erreur lors du chargement des données du membre",
-    "updateFailed": "Erreur lors de la modification du membre",
-    "memberTypeRequired": "Le type de membre est obligatoire",
-    "rolesRequired": "Sélectionnez au moins un rôle"
+  "buttons": {
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "saving": "Enregistrement..."
   },
 
   "success": {
-    "updated": "Membre modifié avec succès",
+    "title": "Membre modifié avec succès !",
     "message": "Les modifications ont été enregistrées"
+  },
+
+  "errors": {
+    "loadFailed": "Erreur lors du chargement des données du membre",
+    "updateFailed": "Erreur lors de la modification du membre",
+    "generic": "Une erreur est survenue",
+    "tryAgain": "Veuillez réessayer",
+    "uniqueRoleConflict": "Rôle(s) unique(s) déjà attribué(s)"
   }
+ 
 }

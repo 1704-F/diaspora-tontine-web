@@ -1,0 +1,173 @@
+{
+  "title": "Ajouter un membre",
+  "description": "Enregistrez un nouveau membre dans votre association",
+  "breadcrumb": {
+    "associations": "Associations",
+    "members": "Membres",
+    "add": "Ajouter un membre"
+  },
+  "form": {
+    "personalInfo": {
+      "title": "Informations personnelles",
+      "description": "Informations de base du membre"
+    },
+    "firstName": {
+      "label": "Prénom",
+      "placeholder": "Ex: Jean",
+      "error": {
+        "required": "Le prénom est obligatoire",
+        "minLength": "Le prénom doit contenir au moins 2 caractères"
+      }
+    },
+    "lastName": {
+      "label": "Nom",
+      "placeholder": "Ex: Dupont",
+      "error": {
+        "required": "Le nom est obligatoire",
+        "minLength": "Le nom doit contenir au moins 2 caractères"
+      }
+    },
+    "phoneNumber": {
+      "label": "Numéro de téléphone",
+      "placeholder": "+33 6 12 34 56 78",
+      "helper": "Format international recommandé",
+      "error": {
+        "required": "Le numéro de téléphone est obligatoire",
+        "invalid": "Format de numéro invalide"
+      }
+    },
+    "email": {
+      "label": "Email (optionnel)",
+      "placeholder": "membre@example.com",
+      "helper": "Pour les notifications et communications",
+      "error": {
+        "invalid": "Format d'email invalide"
+      }
+    },
+    "membershipInfo": {
+      "title": "Informations d'adhésion",
+      "description": "Type de membre et section d'appartenance"
+    },
+    "memberType": {
+      "label": "Type de membre",
+      "placeholder": "Sélectionnez un type",
+      "helper": "Détermine les droits et cotisations",
+      "error": {
+        "required": "Le type de membre est obligatoire"
+      }
+    },
+    "section": {
+      "label": "Section",
+      "placeholder": "Sélectionnez une section",
+      "helper": "Section géographique d'appartenance",
+      "error": {
+        "required": "La section est obligatoire"
+      }
+    },
+    "rolesInfo": {
+      "title": "Rôles et permissions",
+      "description": "Attribuez des rôles au membre pour définir ses permissions"
+    },
+    "roles": {
+      "label": "Rôles",
+      "helper": "Un membre peut avoir plusieurs rôles",
+      "noRoles": "Aucun rôle disponible",
+      "selectRoles": "Sélectionnez un ou plusieurs rôles",
+      "uniqueRoleAssigned": "Déjà attribué à {{memberName}}",
+       "roleAssignedTo": "Déjà attribué à {name}",
+      "roleAssigned": "Ce rôle est déjà attribué"
+    },
+    "addressInfo": {
+      "title": "Adresse",
+      "description": "Informations de localisation du membre"
+    },
+    "country": {
+      "label": "Pays",
+      "placeholder": "Sélectionnez un pays",
+      "error": {
+        "required": "Le pays est obligatoire"
+      }
+    },
+    "city": {
+      "label": "Ville",
+      "placeholder": "Ex: Paris",
+      "error": {
+        "required": "La ville est obligatoire"
+      }
+    },
+    "address": {
+      "label": "Adresse (optionnel)",
+      "placeholder": "Ex: 123 rue de la Paix",
+      "helper": "Adresse complète du membre"
+    },
+    "additionalInfo": {
+      "title": "Informations complémentaires",
+      "description": "Autres informations utiles"
+    },
+    "dateOfBirth": {
+      "label": "Date de naissance (optionnel)",
+      "placeholder": "JJ/MM/AAAA",
+      "helper": "Pour les statistiques d'âge"
+    },
+    "profession": {
+      "label": "Profession (optionnel)",
+      "placeholder": "Ex: Ingénieur, Médecin...",
+      "helper": "Profession ou domaine d'activité"
+    },
+    "emergencyContact": {
+      "label": "Contact d'urgence (optionnel)",
+      "placeholder": "+33 6 12 34 56 78",
+      "helper": "Numéro à contacter en cas d'urgence"
+    },
+    "notes": {
+      "label": "Notes (optionnel)",
+      "placeholder": "Informations supplémentaires...",
+      "helper": "Notes internes visibles uniquement par les administrateurs"
+    }
+  },
+  "memberTypeCard": {
+    "cotisation": "Cotisation",
+    "perMonth": "({amount}) / mois",
+    "permissions": "({count}) permissions",
+    "noPermissions": "Aucune permission spécifique"
+  },
+  "roleCard": {
+    "uniqueRole": "Rôle unique",
+    "multipleAllowed": "Plusieurs membres autorisés",
+    "permissions": "({count}) permissions",
+    "alreadyAssigned": "Déjà attribué"
+  },
+  "validation": {
+    "checkingData": "Vérification des données...",
+    "invalidData": "Données invalides",
+    "pleaseCheckForm": "Veuillez vérifier le formulaire"
+  },
+  "buttons": {
+    "cancel": "Annuler",
+    "create": "Créer le membre",
+    "creating": "Création en cours..."
+  },
+  "success": {
+    "title": "Membre créé avec succès !",
+    "message": "({firstName}) ({lastName}) a été ajouté à l'association",
+    "redirect": "Redirection vers la liste des membres..."
+  },
+  "errors": {
+    "loadAssociation": "Erreur lors du chargement de l'association",
+    "loadSections": "Erreur lors du chargement des sections",
+    "loadRoles": "Erreur lors du chargement des rôles",
+    "createMember": "Erreur lors de la création du membre",
+    "generic": "Une erreur est survenue",
+    "tryAgain": "Veuillez réessayer",
+    "phoneExists": "Ce numéro de téléphone est déjà utilisé",
+    "emailExists": "Cet email est déjà utilisé"
+  },
+  "info": {
+    "noMemberTypes": "Aucun type de membre configuré",
+    "noMemberTypesMessage": "Veuillez d'abord configurer les types de membres dans les paramètres de l'association.",
+    "noSections": "Aucune section disponible",
+    "noSectionsMessage": "Veuillez d'abord créer au moins une section.",
+    "multiSectionRequired": "Cette association est configurée en mode multi-sections. Le membre doit être affecté à une section.",
+    "rolesOptional": "Les rôles sont optionnels. Vous pouvez les attribuer plus tard."
+  }
+}

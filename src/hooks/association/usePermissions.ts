@@ -28,35 +28,56 @@ export function usePermissions(associationId: number) {
    * 📊 Calculer permissions effectives du membre actuel
    * Priorité: Admin > Custom Granted > Custom Revoked > Assigned Roles
    */
-  const effectivePermissions = useMemo(() => {
-    if (!currentMembership) return [];
+const effectivePermissions = useMemo(() => {
+  if (!currentMembership) return [];
 
-    // ✅ Admin a toutes les permissions
-    if (currentMembership.isAdmin) {
-      return availablePermissions.map((p) => p.id);
+  // ✅ CRITIQUE : Admin a TOUTES les permissions (hardcodées)
+  if (currentMembership.isAdmin) {
+    // Liste complète des permissions disponibles dans le système
+    return [
+      "membres.view_list",
+      "membres.manage_members",
+      "membres.approve_members",
+      "membres.view_details",
+      "finances.view_treasury",
+      "finances.manage_budgets",
+      "finances.validate_expenses",
+      "finances.create_income",
+      "finances.export_data",
+      "administration.manage_roles",
+      "administration.modify_settings",
+      "administration.view_reports",
+      "administration.manage_sections",
+      "documents.upload",
+      "documents.manage",
+      "documents.validate",
+      "evenements.create",
+      "evenements.manage",
+      "evenements.view_attendance",
+    ];
+  }
+
+  const permissions = new Set<string>();
+
+  // 1️⃣ Permissions des rôles assignés
+  const assignedRoleIds = currentMembership.assignedRoles || [];
+  assignedRoleIds.forEach((roleId) => {
+    const role = roles.find((r) => r.id === roleId);
+    if (role?.permissions) {
+      role.permissions.forEach((p) => permissions.add(p));
     }
+  });
 
-    const permissions = new Set<string>();
+  // 2️⃣ Ajouter custom granted
+  const customGranted = currentMembership.customPermissions?.granted || [];
+  customGranted.forEach((p) => permissions.add(p));
 
-    // 1️⃣ Permissions des rôles assignés
-    const assignedRoleIds = currentMembership.assignedRoles || [];
-    assignedRoleIds.forEach((roleId) => {
-      const role = roles.find((r) => r.id === roleId);
-      if (role?.permissions) {
-        role.permissions.forEach((p) => permissions.add(p));
-      }
-    });
+  // 3️⃣ Retirer custom revoked
+  const customRevoked = currentMembership.customPermissions?.revoked || [];
+  customRevoked.forEach((p) => permissions.delete(p));
 
-    // 2️⃣ Ajouter custom granted
-    const customGranted = currentMembership.customPermissions?.granted || [];
-    customGranted.forEach((p) => permissions.add(p));
-
-    // 3️⃣ Retirer custom revoked
-    const customRevoked = currentMembership.customPermissions?.revoked || [];
-    customRevoked.forEach((p) => permissions.delete(p));
-
-    return Array.from(permissions);
-  }, [currentMembership, roles, availablePermissions]);
+  return Array.from(permissions);
+}, [currentMembership, roles]); // ✅ Retiré availablePermissions de la dépendance
 
   /**
    * ✅ Vérifier si le membre a une permission
@@ -124,7 +145,7 @@ export function usePermissions(associationId: number) {
     (...roleIds: string[]): boolean => {
       if (!currentMembership) return false;
       return roleIds.every((roleId) =>
-        currentMembership.assignedRoles?.includes(roleId)
+        currentMembership.assignedRoles?.includes(roleId) 
       );
     },
     [currentMembership]
@@ -193,6 +214,7 @@ export function usePermissions(associationId: number) {
     canManageMembers: hasPermission('membres.manage_members'),
     canApproveMembers: hasPermission('membres.approve_members'),
     canViewDetails: hasPermission('membres.view_details'),
+    canExportMembers: hasPermission('membres.export_data'),
     
     canViewFinances: hasPermission('finances.view_treasury'),
     canManageBudgets: hasPermission('finances.manage_budgets'),

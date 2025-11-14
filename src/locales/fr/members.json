@@ -1,30 +1,52 @@
 {
   "title": "Membres",
+  "subtitle": "Gérez les membres de votre association",
   "members": "membres",
   "addMember": "Ajouter un membre",
+  "addFirstMember": "Ajouter le premier membre",
   "admin": "Administrateur",
+  "exportPDF": "Télécharger PDF",
+  "viewList": "Liste",
+  "viewGrid": "Grille",
+  "export": {
+    "generating": "Génération du PDF en cours...",
+    "success": "PDF téléchargé avec succès",
+    "error": "Erreur lors de l'export PDF"
+  },
 
   "stats": {
     "totalMembers": "Total membres",
     "activeMembers": "Membres actifs",
     "pendingMembers": "En attente",
-    "adminMembers": "Administrateurs"
+    "adminMembers": "Administrateurs",
+    "sections": "Sections",
+    "registered": "membres enregistrés",
+    "awaitingValidation": "en attente de validation",
+    "trendVsLastMonth": "vs mois dernier"
   },
 
   "filters": {
     "title": "Filtres",
+    "show": "Afficher",
+    "hide": "Masquer",
     "search": "Rechercher",
     "searchPlaceholder": "Nom, prénom ou téléphone...",
     "status": "Statut",
     "memberType": "Type de membre",
+    "section": "Section",
     "allStatuses": "Tous les statuts",
     "allTypes": "Tous les types",
+    "allSections": "Toutes les sections",
     "active": "Actifs",
     "pending": "En attente",
     "suspended": "Suspendus",
     "inactive": "Inactifs",
     "results": "résultat(s)",
-    "reset": "Réinitialiser"
+    "reset": "Réinitialiser",
+    "filterStatus": "Statut",
+    "filterType": "Type",
+    "filterSection": "Section",
+    "filterSearch": "Recherche"
   },
 
   "status": {
@@ -35,25 +57,47 @@
   },
 
   "table": {
+    "member": "Membre",
     "name": "Nom",
     "contact": "Contact",
+    "type": "Type",
     "memberType": "Type",
     "section": "Section",
     "status": "Statut",
+    "joinDate": "Date d'adhésion",
     "roles": "Rôles",
     "actions": "Actions",
-    "noRoles": "Aucun rôle"
+    "noRoles": "Aucun rôle",
+    "columns": "Colonnes",
+    "showColumns": "Afficher les colonnes",
+    "hideColumns": "Masquer les colonnes"
+  },
+
+  "columns": {
+    "title": "Colonnes affichées",
+    "status": "Statut",
+    "joinDate": "Date d'adhésion",
+    "customize": "Personnaliser les colonnes"
   },
 
   "list": {
     "title": "Liste des membres",
+    "membersFound": "membre(s) trouvé(s)",
     "noMembers": "Aucun membre trouvé",
-    "noMembersHint": "Essayez de modifier vos filtres ou ajoutez des membres"
+    "noMembersHint": "Essayez de modifier vos filtres ou ajoutez des membres",
+    "noMembersDescription": "Commencez par ajouter votre premier membre"
+  },
+
+  "actions": {
+    "view": "Voir les détails",
+    "edit": "Modifier",
+    "delete": "Supprimer"
   },
 
   "errors": {
     "accessDenied": "Accès refusé",
     "noPermission": "Vous n'avez pas la permission de voir les membres de cette association.",
-    "loadFailed": "Erreur lors du chargement des membres"
+    "loadFailed": "Erreur lors du chargement des membres",
+    "associationNotFound": "Association introuvable"
   }
 }

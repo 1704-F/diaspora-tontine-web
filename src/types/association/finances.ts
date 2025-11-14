@@ -1,292 +1,290 @@
-// src/types/association/finances.ts
+// src/types/association/finance.ts
 
 /**
- * 💸 Demande de dépense
+ * 💰 Types pour le module Finances
  */
+
+// ============================================
+// TYPES DE BASE
+// ============================================
+
+export type ExpenseType = 
+  | 'aide_membre'
+  | 'depense_operationnelle'
+  | 'pret_partenariat'
+  | 'projet_special'
+  | 'urgence_communautaire';
+
+export type ExpenseStatus =
+  | 'pending'
+  | 'under_review'
+  | 'additional_info_needed'
+  | 'approved'
+  | 'rejected'
+  | 'paid'
+  | 'cancelled';
+
+export type UrgencyLevel = 'low' | 'normal' | 'high' | 'critical';
+
+export type PaymentMethod =
+  | 'bank_transfer'
+  | 'card_payment'
+  | 'cash'
+  | 'check'
+  | 'mobile_money';
+
+export type PaymentMode = 'digital' | 'manual';
+
+// ============================================
+// INTERFACES PRINCIPALES
+// ============================================
+
 export interface ExpenseRequest {
   id: number;
   associationId: number;
-  requesterId: number; // ID du membre qui demande
-  
-  // 💰 Montant & détails
-  amount: number;
-  currency: string;
+  requesterId: number;
+  expenseType: ExpenseType;
+  expenseSubtype?: string;
+  title: string;
   description: string;
-  category: ExpenseCategory;
-  
-  // 📎 Justificatifs
-  attachments?: string[]; // URLs documents
-  
-  // ✅ Workflow approbation
-  status: 'pending' | 'approved' | 'rejected' | 'paid';
-  approvedBy?: number; // ID membre qui a validé
-  approvedAt?: string; // ISO date
+  amountRequested: number;
+  amountApproved?: number;
+  currency: string;
+  urgencyLevel: UrgencyLevel;
+  status: ExpenseStatus;
+  beneficiaryId?: number;
+  beneficiaryExternal?: {
+    name: string;
+    contact?: string;
+    organization?: string;
+  };
+  isLoan: boolean;
+  loanTerms?: {
+    durationMonths: number;
+    interestRate: number;
+    repaymentSchedule: string;
+  };
+  documents?: string[];
+  validationHistory?: ValidationEntry[];
+  approvedAt?: string;
+  approvedBy?: number;
+  rejectedAt?: string;
+  rejectedBy?: number;
+  paidAt?: string;
+  transactionId?: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+
+  expectedImpact?: string;
+  actualImpact?: string;
   rejectionReason?: string;
   
-  // 💳 Paiement
-  paidAt?: string; // ISO date
-  paymentMethod?: 'cash' | 'transfer' | 'card';
-  paymentReference?: string;
-  
-  createdAt: string;
-  updatedAt: string;
-  
-  // 👤 Relations (si populate)
+  // Relations
   requester?: {
     id: number;
-    name: string;
-    memberType: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone?: string;
   };
-  
-  approver?: {
+  beneficiary?: {
     id: number;
-    name: string;
+    firstName: string;
+    lastName: string;
   };
 }
 
-/**
- * 📊 Catégories de dépenses
- */
-export type ExpenseCategory = 
-  | 'solidarity' // Aide solidarité
-  | 'event' // Événement
-  | 'administration' // Frais administratifs
-  | 'communication' // Communication
-  | 'other'; // Autre
-
-/**
- * 💵 Entrée de revenu (cotisation, don)
- */
-export interface IncomeEntry {
-  id: number;
-  associationId: number;
-  memberId?: number; // Si cotisation membre
-  
-  // 💰 Montant & détails
-  amount: number;
-  currency: string;
-  description: string;
-  category: IncomeCategory;
-  
-  // 💳 Paiement
-  paymentMethod: 'cash' | 'transfer' | 'card' | 'mobile_money';
-  paymentReference?: string;
-  receivedAt: string; // ISO date
-  
-  // 📎 Justificatifs
-  receiptUrl?: string;
-  
-  createdAt: string;
-  updatedAt: string;
-  
-  // 👤 Relations (si populate)
-  member?: {
-    id: number;
-    name: string;
-  };
+export interface ValidationEntry {
+  userId: number;
+  role: string;
+  decision: 'approved' | 'rejected' | 'info_requested';
+  comment: string;
+  timestamp: string;
 }
 
-/**
- * 📊 Catégories de revenus
- */
-export type IncomeCategory = 
-  | 'cotisation' // Cotisation membre
-  | 'donation' // Don
-  | 'fundraising' // Levée de fonds
-  | 'sponsorship' // Parrainage
-  | 'other'; // Autre
-
-/**
- * 💰 Résumé financier
- */
 export interface FinancialSummary {
-  totalBalance: number;
-  totalIncome: number;
-  totalExpenses: number;
-  pendingExpenses: number;
-  
-  // 📊 Par période
-  currentMonth: {
-    income: number;
-    expenses: number;
-    balance: number;
+  association: {
+    id: number;
+    name: string;
+    currency: string;
   };
-  
-  currentYear: {
-    income: number;
-    expenses: number;
-    balance: number;
+  balance: {
+    current: number;
+    projected: number;
+    available: number;
   };
-  
-  // 📈 Top catégories
-  topExpenseCategories: Array<{
-    category: ExpenseCategory;
+  expenses: {
     total: number;
-    count: number;
-  }>;
-  
-  topIncomeCategories: Array<{
-    category: IncomeCategory;
+    pending: number;
+    approved: number;
+    paid: number;
+    byType: Array<{
+      type: ExpenseType;
+      count: number;
+      total: number;
+    }>;
+  };
+  income: {
     total: number;
-    count: number;
+    cotisations: number;
+    donations: number;
+    other: number;
+  };
+  loans: {
+    active: number;
+    totalDisbursed: number;
+    totalRepaid: number;
+    outstanding: number;
+  };
+  alerts?: Array<{
+    type: string;
+    severity: 'info' | 'warning' | 'danger';
+    message: string;
   }>;
 }
 
-/**
- * 📦 Réponse API GET /finances
- */
-export interface GetFinancesResponse {
-  success: boolean;
-  data: {
-    summary: FinancialSummary;
-    recentExpenses: ExpenseRequest[];
-    recentIncome: IncomeEntry[];
-  };
-}
+// ============================================
+// PAYLOADS API
+// ============================================
 
-/**
- * 📦 Réponse API GET /finances/expenses
- */
-export interface GetExpensesResponse {
-  success: boolean;
-  data: {
-    expenses: ExpenseRequest[];
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  };
-}
-
-/**
- * 📦 Réponse API GET /finances/income
- */
-export interface GetIncomeResponse {
-  success: boolean;
-  data: {
-    income: IncomeEntry[];
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  };
-}
-
-/**
- * 📝 Payload création demande dépense
- */
 export interface CreateExpensePayload {
-  amount: number;
+  expenseType: ExpenseType;
+  expenseSubtype?: string;
+  title: string;
   description: string;
-  category: ExpenseCategory;
-  attachments?: string[]; // URLs ou base64
+  amountRequested: number;
+  currency?: string;
+  urgencyLevel?: UrgencyLevel;
+  beneficiaryId?: number;
+  beneficiaryExternal?: {
+    name: string;
+    contact?: string;
+    organization?: string;
+  };
+  isLoan?: boolean;
+  loanTerms?: {
+    durationMonths: number;
+    interestRate: number;
+    repaymentSchedule: string;
+  };
+  documents?: string[];
+  externalReferences?: Record<string, unknown>;
+  expectedImpact?: string;
+  metadata?: Record<string, unknown>;
 }
 
-/**
- * 📝 Payload validation dépense
- */
 export interface ApproveExpensePayload {
-  approvedBy: number; // ID membre validateur
-  paymentMethod?: 'cash' | 'transfer' | 'card';
-  paymentReference?: string;
+  comment?: string;
+  amountApproved?: number;
+  conditions?: string;
 }
 
 export interface RejectExpensePayload {
   rejectionReason: string;
 }
 
-/**
- * 📝 Payload création revenu
- */
-export interface CreateIncomePayload {
-  amount: number;
-  description: string;
-  category: IncomeCategory;
-  memberId?: number; // Si cotisation
-  paymentMethod: 'cash' | 'transfer' | 'card' | 'mobile_money';
-  paymentReference?: string;
-  receivedAt?: string; // ISO date, défaut = now
+export interface ProcessPaymentPayload {
+  paymentMode: PaymentMode;
+  paymentMethod: PaymentMethod;
+  paymentDate?: string;
+  manualPaymentReference?: string;
+  manualPaymentDetails?: Record<string, unknown>;
+  notes?: string;
 }
 
-/**
- * 🔍 Filtres finances
- */
-export interface FinanceFilters {
-  startDate?: string; // ISO date
-  endDate?: string; // ISO date
-  categories?: (ExpenseCategory | IncomeCategory)[];
-  status?: ExpenseRequest['status'][];
-  memberId?: number; // Filtrer par membre
+// ============================================
+// FILTRES & PAGINATION
+// ============================================
+
+export interface ExpenseFilters {
+  status?: ExpenseStatus;
+  expenseType?: ExpenseType;
+  urgencyLevel?: UrgencyLevel;
+  requesterId?: number;
+  beneficiaryId?: number;
   minAmount?: number;
   maxAmount?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  isLoan?: boolean;
+  search?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: 'created_at' | 'amountRequested' | 'urgencyLevel' | 'status';
+  sortOrder?: 'ASC' | 'DESC';
 }
 
-/**
- * 📊 Options tri finances
- */
-export interface FinanceSortOptions {
-  field: 'amount' | 'createdAt' | 'status' | 'category';
-  direction: 'asc' | 'desc';
-}
-
-/**
- * 📈 Rapport financier (export)
- */
-export interface FinancialReport {
-  associationId: number;
-  associationName: string;
-  period: {
-    start: string; // ISO date
-    end: string; // ISO date
-  };
-  
-  summary: {
-    openingBalance: number;
-    totalIncome: number;
-    totalExpenses: number;
-    closingBalance: number;
-  };
-  
+export interface PaginatedExpenses {
   expenses: ExpenseRequest[];
-  income: IncomeEntry[];
-  
-  // 📊 Graphiques
-  expensesByCategory: Record<ExpenseCategory, number>;
-  incomeByCategory: Record<IncomeCategory, number>;
-  monthlyTrend: Array<{
-    month: string; // "2025-01"
-    income: number;
-    expenses: number;
-    balance: number;
-  }>;
-  
-  generatedAt: string; // ISO date
-  generatedBy: number; // userId
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+    totalPages: number;
+  };
+  summary?: {
+    totalAmount: number;
+    averageAmount: number;
+    statusCounts: Record<ExpenseStatus, number>;
+  };
 }
 
-/**
- * 💳 Configuration paiements PSP
- */
-export interface PaymentProviderConfig {
-  provider: 'stripe' | 'square' | 'flutterwave';
-  enabled: boolean;
-  publicKey?: string;
-  currency: string;
-  commissionRate: number; // %
+// ============================================
+// RÉPONSES API
+// ============================================
+
+export interface GetExpensesResponse {
+  success: boolean;
+  data: PaginatedExpenses;
 }
 
-/**
- * 🔔 Notification finance (webhook)
- */
-export interface FinanceNotification {
-  type: 'expense_created' | 'expense_approved' | 'expense_rejected' | 'income_received';
-  associationId: number;
-  amount: number;
-  description: string;
-  triggeredBy: number; // userId
-  triggeredAt: string; // ISO date
+export interface GetExpenseByIdResponse {
+  success: boolean;
+  data: {
+    expense: ExpenseRequest;
+  };
+}
+
+export interface CreateExpenseResponse {
+  success: boolean;
+  message: string;
+  data: {
+    expense: ExpenseRequest;
+  };
+}
+
+export interface ApproveExpenseResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface RejectExpenseResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface GetFinancialSummaryResponse {
+  success: boolean;
+  data: FinancialSummary;
+}
+
+// ============================================
+// TYPES HELPERS
+// ============================================
+
+export interface ExpenseTypeConfig {
+  id: ExpenseType;
+  label: string;
+  icon: string;
+  color: string;
+  description?: string;
+}
+
+export interface ExpenseStatusConfig {
+  id: ExpenseStatus;
+  label: string;
+  variant: 'default' | 'secondary' | 'success' | 'warning' | 'danger';
+  icon?: string;
 }

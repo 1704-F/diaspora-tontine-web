@@ -11,10 +11,78 @@ import type {
   PaginatedMembers
 } from '@/types/association'; 
 
+const BASE_PATH = '/associations';
+
 /**
  * 👥 API Membres
  */
 export const membersApi = {
+
+  /**
+   * ➕ Créer un nouveau membre
+   */
+  async create(
+    associationId: number,
+    data: {
+      firstName: string;
+      lastName: string;
+      phoneNumber: string;
+      email?: string;
+      memberType: string;
+      sectionId?: number;
+      country: string;
+      city: string;
+      address?: string;
+      dateOfBirth?: string;
+      profession?: string;
+      emergencyContact?: string;
+      notes?: string;
+      status?: 'active' | 'inactive' | 'pending';
+      roles?: string[];
+    }
+  ): Promise<{
+    success: boolean;
+    data: {
+      member: AssociationMember;
+    };
+  }> {
+    const response = await apiClient.post(
+      `${BASE_PATH}/${associationId}/members`,
+      data
+    );
+    return response.data;
+  },
+
+  async exportMembersPDF(
+  associationId: number,
+  filters?: {
+    search?: string;
+    status?: string;
+    memberType?: string;
+    sectionId?: number;
+  }
+): Promise<Blob> {
+  try {
+    const params = new URLSearchParams();
+    
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.memberType) params.append('memberType', filters.memberType);
+    if (filters?.sectionId) params.append('sectionId', filters.sectionId.toString());
+
+    const response = await apiClient.get(
+      `/associations/${associationId}/members/export-pdf?${params.toString()}`,
+      {
+        responseType: 'blob',
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error('Erreur export PDF membres:', error);
+    throw error;
+  }
+},
   
   /**
    * 📋 Récupérer tous les membres d'une association
@@ -29,7 +97,7 @@ export const membersApi = {
       memberType?: string;
     }
   ): Promise<{ success: boolean; data: PaginatedMembers }> => {
-    const response = await apiClient.get(`/associations/${associationId}/members`, { params });
+    const response = await apiClient.get(`${BASE_PATH}/${associationId}/members`, { params });
     return response.data;
   },
 
@@ -40,7 +108,7 @@ export const membersApi = {
     associationId: number,
     memberId: number
   ): Promise<{ success: boolean; data: { member: AssociationMember } }> => {
-    const response = await apiClient.get(`/associations/${associationId}/members/${memberId}`);
+    const response = await apiClient.get(`${BASE_PATH}/${associationId}/members/${memberId}`);
     return response.data;
   },
 
@@ -48,7 +116,7 @@ export const membersApi = {
    * 🎭 Récupérer les rôles d'un membre
    */
   getRoles: async (associationId: number, memberId: number): Promise<GetMemberRolesResponse> => {
-    const response = await apiClient.get(`/associations/${associationId}/members/${memberId}/roles`);
+    const response = await apiClient.get(`${BASE_PATH}/${associationId}/members/${memberId}/roles`);
     return response.data;
   },
 
@@ -61,7 +129,7 @@ export const membersApi = {
     data: AssignRolesPayload
   ): Promise<{ success: boolean; message: string }> => {
     const response = await apiClient.post(
-      `/associations/${associationId}/members/${memberId}/roles`,
+      `${BASE_PATH}/${associationId}/members/${memberId}/roles`,
       data
     );
     return response.data;
@@ -76,7 +144,7 @@ export const membersApi = {
     roleId: string
   ): Promise<{ success: boolean; message: string }> => {
     const response = await apiClient.delete(
-      `/associations/${associationId}/members/${memberId}/roles/${roleId}`
+      `${BASE_PATH}/${associationId}/members/${memberId}/roles/${roleId}`
     );
     return response.data;
   },
@@ -90,7 +158,7 @@ export const membersApi = {
     data: GrantPermissionPayload
   ): Promise<{ success: boolean; message: string }> => {
     const response = await apiClient.post(
-      `/associations/${associationId}/members/${memberId}/permissions/grant`,
+      `${BASE_PATH}/${associationId}/members/${memberId}/permissions/grant`,
       data
     );
     return response.data;
@@ -105,7 +173,7 @@ export const membersApi = {
     data: RevokePermissionPayload
   ): Promise<{ success: boolean; message: string }> => {
     const response = await apiClient.post(
-      `/associations/${associationId}/members/${memberId}/permissions/revoke`,
+      `${BASE_PATH}/${associationId}/members/${memberId}/permissions/revoke`,
       data
     );
     return response.data;
@@ -118,7 +186,7 @@ export const membersApi = {
     associationId: number,
     data: TransferAdminPayload
   ): Promise<{ success: boolean; message: string }> => {
-    const response = await apiClient.post(`/associations/${associationId}/transfer-admin`, data);
+    const response = await apiClient.post(`${BASE_PATH}/${associationId}/transfer-admin`, data);
     return response.data;
   },
 
@@ -131,7 +199,7 @@ export const membersApi = {
     data: Partial<AssociationMember>
   ): Promise<{ success: boolean; data: { member: AssociationMember } }> => {
     const response = await apiClient.put(
-      `/associations/${associationId}/members/${memberId}`,
+      `${BASE_PATH}/${associationId}/members/${memberId}`,
       data
     );
     return response.data;
@@ -144,7 +212,13 @@ export const membersApi = {
     associationId: number,
     memberId: number
   ): Promise<{ success: boolean; message: string }> => {
-    const response = await apiClient.delete(`/associations/${associationId}/members/${memberId}`);
+    const response = await apiClient.delete(`${BASE_PATH}/${associationId}/members/${memberId}`);
     return response.data;
-  }
+  },
+
+  /**
+ * Exporter la liste des membres en PDF
+ */
+ 
+
 };

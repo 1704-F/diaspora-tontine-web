@@ -106,17 +106,81 @@ const Select: React.FC<SelectProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // synchro avec prop value
+  // ✅ FIX: Initialiser le label au montage et quand value change
   React.useEffect(() => {
     if (value !== undefined) {
       setSelectedValue(value);
+      
+      // Interface pour typer les props des SelectItem
+      interface SelectItemProps {
+        value?: string;
+        children?: React.ReactNode;
+      }
+      
+      // Chercher le label correspondant dans les enfants
+      const findLabel = (node: React.ReactNode): string | null => {
+        if (!node) return null;
+        
+        if (React.isValidElement<SelectItemProps>(node)) {
+          const props = node.props;
+          
+          // Si c'est un SelectItem avec la bonne valeur
+          if (props?.value === value) {
+            const childContent = props.children;
+            if (typeof childContent === 'string') {
+              return childContent;
+            }
+            if (React.isValidElement(childContent)) {
+              // Extraire le texte des enfants React
+              return extractText(childContent);
+            }
+          }
+          
+          // Chercher récursivement dans les enfants
+          if (props?.children) {
+            const result = findLabel(props.children);
+            if (result) return result;
+          }
+        }
+        
+        // Si c'est un tableau d'enfants
+        if (Array.isArray(node)) {
+          for (const child of node) {
+            const result = findLabel(child);
+            if (result) return result;
+          }
+        }
+        
+        return null;
+      };
+      
+      const label = findLabel(children);
+      if (label) {
+        setSelectedLabel(label);
+      }
     }
-  }, [value]);
+  }, [value, children]);
+
+  // Fonction helper pour extraire le texte d'un React.ReactNode
+  const extractText = (node: React.ReactNode): string => {
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number') return String(node);
+    if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+      const props = node.props;
+      if (props?.children) {
+        return extractText(props.children);
+      }
+    }
+    if (Array.isArray(node)) {
+      return node.map(extractText).join('');
+    }
+    return '';
+  };
 
   const handleValueChange = (newValue: string, label: string | React.ReactNode) => {
     setSelectedValue(newValue);
     setSelectedLabel(
-      typeof label === "string" ? label : (label as React.ReactNode) as string
+      typeof label === "string" ? label : extractText(label)
     );
     setIsOpen(false);
     onValueChange?.(newValue);
@@ -219,7 +283,7 @@ const SelectItem: React.FC<ItemProps> = ({
   disabled = false,
   ...props
 }) => {
-  const { selectedValue, handleValueChange, setSelectedLabel } = useSelect();
+  const { selectedValue, handleValueChange } = useSelect();
   const isSelected = selectedValue === value;
 
   const handleClick = () => {
@@ -227,16 +291,6 @@ const SelectItem: React.FC<ItemProps> = ({
       handleValueChange(value, children);
     }
   };
-
-  React.useEffect(() => {
-    if (isSelected && children) {
-      setSelectedLabel(
-        typeof children === "string"
-          ? children
-          : (children as React.ReactNode) as string
-      );
-    }
-  }, [isSelected, children, setSelectedLabel]);
 
   return (
     <div

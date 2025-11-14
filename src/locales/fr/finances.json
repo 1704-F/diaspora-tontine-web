@@ -1,0 +1,225 @@
+{
+  "title": "Finances",
+  "subtitle": "Gestion des dépenses et du budget de l'association",
+  
+  "tabs": {
+    "dashboard": "Tableau de bord",
+    "requests": "Demandes récentes",
+    "pending": "En attente"
+  },
+
+  "stats": {
+    "currentBalance": "Solde actuel",
+    "totalExpenses": "Dépenses totales",
+    "pendingRequests": "Demandes en attente",
+    "approvedAmount": "Montant approuvé"
+  },
+
+  "actions": {
+    "newRequest": "Nouvelle demande",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "pay": "Marquer comme payé",
+    "viewDetails": "Voir détails",
+    "export": "Exporter",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "downloadReceipt": "Télécharger reçu",
+    "generateCertificate": "Générer attestation",
+    "backToFinances": "Retour aux finances"
+  },
+
+  "filters": {
+    "title": "Filtres",
+    "status": "Statut",
+    "type": "Type de dépense",
+    "urgency": "Urgence",
+    "search": "Rechercher...",
+    "reset": "Réinitialiser"
+  },
+
+  "status": {
+    "pending": "En attente",
+    "under_review": "En cours d'examen",
+    "additional_info_needed": "Infos demandées",
+    "approved": "Approuvée",
+    "rejected": "Rejetée",
+    "paid": "Payée",
+    "cancelled": "Annulée",
+    "all": "Tous"
+  },
+
+  "expenseTypes": {
+    "aide_membre": "Aide membre",
+    "depense_operationnelle": "Dépense opérationnelle",
+    "pret_partenariat": "Prêt/Partenariat",
+    "projet_special": "Projet spécial",
+    "urgence_communautaire": "Urgence communautaire",
+    "all": "Tous"
+  },
+
+  "urgencyLevels": {
+    "low": "Faible",
+    "normal": "Normal",
+    "high": "Élevée",
+    "critical": "Critique",
+    "all": "Tous"
+  },
+
+  "table": {
+    "title": "Demandes de dépenses",
+    "date": "Date",
+    "titleColumn": "Titre",
+    "type": "Type",
+    "requester": "Demandeur",
+    "amount": "Montant",
+    "status": "Statut",
+    "urgency": "Urgence",
+    "actions": "Actions"
+  },
+
+  "details": {
+    "title": "Détails de la demande",
+    "description": "Description",
+    "subcategory": "Sous-catégorie",
+    "expectedImpact": "Impact attendu",
+    "actualImpact": "Impact réalisé",
+    "externalBeneficiary": "Bénéficiaire externe",
+    "loanTerms": "Conditions du prêt",
+    "duration": "Durée",
+    "interestRate": "Taux d'intérêt",
+    "rejectionReason": "Motif de rejet",
+    "validationHistory": "Historique de validation",
+    "information": "Informations",
+    "requester": "Demandeur",
+    "beneficiary": "Bénéficiaire",
+    "createdOn": "Créée le",
+    "paidOn": "Payée le",
+    "contact": "Contact"
+  },
+
+  "modals": {
+    "approveTitle": "Approuver la demande",
+    "rejectTitle": "Rejeter la demande",
+    "commentLabel": "Commentaire",
+    "commentPlaceholder": "Ajoutez un commentaire...",
+    "rejectionReasonLabel": "Motif de refus (minimum 10 caractères)",
+    "rejectionReasonPlaceholder": "Expliquez le motif du refus...",
+    "commentRequired": "Un commentaire est requis",
+    "rejectionReasonRequired": "Un motif de refus d'au moins 10 caractères est requis"
+  },
+
+  "charts": {
+    "expensesByType": "Dépenses par type"
+  },
+
+  "alerts": {
+    "title": "Alertes"
+  },
+
+  "empty": {
+    "title": "Aucune demande de dépense",
+    "description": "Créez votre première demande de dépense pour commencer."
+  },
+   "validations": {
+    "title": "Demandes en attente de validation",
+    "subtitle": "Approuvez ou rejetez les demandes de dépenses",
+    "info": "Seules les demandes en attente sont affichées ici",
+    "pendingCount": "demande(s) en attente de votre validation",
+    
+    "list": {
+      "title": "Demandes à valider"
+    },
+    
+    "empty": {
+      "title": "Aucune demande en attente",
+      "description": "Toutes les demandes ont été traitées. Bon travail !"
+    },
+    
+    "approve": {
+      "title": "Approuver la demande",
+      "amountLabel": "Montant approuvé",
+      "commentLabel": "Commentaire (optionnel)",
+      "commentPlaceholder": "Ajoutez un commentaire sur cette approbation..."
+    },
+    
+    "reject": {
+      "title": "Rejeter la demande",
+      "reasonLabel": "Motif du rejet",
+      "reasonPlaceholder": "Expliquez pourquoi cette demande est rejetée (minimum 10 caractères)..."
+    }
+  },
+
+  
+  "errors": {
+    "loadFailed": "Erreur lors du chargement des finances",
+    "noPermission": "Vous n'avez pas la permission d'accéder aux finances",
+    "notFound": "Demande non trouvée",
+    "unauthorized": "Vous n'avez pas l'autorisation de voir cette demande",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cette demande ?",
+     "approveFailed": "Erreur lors de l'approbation",
+    "rejectFailed": "Erreur lors du rejet"
+  }, 
+  "create": {
+    "title": "Nouvelle demande financière",
+    "sections": {
+      "expenseType": "Type de demande",
+      "generalInfo": "Informations générales",
+      "beneficiary": "Bénéficiaire",
+      "externalBeneficiary": "Bénéficiaire externe",
+      "loanTerms": "Conditions financières"
+    },
+    "fields": {
+      "subcategory": "Sous-catégorie (optionnel)",
+      "title": "Titre de la demande",
+      "description": "Description détaillée",
+      "amount": "Montant demandé",
+      "currency": "Devise",
+      "urgency": "Niveau d'urgence",
+      "member": "Membre bénéficiaire",
+      "externalName": "Nom de l'organisation",
+      "externalContact": "Contact",
+      "isLoan": "Il s'agit d'un prêt à rembourser"
+    },
+    "placeholders": {
+      "subcategory": "Ex: aide_mariage_traditionnel, location_salle_ag...",
+      "title": "Ex: Aide retour urgence, Achat matériel bureau...",
+      "description": "Expliquez en détail la raison de cette demande, son importance et son impact attendu...",
+      "expectedImpact": "Décrivez l'impact positif attendu de cette dépense...",
+      "selectMember": "Sélectionner un membre",
+      "externalName": "Nom de l'organisation",
+      "externalContact": "Email ou téléphone"
+    },
+    "hints": {
+      "minChars": "(minimum {min} caractères)",
+      "amountRange": "Entre 0.01 et 1,000,000"
+    },
+    "actions": {
+      "submit": "Créer la demande",
+      "addExternal": "Ajouter bénéficiaire externe",
+      "removeExternal": "Supprimer bénéficiaire externe"
+    },
+    "errors": {
+      "expenseTypeRequired": "Le type de dépense est requis",
+      "titleLength": "Le titre doit contenir entre 5 et 255 caractères",
+      "descriptionLength": "La description doit contenir entre 20 et 2000 caractères",
+      "amountInvalid": "Le montant doit être entre 0.01 et 1,000,000"
+    },
+    "expenseTypeDescriptions": {
+      "aide_membre": "Assistance financière pour les membres",
+      "depense_operationnelle": "Frais de fonctionnement de l'association",
+      "pret_partenariat": "Prêts ou financement de partenaires",
+      "projet_special": "Financement de projets spécifiques",
+      "urgence_communautaire": "Situations d'urgence nécessitant une aide rapide"
+    }
+  },
+  "success": {
+    "approved": "Demande approuvée avec succès",
+    "rejected": "Demande rejetée",
+    "paid": "Paiement enregistré",
+    "deleted": "Demande supprimée avec succès",
+    "created": "Demande créée avec succès"
+  }
+
+  
+}

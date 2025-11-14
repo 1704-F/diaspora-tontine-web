@@ -41,34 +41,40 @@ export function useAssociationMembers(associationId: number) {
    * 📥 Charger tous les membres
    */
   const fetchMembers = useCallback(
-    async (params?: {
-      page?: number;
-      limit?: number;
-      search?: string;
-      status?: string;
-      memberType?: string;
-    }) => {
-      if (!associationId) return;
+  async (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    memberType?: string;
+    sectionId?: number;  // ✅ Ajoute aussi sectionId ici
+  }) => {
+    if (!associationId) return;
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const response = await membersApi.getAll(associationId, params);
+    try {
+      const response = await membersApi.getAll(associationId, params);
 
-        if (response.success) {
-          setMembers(response.data.members);
-          setPagination(response.data.pagination);
-        }
-      } catch (err) {
-        console.error('Erreur chargement membres:', err);
-        setError(err instanceof Error ? err : new Error('Erreur inconnue'));
-      } finally {
-        setLoading(false);
+      if (response.success) {
+        setMembers(response.data.members);
+        setPagination({
+          total: response.data.pagination.total,
+          page: response.data.pagination.page,
+          limit: response.data.pagination.limit,
+          totalPages: response.data.pagination.pages || response.data.pagination.totalPages || 1  // ✅ Support des deux formats
+        });
       }
-    },
-    [associationId]
-  );
+    } catch (err) {
+      console.error('Erreur chargement membres:', err);
+      setError(err instanceof Error ? err : new Error('Erreur inconnue'));
+    } finally {
+      setLoading(false);
+    }
+  },
+  [associationId]
+);
 
   /**
    * 🔍 Récupérer un membre par ID
@@ -326,10 +332,7 @@ export function useAssociationMembers(associationId: number) {
     });
   }, [members, roles]);
 
-  // Charger au mount
-  useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
+
 
   return {
     // État

@@ -3,11 +3,13 @@
   "error": "Erreur",
   "success": "Succès",
   "save": "Enregistrer",
+  "saving": "Enregistrement...",
   "cancel": "Annuler",
   "delete": "Supprimer",
   "edit": "Modifier",
   "back": "Retour",
   "refresh": "Actualiser",
+  "close": "Fermer",
   
   "nav": {
     "dashboard": "Tableau de bord",
@@ -25,5 +27,47 @@
     "phone": "Numéro de téléphone",
     "loginFor": "Me connecter pour",
     "selectContext": "Sélectionnez votre contexte"
+  },
+
+  "countries": {
+    "FR": "France",
+    "BE": "Belgique",
+    "CH": "Suisse",
+    "CA": "Canada",
+    "US": "États-Unis",
+    "GB": "Royaume-Uni",
+    "DE": "Allemagne",
+    "ES": "Espagne",
+    "IT": "Italie",
+    "CM": "Cameroun",
+    "CI": "Côte d'Ivoire",
+    "SN": "Sénégal",
+    "ML": "Mali",
+    "BF": "Burkina Faso",
+    "CD": "RD Congo",
+    "CG": "Congo",
+    "GA": "Gabon",
+    "TG": "Togo",
+    "BJ": "Bénin",
+    "NE": "Niger",
+    "TD": "Tchad",
+    "GN": "Guinée",
+    "MA": "Maroc",
+    "DZ": "Algérie",
+    "TN": "Tunisie"
+  },
+
+  "actions": {
+    "apply": "Appliquer"
+  },
+
+  "results": "résultat(s)",
+
+  "export": {
+    "generating": "Génération en cours..."
+  },
+
+  "errors": {
+    "notFound": "Ressource non trouvée"
   }
 }

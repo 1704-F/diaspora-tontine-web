@@ -35,15 +35,25 @@ export interface AssociationMember {
   totalOwed?: number;
   lastContributionDate?: string | null;
   contributionStatus?: 'up_to_date' | 'late' | 'very_late' | 'inactive';
+
+  // 📋 Informations complémentaires (dans AssociationMember)
+  profession?: string;
+  emergencyContact?: string;
+  notes?: string;
+  
   
   // 📱 Contact (si inclus via populate)
-  user?: {
+ user?: {
     id: number;
     firstName: string;
     lastName: string;
     phoneNumber: string;
     email?: string;
     profilePicture?: string;
+    country?: string;
+    city?: string;
+    address?: string;
+    dateOfBirth?: string;
   };
   
   // 📍 Section (si inclus via populate)
@@ -179,43 +189,100 @@ export interface RevokePermissionPayload {
  * ✅ MODIFIÉ : assignedRoles au lieu de defaultRole
  */
 export interface CreateMemberPayload {
-  userId?: number; // Optionnel si création à partir du user courant
-  memberType?: string | null;
-  sectionId?: number | null;
-  assignedRoles?: string[]; // ✅ MULTI-RÔLES
+  // Informations personnelles (obligatoires)
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  
+  // Informations personnelles (optionnelles)
+  email?: string;
+  dateOfBirth?: string;
+  profession?: string;
+  
+  // Adhésion
+  memberType: string;
+  sectionId?: number;
+  status?: 'active' | 'inactive' | 'pending';
+  
+  // Adresse
+  country: string;
+  city: string;
+  address?: string;
+  
+  // Rôles (multi-rôles)
+  assignedRoles?: string[];
+  roles?: string[];
+  
+  // Informations complémentaires
+  emergencyContact?: string;
+  notes?: string;
+  
+  // Paiement (optionnel)
+  userId?: number;
   cotisationAmount?: number;
   autoPaymentEnabled?: boolean;
   paymentMethod?: 'card' | 'bank_transfer';
-  status?: 'active' | 'pending';
 }
 
 /**
  * 📝 Payload mise à jour membre
  */
 export interface UpdateMemberPayload {
-  memberType?: string | null;
-  status?: 'active' | 'suspended' | 'pending' | 'inactive';
-  sectionId?: number | null;
-  assignedRoles?: string[]; // ✅ MULTI-RÔLES
-  cotisationAmount?: number;
-  autoPaymentEnabled?: boolean;
-  paymentMethod?: 'card' | 'bank_transfer';
-  customPermissions?: CustomPermissions;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  email?: string;
+  memberType?: string;
+  sectionId?: number;
+  country?: string;
+  city?: string;
+  address?: string;
+  dateOfBirth?: string;
+  profession?: string;
+  emergencyContact?: string;
+  notes?: string;
+  status?: 'active' | 'inactive' | 'pending' | 'suspended';
+  roles?: string[];
+  assignedRoles?: string[];
 }
 
 /**
  * 🔍 Filtres membres (pour UI liste)
  */
 export interface MemberFilters {
+  // Recherche textuelle
   search?: string;
+  
+  // Filtres catégoriels
   memberTypes?: string[];
   roles?: string[];
-  status?: AssociationMember['status'][];
+  status?: Array<'active' | 'inactive' | 'pending' | 'suspended'>; // ✅ Plus strict
+  
+  // Filtres booléens
   isAdmin?: boolean;
+  
+  // Filtre section
   sectionId?: number;
+  
+  // Statut contributions
   contributionStatus?: 'up_to_date' | 'late' | 'very_late' | 'inactive';
+  
+  // Pagination
   page?: number;
   limit?: number;
+}
+
+
+/**
+ * 📊 Paramètres pour fetchMembers (hook API)
+ */
+export interface FetchMembersParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  memberType?: string;
+  sectionId?: number;
 }
 
 /**
@@ -235,7 +302,8 @@ export interface PaginatedMembers {
     total: number;
     page: number;
     limit: number;
-    totalPages: number;
+    totalPages?: number;  // ✅ Optionnel (frontend)
+    pages?: number;        // ✅ Optionnel (backend)
   };
 }
 

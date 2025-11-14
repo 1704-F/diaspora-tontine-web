@@ -11,7 +11,10 @@ import type {
   GetAssociationsResponse,
   CreateAssociationPayload,
   UpdateAssociationPayload,
-  AssociationStats
+  AssociationStats,
+  MemberTypeConfig,
+  CustomRole,
+  CotisationSettings
 } from '@/types/association';
 
 export const associationsApi = {
@@ -104,6 +107,26 @@ export const associationsApi = {
    */
   getBalance: async (associationId: number): Promise<{ success: boolean; balance: number }> => {
     const response = await apiClient.get(`/associations/${associationId}/finances/balance`);
+    return response.data;
+  },
+
+  /**
+   * 🔧 Mettre à jour configuration association
+   * ✅ NOUVEAU : Pour gérer memberTypes, customRoles, cotisationSettings
+   */
+  updateConfiguration: async (
+    associationId: number,
+    data: {
+      memberTypes?: MemberTypeConfig[];
+      customRoles?: CustomRole[];
+      cotisationSettings?: Partial<CotisationSettings>;
+      accessRights?: Association['accessRights'];
+    }
+  ): Promise<GetAssociationResponse> => {
+    const response = await apiClient.put(
+      `/associations/${associationId}/configuration`,
+      data
+    );
     return response.data;
   }
 };

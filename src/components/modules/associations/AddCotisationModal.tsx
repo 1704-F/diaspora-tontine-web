@@ -1,568 +1,577 @@
 // src/components/modules/associations/AddCotisationModal.tsx
-'use client'
-import React, { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { useAuthStore } from '@/stores/authStore'
-import { 
-  X, 
-  Save, 
-  User, 
-  Euro,
-  Calendar,
-  FileText,
-  AlertCircle,
-  Info,
-  CheckCircle
-} from 'lucide-react'
+"use client";
+
+import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Save, Euro, CreditCard, Banknote, Wallet, Search } from "lucide-react";
+
+// ✅ Imports types
+import type { PaymentMethod } from "@/types/association/cotisation";
+import type { AssociationMember } from "@/types/association/member";
+import type { Association } from "@/types/association/association";
+
+// ✅ Imports API
+import { cotisationsApi } from "@/lib/api/association/cotisations";
+import { CURRENCIES } from "@/lib/constants/countries";
+
+// ✅ Imports hooks
+import { useAssociationMembers } from "@/hooks/association/useAssociationMembers";
+
+// ✅ Imports components
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { Avatar } from "@/components/ui/Avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface AddCotisationModalProps {
-  isOpen: boolean
-  onClose: () => void
-  associationId: string
-  onCotisationAdded: () => void
+  open: boolean;
+  onClose: () => void;
+  associationId: number;
+  onSuccess: () => void;
+  primaryCurrency: string;
+  association: Association;
 }
 
-interface Member {
-  id: number
-  userId: number
-  user: {
-    id: number
-    firstName: string
-    lastName: string
-    phoneNumber: string
-  }
-  memberType: string
-  section: {
-    id: number
-    name: string
-  } | null
-  expectedAmount: number
-}
-
-interface Association {
-  id: number
-  name: string
-  isMultiSection: boolean
-  memberTypes: Array<{
-    name: string
-    cotisationAmount: number
-  }>
-}
-
-interface SuccessData {
-  memberName: string
-  amount: string
-  month: string
-  year: number
-}
-
-export const AddCotisationModal: React.FC<AddCotisationModalProps> = ({
-  isOpen,
+export function AddCotisationModal({
+  open,
   onClose,
   associationId,
-  onCotisationAdded
-}) => {
-  const { token } = useAuthStore()
-  const [members, setMembers] = useState<Member[]>([])
-  const [association, setAssociation] = useState<Association | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [errors, setErrors] = useState<{[key: string]: string}>({})
+  onSuccess,
+  primaryCurrency,
+  association,
+}: AddCotisationModalProps) {
+  const t = useTranslations("cotisations.addManual");
+  const tCommon = useTranslations("common");
+  const tMonths = useTranslations("cotisations.months");
 
-  // États du formulaire
-  const [selectedMemberId, setSelectedMemberId] = useState<string>('')
-  const [amount, setAmount] = useState<string>('')
-  const [month, setMonth] = useState<number>(new Date().getMonth() + 1)
-  const [year, setYear] = useState<number>(new Date().getFullYear())
-  const [reason, setReason] = useState<string>('')
-  const [paymentMethod, setPaymentMethod] = useState<string>('cash')
+  // ✅ Hook membres
+  const {
+    members: allMembers,
+    loading: membersLoading,
+    fetchMembers,
+  } = useAssociationMembers(associationId);
 
-  // États pour le feedback de succès
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
-  const [successData, setSuccessData] = useState<SuccessData | null>(null)
+  // ============================================
+  // ÉTATS LOCAUX
+  // ============================================
+  const [filteredMembers, setFilteredMembers] = useState<AssociationMember[]>(
+    []
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const months = [
-    { value: 1, label: 'Janvier' }, { value: 2, label: 'Février' },
-    { value: 3, label: 'Mars' }, { value: 4, label: 'Avril' },
-    { value: 5, label: 'Mai' }, { value: 6, label: 'Juin' },
-    { value: 7, label: 'Juillet' }, { value: 8, label: 'Août' },
-    { value: 9, label: 'Septembre' }, { value: 10, label: 'Octobre' },
-    { value: 11, label: 'Novembre' }, { value: 12, label: 'Décembre' }
-  ]
+  // Formulaire
+  const [selectedMemberId, setSelectedMemberId] = useState<string>("");
+  const [amount, setAmount] = useState<string>("");
+  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [reason, setReason] = useState<string>("");
 
-  const paymentMethods = [
-    { value: 'cash', label: 'Espèces' },
-    { value: 'check', label: 'Chèque' },
-    { value: 'transfer', label: 'Virement' },
-    { value: 'card', label: 'Carte bancaire' }
-  ]
+  // Erreurs
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // ============================================
+  // CHARGEMENT MEMBRES
+  // ============================================
   useEffect(() => {
-    if (isOpen) {
-      fetchData()
+    if (open) {
+      fetchMembers({
+        status: "active",
+        limit: 1000,
+      });
+    } else {
+      resetForm();
     }
-  }, [isOpen, associationId])
+  }, [open, fetchMembers]);
 
+  // Filtrage membres
   useEffect(() => {
-    // Auto-remplir le montant quand un membre est sélectionné
-    if (selectedMemberId) {
-      const selectedMember = members.find(m => m.id.toString() === selectedMemberId)
-      if (selectedMember) {
-        setAmount(selectedMember.expectedAmount.toString())
-      }
+    if (!searchQuery.trim()) {
+      setFilteredMembers(allMembers);
+      return;
     }
-  }, [selectedMemberId, members])
 
-  const fetchData = async () => {
-    if (!token) return
+    const query = searchQuery.toLowerCase();
+    const filtered = allMembers.filter((m) => {
+      // ✅ Vérifier que user existe
+      if (!m.user) return false;
 
-    try {
-      setIsLoading(true)
-
-      // Récupérer association et membres en parallèle
-      const [associationResponse, membersResponse] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/members`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      ])
-
-      let assocResult = null
-      let membersResult = null
-
-      if (associationResponse.ok) {
-        assocResult = await associationResponse.json()
-        setAssociation(assocResult.data.association)
-      }
-
-      if (membersResponse.ok) {
-        membersResult = await membersResponse.json()
-      }
-
-      // Calculer le montant attendu pour chaque membre (seulement si les deux requêtes ont réussi)
-      if (assocResult && membersResult) {
-        const membersWithAmount = membersResult.data.members.map((member: any) => {
-          const memberTypeConfig = assocResult.data.association.memberTypes?.find(
-            (type: any) => type.name === member.memberType
-          )
-          return {
-            ...member,
-            expectedAmount: memberTypeConfig?.cotisationAmount || 0
-          }
-        })
-        setMembers(membersWithAmount)
-      }
-
-    } catch (error) {
-      console.error('Erreur chargement données:', error)
-      setErrors({ fetch: 'Erreur de chargement des données' })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
+      return (
+        m.user.firstName.toLowerCase().includes(query) ||
+        m.user.lastName.toLowerCase().includes(query) ||
+        m.user.phoneNumber.includes(query)
+      );
+    });
+    setFilteredMembers(filtered);
+  }, [searchQuery, allMembers]);
+  // ============================================
+  // VALIDATION
+  // ============================================
   const validateForm = (): boolean => {
-    const newErrors: {[key: string]: string} = {}
+    const newErrors: Record<string, string> = {};
 
     if (!selectedMemberId) {
-      newErrors.member = 'Veuillez sélectionner un membre'
+      newErrors.member = t("errors.memberRequired");
     }
 
-    if (!amount || parseFloat(amount) <= 0) {
-      newErrors.amount = 'Le montant doit être supérieur à 0'
+    const amountNum = parseFloat(amount);
+    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+      newErrors.amount = t("errors.amountInvalid");
     }
 
-    if (!reason.trim()) {
-      newErrors.reason = 'Veuillez préciser le motif'
+    if (!month || month < 1 || month > 12) {
+      newErrors.month = t("errors.monthInvalid");
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    const currentYear = new Date().getFullYear();
+    if (!year || year < 2020 || year > currentYear + 1) {
+      newErrors.year = t("errors.yearInvalid");
+    }
 
+    if (!paymentMethod) {
+      newErrors.paymentMethod = t("errors.paymentMethodRequired");
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // ============================================
+  // HANDLERS
+  // ============================================
   const handleSubmit = async () => {
-    if (!validateForm()) return
+    if (!validateForm()) {
+      return;
+    }
 
-    setIsSaving(true)
-    setErrors({}) // Clear previous errors
-    
     try {
-      const selectedMember = members.find(m => m.id.toString() === selectedMemberId)
-      
-      const cotisationData = {
+      setSubmitting(true);
+      setErrors({});
+
+      const selectedMember = allMembers.find(
+        (m) => m.id.toString() === selectedMemberId
+      );
+
+      await cotisationsApi.addManualCotisation(associationId, {
         memberId: parseInt(selectedMemberId),
         amount: parseFloat(amount),
         month,
         year,
-        reason: reason.trim(),
+        reason: reason.trim() || undefined,
         paymentMethod,
-        type: 'manual_entry'
-      }
+      });
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/cotisations-manual`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(cotisationData)
-        }
-      )
+      const monthName = getMonthName(month);
 
-      if (response.ok) {
-        const result = await response.json()
-        
-        // Afficher message de succès
-        const monthName = months.find(m => m.value === month)?.label || month.toString()
-        setSuccessData({
-          memberName: selectedMember ? `${selectedMember.user.firstName} ${selectedMember.user.lastName}` : 'Membre',
-          amount: amount,
-          month: monthName,
-          year: year
-        })
-        setShowSuccessMessage(true)
+      // ✅ Vérifier que selectedMember et user existent
+      const memberName = selectedMember?.user
+        ? `${selectedMember.user.firstName} ${selectedMember.user.lastName}`
+        : "Membre";
 
-        // Rafraîchir les données parent
-        onCotisationAdded()
+      toast.success(t("success"), {
+        description: `${memberName} - ${amount} ${getCurrencySymbol(primaryCurrency)} (${monthName} ${year})`,
+      });
 
-        // Fermer automatiquement après 3 secondes
-        setTimeout(() => {
-          setShowSuccessMessage(false)
-          onClose()
-          // Reset form
-          setSelectedMemberId('')
-          setAmount('')
-          setReason('')
-          setPaymentMethod('cash')
-          setSuccessData(null)
-        }, 3000)
+      onSuccess();
+      onClose();
+    } catch (error: unknown) {
+      console.error("❌ Erreur ajout cotisation:", error);
 
+      const apiError = error as {
+        response?: { data?: { code?: string; message?: string } };
+      };
+
+      if (apiError.response?.data?.code === "COTISATION_ALREADY_EXISTS") {
+        toast.error(t("errors.alreadyExists"));
       } else {
-        const errorData = await response.json()
-        setErrors({ submit: errorData.error || 'Erreur lors de l\'ajout' })
+        toast.error(t("errors.submitFailed"));
       }
-
-    } catch (error) {
-      console.error('Erreur ajout cotisation:', error)
-      setErrors({ submit: 'Erreur de connexion' })
     } finally {
-      setIsSaving(false)
+      setSubmitting(false);
     }
-  }
+  };
 
-  const getValidationInfo = () => {
-    if (!association) return null
+  const resetForm = () => {
+    setSelectedMemberId("");
+    setAmount("");
+    setMonth(new Date().getMonth() + 1);
+    setYear(new Date().getFullYear());
+    setPaymentMethod("cash");
+    setReason("");
+    setSearchQuery("");
+    setErrors({});
+  };
 
-    if (association.isMultiSection) {
-      return (
-        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-          <div className="flex items-start gap-2">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-            <div className="text-sm text-blue-700">
-              <h4 className="font-medium mb-1">Validation requise</h4>
-              <p>Cette cotisation devra être validée par :</p>
-              <ul className="list-disc list-inside mt-1 space-y-1">
-                <li>Le trésorier de la section concernée, OU</li>
-                <li>Un membre du bureau central (trésorier, président)</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )
-    } else {
-      return (
-        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-          <div className="flex items-start gap-2">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-            <div className="text-sm text-blue-700">
-              <h4 className="font-medium mb-1">Validation requise</h4>
-              <p>Cette cotisation devra être validée par le trésorier de l'association.</p>
-            </div>
-          </div>
-        </div>
-      )
+  const handleMemberChange = (memberId: string) => {
+    setSelectedMemberId(memberId);
+
+    // ✅ Récupérer le membre sélectionné
+    const selectedMember = allMembers.find((m) => m.id.toString() === memberId);
+
+    if (selectedMember && selectedMember.memberType) {
+      // ✅ Trouver le montant de cotisation pour ce type de membre
+      const memberTypeConfig = association?.memberTypes?.find(
+        (mt) => mt.name === selectedMember.memberType
+      );
+
+      // ✅ Remplir automatiquement le montant
+      if (memberTypeConfig && memberTypeConfig.cotisationAmount) {
+        setAmount(memberTypeConfig.cotisationAmount.toString());
+      }
     }
-  }
 
-  // Composant Message de Succès
-  const SuccessMessage = () => {
-    if (!showSuccessMessage || !successData) return null
+    // Clear error
+    if (errors.member) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.member;
+        return newErrors;
+      });
+    }
+  };
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-        <div className="bg-white rounded-lg shadow-2xl p-8 mx-4 max-w-md w-full text-center">
-          
-          {/* Icône de succès animée */}
-          <div className="mx-auto mb-4 w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-            <CheckCircle className="w-8 h-8 text-green-600 animate-bounce" />
-          </div>
+  // ============================================
+  // HELPERS
+  // ============================================
+  const getCurrencySymbol = (currencyCode: string): string => {
+    const currency = CURRENCIES.find((c) => c.code === currencyCode);
+    return currency?.symbol || currencyCode;
+  };
 
-          {/* Message principal */}
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            Cotisation enregistrée !
-          </h3>
-          
-          {/* Détails */}
-          <div className="text-gray-600 mb-4 space-y-1">
-            <p><strong>{successData.memberName}</strong></p>
-            <p>{successData.amount}€ - {successData.month} {successData.year}</p>
-          </div>
+  const getMonthName = (monthNum: number): string => {
+    const monthKeys = [
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+    ];
+    return tMonths(monthKeys[monthNum - 1]);
+  };
 
-          {/* Statut en attente */}
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-              <span className="text-orange-700 text-sm font-medium">
-                En attente de validation
-              </span>
-            </div>
-            <p className="text-orange-600 text-xs mt-1">
-              Un trésorier doit confirmer la réception du paiement
-            </p>
-          </div>
+  const getPaymentMethodIcon = (method: string) => {
+    if (!method) return null;
 
-          {/* Barre de progression */}
-          <div className="w-full bg-gray-200 rounded-full h-1 mb-4">
-            <div className="bg-green-600 h-1 rounded-full animate-pulse" style={{width: '100%'}}></div>
-          </div>
+    const icons: Record<string, React.ReactNode> = {
+      card: <CreditCard className="h-4 w-4" />,
+      bank_transfer: <Banknote className="h-4 w-4" />,
+      cash: <Euro className="h-4 w-4" />,
+      mobile_money: <Wallet className="h-4 w-4" />,
+    };
 
-          <p className="text-gray-500 text-sm">
-            Cette fenêtre se fermera automatiquement...
-          </p>
-        </div>
-      </div>
-    )
-  }
+    return icons[method] || null;
+  };
 
-  if (!isOpen) return null
+  const getPaymentMethodLabel = (method: string): string => {
+    const labels: Record<string, string> = {
+      card: "Carte bancaire",
+      bank_transfer: "Virement",
+      cash: "Espèces",
+      mobile_money: "Mobile Money",
+    };
+    return labels[method] || method;
+  };
 
+  // Générer années (année actuelle ± 1 an)
+  const years = Array.from(
+    { length: 3 },
+    (_, i) => new Date().getFullYear() - 1 + i
+  );
+
+  const selectedMember = allMembers.find(
+    (m) => m.id.toString() === selectedMemberId
+  );
+
+  // ============================================
+  // RENDU
+  // ============================================
   return (
-    <>
-      {/* Modal principale */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b">
-            <div className="flex items-center gap-3">
-              <Euro className="h-5 w-5 text-gray-600" />
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Ajouter une cotisation
-                </h2>
-                <p className="text-sm text-gray-600">
-                  Enregistrer un paiement reçu en espèces/chèque
-                </p>
-              </div>
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-5xl max-h-[90vh] overflow-y-auto"
+        style={{
+          left: "calc(40% + 1rem)",
+          top: "52%",
+          transform: "translate(-50%, -50%)", // ✅ Force le transform complet
+        }}
+      >
+        <DialogHeader className="px-6 pt-4">
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Euro className="h-5 w-5 text-primary" />
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="h-8 w-8 p-0"
-              disabled={isSaving || showSuccessMessage}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            {t("title")}
+          </DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
+        </DialogHeader>
+
+        {membersLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <LoadingSpinner size="lg" />
           </div>
+        ) : (
+          <div className="space-y-6 px-6 pb-2">
+            {/* ✅ SÉLECTION MEMBRE */}
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-gray-900">
+                {t("selectMember")} <span className="text-red-500">*</span>
+              </label>
 
-          {/* Contenu */}
-          <div className="p-6">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <LoadingSpinner size="lg" />
+              {/* Recherche */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Rechercher un membre..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-            ) : (
-              <div className="space-y-6">
 
-                {/* Sélection du membre */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Membre *
-                  </label>
-                  <select
-                    value={selectedMemberId}
-                    onChange={(e) => setSelectedMemberId(e.target.value)}
-                    disabled={isSaving || showSuccessMessage}
-                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.member ? 'border-red-300' : 'border-gray-300'
-                    } ${(isSaving || showSuccessMessage) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  >
-                    <option value="">Sélectionner un membre...</option>
-                    {members.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.user.firstName} {member.user.lastName} - 
-                        {member.memberType} ({member.expectedAmount}€/mois)
-                        {member.section && ` - ${member.section.name}`}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.member && (
-                    <p className="text-red-500 text-sm mt-1">{errors.member}</p>
-                  )}
-                </div>
-
-                {/* Période */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Mois *
-                    </label>
-                    <select
-                      value={month}
-                      onChange={(e) => setMonth(parseInt(e.target.value))}
-                      disabled={isSaving || showSuccessMessage}
-                      className={`w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        (isSaving || showSuccessMessage) ? 'bg-gray-100 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      {months.map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
+              {/* Liste membres */}
+              <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto p-2 bg-gray-50">
+                {filteredMembers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    {searchQuery ? "Aucun membre trouvé" : "Aucun membre actif"}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Année *
-                    </label>
-                    <select
-                      value={year}
-                      onChange={(e) => setYear(parseInt(e.target.value))}
-                      disabled={isSaving || showSuccessMessage}
-                      className={`w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        (isSaving || showSuccessMessage) ? 'bg-gray-100 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      {[2024, 2025, 2026].map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Montant */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Montant (€) *
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    error={errors.amount}
-                    disabled={isSaving || showSuccessMessage}
-                  />
-                  {selectedMemberId && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Montant habituel pour ce type de membre
-                    </p>
-                  )}
-                </div>
-
-                {/* Mode de paiement */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mode de paiement *
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    disabled={isSaving || showSuccessMessage}
-                    className={`w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      (isSaving || showSuccessMessage) ? 'bg-gray-100 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    {paymentMethods.map(method => (
-                      <option key={method.value} value={method.value}>
-                        {method.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Motif */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Motif / Commentaire *
-                  </label>
-                  <textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Ex: Paiement reçu en espèces lors de la réunion du 15/11"
-                    rows={3}
-                    disabled={isSaving || showSuccessMessage}
-                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
-                      errors.reason ? 'border-red-300' : 'border-gray-300'
-                    } ${(isSaving || showSuccessMessage) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  />
-                  {errors.reason && (
-                    <p className="text-red-500 text-sm mt-1">{errors.reason}</p>
-                  )}
-                </div>
-
-                {/* Info validation */}
-                {getValidationInfo()}
-
-                {errors.submit && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                      <p className="text-red-700 text-sm">{errors.submit}</p>
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          {!isLoading && (
-            <div className="flex items-center justify-end gap-3 p-6 border-t">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                disabled={isSaving || showSuccessMessage}
-              >
-                Annuler
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={isSaving || showSuccessMessage}
-                className={`flex items-center gap-2 transition-all duration-200 ${
-                  isSaving ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                {isSaving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Enregistrement...
-                  </>
                 ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Enregistrer cotisation
-                  </>
+                  <div className="divide-y divide-gray-100">
+                    {filteredMembers.map((member) => {
+                      if (!member.user) return null;
+
+                      return (
+                        <button
+                          key={member.id}
+                          type="button"
+                          onClick={() =>
+                            handleMemberChange(member.id.toString())
+                          }
+                          className={`w-full p-4 flex items-center gap-3 transition-all text-left border-2 rounded-lg mb-2 ${
+                            selectedMemberId === member.id.toString()
+                              ? "bg-primary/10 border-primary shadow-md ring-2 ring-primary/20"
+                              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          <Avatar
+                            firstName={member.user.firstName}
+                            lastName={member.user.lastName}
+                            imageUrl={member.user.profilePicture || undefined}
+                            size="md"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 truncate text-base">
+                              {member.user.firstName} {member.user.lastName}
+                            </div>
+                            <div className="text-sm text-gray-500 flex items-center gap-2 mt-1">
+                              <span>{member.user.phoneNumber}</span>
+                              {member.section && (
+                                <>
+                                  <span>•</span>
+                                  <span>{member.section.name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-gray-600 mb-1">
+                              {member.memberType}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-              </Button>
+              </div>
+              {errors.member && (
+                <p className="text-sm text-red-600">{errors.member}</p>
+              )}
             </div>
-          )}
 
-        </div>
-      </div>
+            {/* ✅ MONTANT AUTO-REMPLI */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-900">
+                {t("amount")} <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={amount}
+                  readOnly // ✅ BLOQUÉ - ne peut pas être modifié
+                  className={`pr-20 text-base bg-gray-50 cursor-not-allowed ${errors.amount ? "border-red-500" : ""}`}
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm font-medium text-gray-500">
+                  {getCurrencySymbol(primaryCurrency)}
+                </div>
+              </div>
+              {selectedMemberId && (
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  💡 {t("amountAutoFilled")}
+                </p>
+              )}
+              {errors.amount && (
+                <p className="text-sm text-red-600">{errors.amount}</p>
+              )}
+            </div>
 
-      {/* Message de succès par-dessus */}
-      <SuccessMessage />
-    </>
-  )
+            {/* ✅ PÉRIODE */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-900">
+                  {t("month")} <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={month.toString()}
+                  onValueChange={(value) => setMonth(parseInt(value))}
+                >
+                  <SelectTrigger className="text-base">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <SelectItem key={m} value={m.toString()}>
+                        {getMonthName(m)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.month && (
+                  <p className="text-sm text-red-600">{errors.month}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-900">
+                  {t("year")} <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={year.toString()}
+                  onValueChange={(value) => setYear(parseInt(value))}
+                >
+                  <SelectTrigger className="text-base">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y) => (
+                      <SelectItem key={y} value={y.toString()}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.year && (
+                  <p className="text-sm text-red-600">{errors.year}</p>
+                )}
+              </div>
+            </div>
+
+            {/* ✅ MODE PAIEMENT */}
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-gray-900">
+                {t("paymentMethod")} <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-4 gap-3">
+                {["card", "bank_transfer", "cash", "mobile_money"].map(
+                  (method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setPaymentMethod(method as PaymentMethod)}
+                      className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all ${
+                        paymentMethod === method
+                          ? "border-primary bg-primary/10 shadow-lg ring-2 ring-primary/30 scale-105"
+                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 hover:shadow-md"
+                      }`}
+                    >
+                      <div
+                        className={`${paymentMethod === method ? "text-primary" : "text-gray-700"}`}
+                      >
+                        {getPaymentMethodIcon(method)}
+                      </div>
+                      <span
+                        className={`text-sm font-medium text-center ${
+                          paymentMethod === method
+                            ? "text-primary font-semibold"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {getPaymentMethodLabel(method)}
+                      </span>
+                    </button>
+                  )
+                )}
+              </div>
+              {errors.paymentMethod && (
+                <p className="text-sm text-red-600">{errors.paymentMethod}</p>
+              )}
+            </div>
+
+            {/* ✅ RAISON (OPTIONNEL) */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-900">
+                {t("reason")}
+              </label>
+              <textarea
+                placeholder="Ex: Cotisation manuelle suite à paiement en espèces..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none text-base"
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-3 pt-4 px-6 pb-6 border-t border-gray-100">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
+            {tCommon("cancel")}
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={membersLoading || submitting}
+          >
+            {submitting ? (
+              <>
+                <LoadingSpinner size="sm" className="mr-2" />
+                {tCommon("saving")}
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                {t("submit")}
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

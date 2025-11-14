@@ -1,812 +1,784 @@
 // src/app/modules/associations/[id]/finances/validations/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { useAuthStore } from "@/stores/authStore";
-import { Textarea } from "@/components/ui/Textarea"; 
-import { Label } from "@/components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   CheckCircle,
   XCircle,
-  AlertTriangle,
+  AlertCircle,
   Clock,
-  Users,
+  Eye,
+  Filter,
+  X,
+  Calendar,
+  User,
+  DollarSign,
+  FileText,
   Building,
+  Users,
   Handshake,
   Star,
   Zap,
-  FileText,
-  Download,
-  Eye,
-  MessageSquare,
-  Euro,
-  Calendar,
-  Filter,
-  Search
 } from "lucide-react";
+import { toast } from "sonner";
 
-interface ExpenseRequest {
-  id: number;
-  title: string;
-  description: string;
-  expenseType: string;
-  expenseSubtype?: string;
-  amountRequested: string | number;
-  amountApproved?: number;
-  currency: string;
-  status: string;
-  urgencyLevel: string;
-  isLoan: boolean;
-  createdAt: string;
-  requester: {
-    id: number;
-    firstName: string;
-    lastName: string;
-  };
-  beneficiary?: {
-    id: number;
-    firstName: string;
-    lastName: string;
-  };
-  validationHistory: Array<{
-    userId: number;
-    role: string;
-    decision: string;
-    comment?: string;
-    timestamp: string;
-    user: {
-      firstName: string;
-      lastName: string;
-    };
-  }>;
-  requiredValidators: string[];
-  documents?: Array<{
-    type: string;
-    url: string;
-    name: string;
-  }>;
-  expectedImpact?: string;
-}
+// ✅ Imports hooks
+import { useAssociation } from "@/hooks/association/useAssociation";
+import { useExpenseRequests } from "@/hooks/association/useExpenseRequests";
+import { usePermissions } from "@/hooks/association/usePermissions";
+import { financesApi } from "@/lib/api/association/finances";
+import { CURRENCIES } from "@/lib/constants/countries";
 
-interface ValidationAction {
-  requestId: number;
-  decision: 'approved' | 'rejected' | 'info_needed';
-  comment: string;
-  amountApproved?: number;
-  conditions?: string;
-}
+// ✅ Imports types
+import type {
+  ExpenseRequest,
+  ExpenseType,
+  UrgencyLevel,
+  ExpenseFilters,
+} from "@/types/association/finances";
 
-export default function ValidationsPage() {
-  const { user, token } = useAuthStore();
-  const router = useRouter();
+// ✅ Imports components
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { Pagination } from "@/components/ui/Pagination";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/Textarea";
+
+export default function FinancesValidationsPage() {
   const params = useParams();
-  const associationId = params.id as string;
+  const router = useRouter();
+  const t = useTranslations("finances");
+  const tCommon = useTranslations("common");
+  const associationId = Number(params.id);
 
-  const [association, setAssociation] = useState<any>(null);
-  const [pendingRequests, setPendingRequests] = useState<ExpenseRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<ExpenseRequest | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // ============================================
+  // HOOKS
+  // ============================================
+  const { association, loading: associationLoading } = useAssociation(associationId);
+  const { expenses, loading, pagination, fetchExpenses, refetch } =
+    useExpenseRequests(associationId);
+  const { canValidateExpenses } = usePermissions(associationId);
+
+  // ============================================
+  // ÉTATS LOCAUX
+  // ============================================
+  const [selectedType, setSelectedType] = useState<string>("all");
+  const [selectedUrgency, setSelectedUrgency] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [showFilters, setShowFilters] = useState(true);
+
+  // États modals
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<ExpenseRequest | null>(null);
+  const [approvalComment, setApprovalComment] = useState("");
+  const [approvedAmount, setApprovedAmount] = useState<string>("");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [availableBalance, setAvailableBalance] = useState<number>(0);
-  
-  // Filtres
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterUrgency, setFilterUrgency] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [membership, setMembership] = useState<any>(null);
 
-  // Modal validation
-  const [showValidationModal, setShowValidationModal] = useState(false);
-  const [validationAction, setValidationAction] = useState<ValidationAction>({
-    requestId: 0,
-    decision: 'approved',
-    comment: '',
-    amountApproved: undefined,
-    conditions: ''
-  });
+
 
   useEffect(() => {
-  if (associationId && token && user) {
-    fetchData();
-  }
-}, [associationId, token, user]);
+    const filters: ExpenseFilters = {
+      status: "pending", // ✅ Seulement les demandes en attente
+      expenseType: selectedType !== "all" ? (selectedType as ExpenseType) : undefined,
+      urgencyLevel: selectedUrgency !== "all" ? (selectedUrgency as UrgencyLevel) : undefined,
+      search: searchQuery || undefined,
+      page: currentPage,
+      limit: itemsPerPage,
+      sortBy: "created_at",
+      sortOrder: "DESC",
+    };
 
-  const canUserValidate = () => {
-  const userRoles = membership?.roles || [];
-  
-  // Vérifier d'abord les rôles dans l'association
-  const hasAssociationRole = userRoles.some((role: string) => 
-    ['admin_association', 'president', 'tresorier', 'secretaire'].includes(role)
+    fetchExpenses(filters);
+  }, [selectedType, selectedUrgency, searchQuery, currentPage, itemsPerPage, fetchExpenses]);
+
+  // ============================================
+  // HELPERS
+  // ============================================
+  const getCurrencySymbol = useCallback((currencyCode: string): string => {
+    const currency = CURRENCIES.find((c) => c.code === currencyCode);
+    return currency?.symbol || currencyCode;
+  }, []);
+
+  const formatAmount = useCallback(
+    (amount: number, currencyCode: string): string => {
+      return `${amount.toFixed(2)} ${getCurrencySymbol(currencyCode)}`;
+    },
+    [getCurrencySymbol]
   );
-  
-  // Vérifier si super_admin au niveau plateforme (si ce champ existe)
-  // ✅ Supprimer cette vérification si user.role n'a pas 'super_admin'
-  // const isPlatformAdmin = user?.role === 'super_admin';
-  
-  return hasAssociationRole;
+
+  const formatDate = useCallback((dateString: string): string => {
+    return new Date(dateString).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, []);
+
+  // ============================================
+  // URGENCY BADGE
+  // ============================================
+  const getUrgencyBadge = (urgency: UrgencyLevel) => {
+  const configs: Record<UrgencyLevel, { variant: "default" | "secondary" | "warning" | "danger"; label: string }> = {
+    low: { variant: "secondary", label: t("urgencyLevels.low") },
+    normal: { variant: "default", label: t("urgencyLevels.normal") },
+    high: { variant: "warning", label: t("urgencyLevels.high") },
+    critical: { variant: "danger", label: t("urgencyLevels.critical") },
+  };
+
+  return <Badge variant={configs[urgency].variant}>{configs[urgency].label}</Badge>;
 };
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  // ============================================
+  // EXPENSE TYPE HELPERS
+  // ============================================
+  const getExpenseTypeIcon = (type: ExpenseType) => {
+    const icons: Record<ExpenseType, typeof FileText> = {
+      aide_membre: Users,
+      depense_operationnelle: Building,
+      pret_partenariat: Handshake,
+      projet_special: Star,
+      urgence_communautaire: Zap,
+    };
+    return icons[type] || FileText;
+  };
+
+  const getExpenseTypeLabel = (type: ExpenseType): string => {
+    return t(`expenseTypes.${type}`);
+  };
+
+  // ============================================
+  // HANDLERS FILTRES
+  // ============================================
+  const handleSearch = () => {
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedType("all");
+    setSelectedUrgency("all");
+    setSearchQuery("");
+    setCurrentPage(1);
+  };
+
+  const handleTypeChange = (value: string) => {
+    setSelectedType(value);
+    setCurrentPage(1);
+  };
+
+  const handleUrgencyChange = (value: string) => {
+    setSelectedUrgency(value);
+    setCurrentPage(1);
+  };
+
+  // ============================================
+  // HANDLERS PAGINATION
+  // ============================================
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  // ============================================
+  // HANDLERS ACTIONS
+  // ============================================
+  const handleViewDetails = (expense: ExpenseRequest) => {
+    router.push(`/modules/associations/${associationId}/finances/${expense.id}`);
+  };
+
+  const handleOpenApprove = (expense: ExpenseRequest) => {
+    setSelectedExpense(expense);
+    setApprovedAmount(expense.amountRequested.toString());
+    setApprovalComment("");
+    setShowApproveModal(true);
+  };
+
+  const handleOpenReject = (expense: ExpenseRequest) => {
+    setSelectedExpense(expense);
+    setRejectionReason("");
+    setShowRejectModal(true);
+  };
+
+  const handleApprove = async () => {
+    if (!selectedExpense) return;
+
+    if (!approvedAmount || parseFloat(approvedAmount) <= 0) {
+      toast.error("Montant approuvé invalide");
+      return;
+    }
+
+    setIsSubmitting(true);
+
     try {
-      await Promise.all([
-        fetchAssociation(),
-        fetchPendingRequests(),
-        fetchAvailableBalance()
-      ]);
-    } catch (error) {
-      console.error("Erreur chargement données:", error);
-      setError("Erreur de chargement des données");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchAssociation = async () => {
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
-
-  if (response.ok) {
-    const result = await response.json();
-    setAssociation(result.data.association);
-    setMembership(result.data.membership || null);
-  }
-};
-
-  const fetchPendingRequests = async () => {
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests-pending`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    if (response.ok) {
-      const result = await response.json();
-      setPendingRequests(result.data?.pendingRequests || []);
-    } else {
-      setPendingRequests([]);
-    }
-  } catch (error) {
-    console.error("Erreur chargement demandes:", error);
-    setPendingRequests([]);
-  }
-};
-
-  const fetchAvailableBalance = async () => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/finances/balance`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    if (response.ok) {
-      const result = await response.json();
-      setAvailableBalance(result.availableBalance || 0);
-    }
-  };
-
-  const getExpenseTypeIcon = (type: string) => {
-    switch (type) {
-      case 'aide_membre': return Users;
-      case 'depense_operationnelle': return Building;
-      case 'pret_partenariat': return Handshake;
-      case 'projet_special': return Star;
-      case 'urgence_communautaire': return Zap;
-      default: return FileText;
-    }
-  };
-
-  const getExpenseTypeLabel = (type: string) => {
-    switch (type) {
-      case 'aide_membre': return 'Aide aux membres';
-      case 'depense_operationnelle': return 'Dépense opérationnelle';
-      case 'pret_partenariat': return 'Prêt & partenariat';
-      case 'projet_special': return 'Projet spécial';
-      case 'urgence_communautaire': return 'Urgence communautaire';
-      default: return type;
-    }
-  };
-
-  const getUrgencyBadge = (level: string) => {
-    switch (level) {
-      case 'critical':
-        return <Badge variant="destructive">🚨 Critique</Badge>;
-      case 'high':
-        return <Badge className="bg-orange-100 text-orange-700">⚡ Urgent</Badge>;
-      case 'normal':
-        return <Badge variant="outline">📊 Normal</Badge>;
-      case 'low':
-        return <Badge variant="outline" className="bg-gray-50">🔽 Faible</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const getValidationProgress = (request: ExpenseRequest) => {
-    const completed = request.validationHistory?.filter(v => v.decision === 'approved').length || 0;
-    const total = request.requiredValidators?.length || 3;
-    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-    
-    return { completed, total, percentage };
-  };
-
-  const getCurrentUserValidation = (request: ExpenseRequest) => {
-    return request.validationHistory?.find(v => v.userId === user?.id);
-  };
-
-  const canCurrentUserValidate = (request: ExpenseRequest) => {
-    const userValidation = getCurrentUserValidation(request);
-    return !userValidation; // Peut valider si pas encore validé
-  };
-
-  const hasSufficientFunds = (amount: number | string) => {
-  const parsedAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return availableBalance >= parsedAmount;
-};
-
- const openValidationModal = (request: ExpenseRequest, decision: 'approved' | 'rejected' | 'info_needed') => {
-  const requestedAmount = typeof request.amountRequested === 'string' 
-    ? parseFloat(request.amountRequested) 
-    : request.amountRequested;
-    
-  setValidationAction({
-    requestId: request.id,
-    decision,
-    comment: '',
-    amountApproved: decision === 'approved' ? requestedAmount : undefined,
-    conditions: ''
-  });
-  setSelectedRequest(request);
-  setShowValidationModal(true);
-};
-
-  const submitValidation = async () => {
-  if (!validationAction.comment.trim()) {
-    setError("Un commentaire est requis");
-    return;
-  }
-
-  setIsSubmitting(true);
-  try {
-    const endpoint = validationAction.decision === 'approved' ? 'approve' : 
-                     validationAction.decision === 'rejected' ? 'reject' : 'request-info';
-    
-    // ✅ Construire directement le bon objet selon l'action
-    const requestBody = validationAction.decision === 'approved' 
-      ? {
-          comment: validationAction.comment,
-          amountApproved: validationAction.amountApproved,
-          ...(validationAction.conditions && { conditions: validationAction.conditions })
-        }
-      : validationAction.decision === 'rejected'
-      ? {
-          rejectionReason: validationAction.comment
-        }
-      : {
-          requestedInfo: validationAction.comment
-        };
-
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests/${validationAction.requestId}/${endpoint}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-      }
-    );
-
-    if (response.ok) {
-      setShowValidationModal(false);
-      setValidationAction({ 
-        requestId: 0, 
-        decision: 'approved', 
-        comment: '', 
-        amountApproved: undefined, 
-        conditions: '' 
+      const response = await financesApi.approveExpense(associationId, selectedExpense.id, {
+        comment: approvalComment || undefined,
+        amountApproved: parseFloat(approvedAmount),
       });
-      setSelectedRequest(null);
-      await fetchPendingRequests();
-      setError("");
-    } else {
-      const error = await response.json();
-      setError(error.error || error.message || "Erreur lors de la validation");
+
+      if (response.success) {
+        toast.success(t("success.approved"));
+        setShowApproveModal(false);
+        setSelectedExpense(null);
+        refetch({ status: "pending" });
+      }
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: { error?: string } } };
+      toast.error(apiError.response?.data?.error || t("errors.approveFailed"));
+      console.error("Erreur approbation:", error);
+    } finally {
+      setIsSubmitting(false);
     }
-  } catch (error) {
-    console.error("Erreur validation:", error);
-    setError("Erreur lors de la validation");
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
-  // Filtrer les demandes
-  const filteredRequests = pendingRequests.filter(request => {
-    if (filterStatus !== 'all' && request.status !== filterStatus) return false;
-    if (filterType !== 'all' && request.expenseType !== filterType) return false;
-    if (filterUrgency !== 'all' && request.urgencyLevel !== filterUrgency) return false;
-    if (searchTerm && !request.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !request.requester.firstName.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !request.requester.lastName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    
-    return true;
-  });
+  const handleReject = async () => {
+    if (!selectedExpense) return;
 
-  if (isLoading) {
+    if (!rejectionReason || rejectionReason.trim().length < 10) {
+      toast.error("Motif de refus requis (minimum 10 caractères)");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await financesApi.rejectExpense(associationId, selectedExpense.id, {
+        rejectionReason: rejectionReason.trim(),
+      });
+
+      if (response.success) {
+        toast.success(t("success.rejected"));
+        setShowRejectModal(false);
+        setSelectedExpense(null);
+        refetch({ status: "pending" });
+      }
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: { error?: string } } };
+      toast.error(apiError.response?.data?.error || t("errors.rejectFailed"));
+      console.error("Erreur rejet:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ============================================
+  // LOADING STATES
+  // ============================================
+  if (associationLoading) {
     return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="flex items-center justify-center min-h-screen">
-          <LoadingSpinner size="lg" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner size="lg" />
+      </div>
     );
   }
 
- if (error) {
+  if (!association) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-600">{tCommon("errors.notFound")}</p>
+      </div>
+    );
+  }
+
+  // ============================================
+  // RENDER
+  // ============================================
   return (
-    <ProtectedRoute requiredModule="associations">
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Erreur</h1>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Retour
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      {/* ✅ HEADER */}
+      <div className="mb-8">
+        <div className="flex items-center gap-4 mb-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/modules/associations/${associationId}/finances`)}
+            className="hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
           </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {t("validations.title")}
+            </h1>
+            <p className="text-gray-600 mt-2">
+              {t("validations.subtitle")}
+            </p>
+          </div>
+        </div>
+
+        {/* ✅ ALERTE INFO */}
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-blue-900">
+                {t("validations.info")}
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                {pagination.total}{" "}
+                {t("validations.pendingCount")}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </ProtectedRoute>
-  );
-}
 
-  return (
-    <ProtectedRoute requiredModule="associations">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              onClick={() => router.push(`/modules/associations/${associationId}/finances`)}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour aux finances
+      {/* ✅ FILTRES */}
+      <Card className="shadow-sm mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">{t("filters.title")}</CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => setShowFilters(!showFilters)}>
+              <Filter className="h-4 w-4" />
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Validation des Demandes</h1>
-              <p className="text-gray-600">{association?.name}</p>
-            </div>
           </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Solde disponible</p>
-              <p className="text-lg font-bold text-green-600">{availableBalance.toFixed(2)} €</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Filtres */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Rechercher..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        </CardHeader>
+        {showFilters && (
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Recherche */}
+              <div className="md:col-span-2">
+                <Input
+                  placeholder={t("filters.search")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 />
               </div>
-              
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
+
+              {/* Type */}
+              <Select value={selectedType} onValueChange={handleTypeChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Statut" />
+                  <SelectValue placeholder={t("filters.type")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tous les statuts</SelectItem>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="under_review">En cours</SelectItem>
+                  <SelectItem value="all">{t("expenseTypes.all")}</SelectItem>
+                  <SelectItem value="aide_membre">{t("expenseTypes.aide_membre")}</SelectItem>
+                  <SelectItem value="depense_operationnelle">
+                    {t("expenseTypes.depense_operationnelle")}
+                  </SelectItem>
+                  <SelectItem value="pret_partenariat">
+                    {t("expenseTypes.pret_partenariat")}
+                  </SelectItem>
+                  <SelectItem value="projet_special">{t("expenseTypes.projet_special")}</SelectItem>
+                  <SelectItem value="urgence_communautaire">
+                    {t("expenseTypes.urgence_communautaire")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
-              <Select value={filterType} onValueChange={setFilterType}>
+              {/* Urgence */}
+              <Select value={selectedUrgency} onValueChange={handleUrgencyChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Type" />
+                  <SelectValue placeholder={t("filters.urgency")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tous les types</SelectItem>
-                  <SelectItem value="aide_membre">Aide membre</SelectItem>
-                  <SelectItem value="depense_operationnelle">Dépense opérationnelle</SelectItem>
-                  <SelectItem value="pret_partenariat">Prêt & partenariat</SelectItem>
-                  <SelectItem value="projet_special">Projet spécial</SelectItem>
-                  <SelectItem value="urgence_communautaire">Urgence</SelectItem>
+                  <SelectItem value="all">{t("urgencyLevels.all")}</SelectItem>
+                  <SelectItem value="low">{t("urgencyLevels.low")}</SelectItem>
+                  <SelectItem value="normal">{t("urgencyLevels.normal")}</SelectItem>
+                  <SelectItem value="high">{t("urgencyLevels.high")}</SelectItem>
+                  <SelectItem value="critical">{t("urgencyLevels.critical")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
 
-              <Select value={filterUrgency} onValueChange={setFilterUrgency}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Urgence" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes urgences</SelectItem>
-                  <SelectItem value="critical">Critique</SelectItem>
-                  <SelectItem value="high">Urgent</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="low">Faible</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Button variant="outline" onClick={() => {
-                setFilterStatus('all');
-                setFilterType('all');
-                setFilterUrgency('all');
-                setSearchTerm('');
-              }}>
-                <Filter className="h-4 w-4 mr-2" />
-                Réinitialiser
+            {/* Boutons actions filtres */}
+            <div className="flex items-center gap-3 mt-4">
+              <Button onClick={handleSearch} size="sm" className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                {tCommon("actions.apply")}
+              </Button>
+              <Button
+                onClick={handleResetFilters}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <X className="h-4 w-4" />
+                {t("filters.reset")}
               </Button>
             </div>
           </CardContent>
+        )}
+      </Card>
+
+      {/* ✅ LISTE DES DEMANDES */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner size="lg" />
+        </div>
+      ) : expenses.length === 0 ? (
+        <Card className="shadow-sm">
+          <CardContent className="py-20">
+            <div className="text-center">
+              <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-10 w-10 text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                {t("validations.empty.title")}
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {t(
+                  "validations.empty.description"
+                  
+                )}
+              </p>
+            </div>
+          </CardContent>
         </Card>
-
-        {/* Liste des demandes */}
-        <div className="space-y-4">
-          {filteredRequests.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune demande en attente</h3>
-                <p className="text-gray-600">Toutes les demandes ont été traitées ou aucune demande ne correspond aux critères de filtrage.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            filteredRequests.map((request) => {
-              const Icon = getExpenseTypeIcon(request.expenseType);
-              const progress = getValidationProgress(request);
-              const userValidation = getCurrentUserValidation(request);
-              const canValidate = canCurrentUserValidate(request);
-              const sufficientFunds = hasSufficientFunds(request.amountRequested);
-
-              return (
-                <Card key={request.id} className={`${!sufficientFunds ? 'border-red-200 bg-red-50' : ''}`}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-3">
-                          <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Icon className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">{request.title}</h3>
-                            <p className="text-sm text-gray-600">{getExpenseTypeLabel(request.expenseType)}</p>
-                          </div>
-                          {getUrgencyBadge(request.urgencyLevel)}
-                          {request.isLoan && (
-                            <Badge className="bg-purple-100 text-purple-700">💰 Prêt</Badge>
-                          )}
-                        </div>
-
-                        <p className="text-gray-700 mb-4 line-clamp-3">{request.description}</p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <p className="text-gray-500">Demandeur</p>
-                            <p className="font-medium">{request.requester.firstName} {request.requester.lastName}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-500">Date de demande</p>
-                            <p className="font-medium">{new Date(request.createdAt).toLocaleDateString('fr-FR')}</p>
-                          </div>
-                          {request.beneficiary && (
-                            <div>
-                              <p className="text-gray-500">Bénéficiaire</p>
-                              <p className="font-medium">{request.beneficiary.firstName} {request.beneficiary.lastName}</p>
+      ) : (
+        <>
+          <Card className="shadow-sm mb-6">
+            <CardHeader className="border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>
+                    {t("validations.list.title")}
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {pagination.total} {tCommon("results")}
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.date")}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.title")}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.type")}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.requester")}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.amount")}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.urgency")}
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("table.actions")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {expenses.map((expense) => {
+                      const Icon = getExpenseTypeIcon(expense.expenseType);
+                      return (
+                        <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
+                          {/* Date */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <Calendar className="h-3 w-3 text-gray-400" />
+                              {formatDate(expense.createdAt)}
                             </div>
-                          )}
-                        </div>
+                          </td>
 
-                        {request.expectedImpact && (
-                          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                            <p className="text-sm text-gray-600 font-medium">Impact attendu:</p>
-                            <p className="text-sm text-gray-700">{request.expectedImpact}</p>
-                          </div>
-                        )}
-
-                        {!sufficientFunds && (
-                          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <div className="flex items-center">
-                              <AlertTriangle className="h-4 w-4 text-red-600 mr-2" />
-                              <p className="text-sm text-red-700 font-medium">Fonds insuffisants</p>
+                          {/* Titre */}
+                          <td className="px-6 py-4">
+                            <div className="max-w-xs">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {expense.title}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                {expense.description}
+                              </p>
                             </div>
+                          </td>
 
-                            <p className="text-sm text-red-600 mt-1">
-  Solde disponible: {availableBalance.toFixed(2)} € | Demandé: {parseFloat(request.amountRequested.toString()).toFixed(2)} €
-</p>
-
-                          </div>
-                        )}
-
-                        {/* Documents */}
-                        {request.documents && request.documents.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-sm font-medium text-gray-700 mb-2">Documents joints:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {request.documents.map((doc, index) => (
-                                <Button
-                                  key={index}
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => window.open(doc.url, '_blank')}
-                                >
-                                  <Download className="h-3 w-3 mr-1" />
-                                  {doc.name}
-                                </Button>
-                              ))}
+                          {/* Type */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                <Icon className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <Badge variant="secondary">
+                                {getExpenseTypeLabel(expense.expenseType)}
+                              </Badge>
                             </div>
-                          </div>
-                        )}
+                          </td>
 
-                        {/* Historique des validations */}
-                        {request.validationHistory && request.validationHistory.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-sm font-medium text-gray-700 mb-2">Validations:</p>
-                            <div className="space-y-2">
-                              {request.validationHistory.map((validation, index) => (
-                                <div key={index} className="flex items-center space-x-2 text-sm">
-                                  {validation.decision === 'approved' ? (
-                                    <CheckCircle className="h-4 w-4 text-green-600" />
-                                  ) : (
-                                    <XCircle className="h-4 w-4 text-red-600" />
-                                  )}
-                                  <span className="font-medium">{validation.user.firstName} {validation.user.lastName}</span>
-                                  <span className="text-gray-500">({validation.role})</span>
-                                  <span className={validation.decision === 'approved' ? 'text-green-600' : 'text-red-600'}>
-                                    {validation.decision === 'approved' ? 'Approuvé' : 'Refusé'}
-                                  </span>
-                                  {validation.comment && (
-                                    <span className="text-gray-600">-&ldquo;{validation.comment}&rdquo;</span>
+                          {/* Demandeur */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {expense.requester ? (
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-gray-400" />
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {expense.requester.firstName} {expense.requester.lastName}
+                                  </p>
+                                  {expense.requester.phone && (
+                                    <p className="text-xs text-gray-500">
+                                      {expense.requester.phone}
+                                    </p>
                                   )}
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-right ml-6">
-
-                        <p className="text-2xl font-bold text-gray-900 mb-2">
-  {parseFloat(request.amountRequested.toString()).toFixed(2)} {request.currency}
-</p>
-
-                        {/* Progression validation */}
-                        <div className="mb-4">
-                          <div className="flex items-center text-sm text-gray-600 mb-1">
-                            <span>Validation: {progress.completed}/{progress.total}</span>
-                          </div>
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-blue-600 h-2 rounded-full transition-all"
-                              style={{ width: `${progress.percentage}%` }}
-                            ></div>
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        {userValidation ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center text-sm">
-                              {userValidation.decision === 'approved' ? (
-                                <CheckCircle className="h-4 w-4 text-green-600 mr-1" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-600 mr-1" />
-                              )}
-                              <span className="font-medium">Votre décision: {userValidation.decision === 'approved' ? 'Approuvé' : 'Refusé'}</span>
-                            </div>
-                            {userValidation.comment && (
-                              <p className="text-xs text-gray-600 italic">&ldquo;{userValidation.comment}&rdquo;</p>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
                             )}
-                          </div>
-                        ) : canValidate ? (
-                          <div className="space-y-2">
-                            <Button
-                              size="sm"
-                              onClick={() => openValidationModal(request, 'approved')}
-                              disabled={!sufficientFunds}
-                              className="w-full bg-green-600 hover:bg-green-700"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approuver
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openValidationModal(request, 'rejected')}
-                              className="w-full border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Refuser
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openValidationModal(request, 'info_needed')}
-                              className="w-full"
-                            >
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              Demander infos
-                            </Button>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500">En attente d'autres validateurs</p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-        </div>
+                          </td>
 
-        {/* Modal de validation */}
-        {showValidationModal && selectedRequest && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-2xl m-4">
-              <h2 className="text-xl font-bold mb-4">
-                {validationAction.decision === 'approved' ? '✅ Approuver la demande' :
-                 validationAction.decision === 'rejected' ? '❌ Refuser la demande' :
-                 '💬 Demander des informations complémentaires'}
-              </h2>
+                          {/* Montant */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-gray-400" />
+                              <span className="font-semibold text-gray-900">
+                                {formatAmount(expense.amountRequested, expense.currency)}
+                              </span>
+                            </div>
+                          </td>
 
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium">{selectedRequest.title}</h3>
+                          {/* Urgence */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getUrgencyBadge(expense.urgencyLevel)}
+                          </td>
 
-               <p className="text-sm text-gray-600">
-  {selectedRequest.requester.firstName} {selectedRequest.requester.lastName} - {parseFloat(selectedRequest.amountRequested.toString()).toFixed(2)} €
-</p>
-
+                          {/* Actions */}
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewDetails(expense)}
+                                title={t("actions.viewDetails")}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenApprove(expense)}
+                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                title={t("actions.approve")}
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenReject(expense)}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                title={t("actions.reject")}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
+            </CardContent>
+          </Card>
 
-              {validationAction.decision === 'approved' && (
-                <div className="space-y-4 mb-4">
-                  <div>
-                    <Label htmlFor="amountApproved">Montant approuvé (€)</Label>
+          {/* ✅ PAGINATION */}
+          <div className="flex justify-center">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              itemsPerPage={itemsPerPage}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
+              itemsPerPageOptions={[10, 25, 50, 100]}
+              showItemsPerPage={true}
+            />
+          </div>
+        </>
+      )}
 
-                    <input
-  id="amountApproved"
-  type="number"
-  step="0.01"
-  min="0"
-  max={parseFloat(selectedRequest.amountRequested.toString())}
-  value={validationAction.amountApproved || ''}
-  onChange={(e) => setValidationAction({
-    ...validationAction,
-    amountApproved: parseFloat(e.target.value) || undefined
-  })}
-  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-  placeholder={selectedRequest.amountRequested.toString()}
-/>
-
-
-                  </div>
-
-                  <div>
-                    <Label htmlFor="conditions">Conditions particulières (optionnel)</Label>
-                    <Textarea
-                      id="conditions"
-                      value={validationAction.conditions}
-                      onChange={(e) => setValidationAction({
-                        ...validationAction,
-                        conditions: e.target.value
-                      })}
-                      placeholder="Ex: Remboursement échelonné sur 12 mois..."
-                      className="mt-1"
-                      rows={2}
-                    />
-                  </div>
-                </div>
+      {/* ✅ MODAL APPROBATION */}
+      <Dialog open={showApproveModal} onOpenChange={setShowApproveModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              {t("validations.approve.title")}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedExpense && (
+                <>
+                  <span className="font-medium">{selectedExpense.title}</span>
+                  <br />
+                  Montant demandé:{" "}
+                  {formatAmount(selectedExpense.amountRequested, selectedExpense.currency)}
+                </>
               )}
+            </DialogDescription>
+          </DialogHeader>
 
-              <div className="mb-6">
-                <Label htmlFor="comment" required>
-                  {validationAction.decision === 'approved' ? 'Commentaire de validation' :
-                   validationAction.decision === 'rejected' ? 'Motif de refus' :
-                   'Informations demandées'} *
-                </Label>
-                <Textarea
-                  id="comment"
-                  value={validationAction.comment}
-                  onChange={(e) => setValidationAction({
-                    ...validationAction,
-                    comment: e.target.value
-                  })}
-                  placeholder={
-                    validationAction.decision === 'approved' ? 'Demande justifiée et conforme...' :
-                    validationAction.decision === 'rejected' ? 'Motif du refus...' :
-                    'Précisez les informations manquantes...'
-                  }
-                  className="mt-1"
-                  rows={4}
-                  required
-                />
-              </div>
+          <div className="space-y-4 py-4">
+            {/* Montant approuvé */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t("validations.approve.amountLabel")}
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={approvedAmount}
+                onChange={(e) => setApprovedAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
 
-              <div className="flex justify-end space-x-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowValidationModal(false);
-                    setValidationAction({ requestId: 0, decision: 'approved', comment: '', amountApproved: undefined, conditions: '' });
-                    setSelectedRequest(null);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Annuler
-                </Button>
-                <Button
-                  onClick={submitValidation}
-                  disabled={isSubmitting || !validationAction.comment.trim()}
-                  className={
-                    validationAction.decision === 'approved' ? 'bg-green-600 hover:bg-green-700' :
-                    validationAction.decision === 'rejected' ? 'bg-red-600 hover:bg-red-700' :
-                    'bg-blue-600 hover:bg-blue-700'
-                  }
-                >
-                  {isSubmitting ? (
-                    <LoadingSpinner size="sm" className="mr-2" />
-                  ) : (
-                    validationAction.decision === 'approved' ? <CheckCircle className="h-4 w-4 mr-2" /> :
-                    validationAction.decision === 'rejected' ? <XCircle className="h-4 w-4 mr-2" /> :
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                  )}
-                  {validationAction.decision === 'approved' ? 'Approuver' :
-                   validationAction.decision === 'rejected' ? 'Refuser' :
-                   'Demander infos'}
-                </Button>
-              </div>
+            {/* Commentaire */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t("validations.approve.commentLabel")}
+              </label>
+              <Textarea
+                value={approvalComment}
+                onChange={(e) => setApprovalComment(e.target.value)}
+                placeholder={t(
+                  "validations.approve.commentPlaceholder"
+                )}
+                rows={3}
+                maxLength={1000}
+              />
             </div>
           </div>
-        )}
 
-        {error && (
-          <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
-            <div className="flex items-center">
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              <span>{error}</span>
-              <button
-                onClick={() => setError("")}
-                className="ml-4 text-red-500 hover:text-red-700"
-              >
-                ×
-              </button>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowApproveModal(false)}
+              disabled={isSubmitting}
+            >
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button
+              onClick={handleApprove}
+              disabled={isSubmitting || !approvedAmount}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  {tCommon("actions.processing")}
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {t("actions.approve")}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ MODAL REJET */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-600" />
+              {t("validations.reject.title")}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedExpense && (
+                <>
+                  <span className="font-medium">{selectedExpense.title}</span>
+                  <br />
+                  Montant demandé:{" "}
+                  {formatAmount(selectedExpense.amountRequested, selectedExpense.currency)}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Motif de rejet */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t("validations.reject.reasonLabel")}
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <Textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder={t(
+                  "validations.reject.reasonPlaceholder"
+                )}
+                rows={4}
+                maxLength={1000}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {rejectionReason.length}/1000 caractères
+              </p>
             </div>
           </div>
-        )}
-      </div>
-    </ProtectedRoute>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRejectModal(false)}
+              disabled={isSubmitting}
+            >
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button
+              onClick={handleReject}
+              disabled={isSubmitting || rejectionReason.length < 10}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  {tCommon("actions.processing")}
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  {t("actions.reject")}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
-                    

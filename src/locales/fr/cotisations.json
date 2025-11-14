@@ -1,0 +1,147 @@
+{
+  "title": "Cotisations",
+  "subtitle": "Gérez les cotisations mensuelles de vos membres",
+  "backToAssociation": "Retour à l'association",
+
+  "period": {
+    "month": "Mois",
+    "year": "Année",
+    "currentPeriod": "Période actuelle"
+  },
+
+  "months": {
+    "january": "Janvier",
+    "february": "Février",
+    "march": "Mars",
+    "april": "Avril",
+    "may": "Mai",
+    "june": "Juin",
+    "july": "Juillet",
+    "august": "Août",
+    "september": "Septembre",
+    "october": "Octobre",
+    "november": "Novembre",
+    "december": "Décembre"
+  },
+
+  "stats": {
+    "totalExpected": "Total attendu",
+    "totalCollected": "Total collecté",
+    "totalPending": "En attente",
+    "collectionRate": "Taux de collecte",
+    "membersCount": "Membres",
+    "paidCount": "Payés",
+    "pendingCount": "En attente",
+    "lateCount": "En retard",
+    "veryLateCount": "Très en retard"
+  },
+
+  "filters": {
+    "title": "Filtres",
+    "show": "Afficher",
+    "hide": "Masquer",
+    "month": "Mois",
+    "year": "Année",
+    "section": "Section",
+    "memberType": "Type de membre",
+    "status": "Statut",
+    "search": "Rechercher",
+    "searchPlaceholder": "Nom, prénom...",
+    "allSections": "Toutes les sections",
+    "allTypes": "Tous les types",
+    "allStatuses": "Tous les statuts",
+    "reset": "Réinitialiser",
+    "filterMonth": "Mois",
+    "filterYear": "Année",
+    "filterSection": "Section",
+    "filterType": "Type",
+    "filterStatus": "Statut"
+  },
+
+  "status": {
+    "paid": "Payé",
+    "pending": "En attente",
+    "late": "En retard",
+    "very_late": "Très en retard",
+    "all": "Tous"
+  },
+
+  "table": {
+    "member": "Membre",
+    "section": "Section",
+    "type": "Type",
+    "expectedAmount": "Montant attendu",
+    "paidAmount": "Montant payé",
+    "paymentMethod": "Mode de paiement",
+    "status": "Statut",
+    "paymentDate": "Date de paiement",
+    "actions": "Actions",
+    "noMembers": "Aucun membre"
+  },
+
+  "paymentMethods": {
+    "card": "Carte bancaire",
+    "bank_transfer": "Virement",
+    "cash": "Espèces",
+    "mobile_money": "Mobile Money",
+    "unknown": "Non spécifié"
+  },
+
+  "actions": {
+    "view": "Voir les détails",
+    "sendReminder": "Envoyer un rappel",
+    "viewHistory": "Voir l'historique",
+    "addManual": "Ajouter cotisation manuelle",
+    "export": "Exporter PDF",
+    "refresh": "Actualiser"
+  },
+
+  "addManual": {
+    "title": "Ajouter une cotisation manuelle",
+    "description": "Enregistrez un paiement de cotisation effectué hors ligne",
+    "selectMember": "Sélectionner un membre",
+    "amount": "Montant",
+    "amountAutoFilled": "Montant automatique selon le type de membre",
+    "month": "Mois",
+    "year": "Année",
+    "paymentMethod": "Mode de paiement",
+    "reason": "Raison (optionnel)",
+    "submit": "Enregistrer",
+    "cancel": "Annuler",
+    "success": "Cotisation ajoutée avec succès",
+    "errors": {
+      "memberRequired": "Veuillez sélectionner un membre",
+      "amountInvalid": "Le montant doit être supérieur à 0",
+      "monthInvalid": "Mois invalide",
+      "yearInvalid": "Année invalide",
+      "paymentMethodRequired": "Veuillez sélectionner un mode de paiement",
+      "submitFailed": "Erreur lors de l'ajout de la cotisation",
+      "alreadyExists": "Une cotisation existe déjà pour cette période"
+    }
+  },
+
+  "export": {
+    "generating": "Génération du PDF en cours...",
+    "success": "PDF téléchargé avec succès",
+    "error": "Erreur lors de l'export PDF"
+  },
+
+  "reminder": {
+    "sending": "Envoi du rappel en cours...",
+    "success": "Rappel envoyé avec succès",
+    "error": "Erreur lors de l'envoi du rappel"
+  },
+
+  "list": {
+    "title": "Liste des cotisations",
+    "membersFound": "membre(s) trouvé(s)",
+    "noMembers": "Aucune cotisation trouvée",
+    "noMembersDescription": "Aucune cotisation pour cette période"
+  },
+
+  "errors": {
+    "loadFailed": "Erreur lors du chargement des cotisations",
+    "noPermission": "Vous n'avez pas la permission d'accéder aux cotisations",
+    "associationNotFound": "Association introuvable"
+  }
+}

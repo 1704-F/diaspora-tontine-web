@@ -4,11 +4,16 @@
   "memberSince": "Membre depuis",
   "notProvided": "Non renseigné",
   
-  "personalInfo": "Informations personnelles",
+  "personalInfo": "Informations personnelles", 
   "phone": "Téléphone",
   "email": "Email",
   "memberType": "Type de membre",
   "joinDate": "Date d'adhésion",
+  "dateOfBirth": "Date de naissance",
+  "profession": "Profession",
+  "emergencyContact": "Contact d'urgence",
+  "address": "Adresse",
+  "notes": "Notes internes",
   
   "section": "Section",
   

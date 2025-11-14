@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAssociation, useRoles, usePermissions } from "@/hooks/association";
+import { associationsApi } from "@/lib/api/association";
+import type { MemberTypeConfig, CustomRole, CotisationSettings } from "@/types/association";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -27,24 +29,8 @@ import {
   Building2,
   Info,
 } from "lucide-react";
-
-// ============================================
-// INTERFACES
-// ============================================
-interface MemberType {
-  name: string;
-  cotisationAmount: number;
-  description: string;
-  defaultRole: string;
-}
-
-interface CustomRole {
-  id: string;
-  name: string;
-  description: string;
-  assignedTo: number | null;
-  assignedAt?: string;
-}
+import { DEFAULT_ASSOCIATION_FEATURES } from '@/lib/constants/features';
+import { CURRENCIES } from '@/lib/constants/countries';
 
 type ActiveTab = "members" | "sections" | "cotisations";
 
@@ -67,11 +53,10 @@ export default function AssociationSettingsPage() {
   const [editingMemberType, setEditingMemberType] = useState<number | null>(
     null
   );
-  const [newMemberType, setNewMemberType] = useState<MemberType>({
+  const [newMemberType, setNewMemberType] = useState<MemberTypeConfig>({
     name: "",
     cotisationAmount: 0,
     description: "",
-    defaultRole: "",
   });
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("members");
@@ -162,6 +147,11 @@ export default function AssociationSettingsPage() {
     associationId,
   ]);
 
+  const getCurrencySymbol = (currencyCode: string): string => {
+  const currency = CURRENCIES.find(c => c.code === currencyCode);
+  return currency?.symbol || currencyCode;
+};
+
   const showConfirmDialog = (
     title: string,
     message: string,
@@ -187,45 +177,24 @@ export default function AssociationSettingsPage() {
       return;
     }
 
-    if (!newMemberType.defaultRole) {
-      toast.error(t("memberTypes.missingDefaultRole"), {
-        description: t("memberTypes.missingDefaultRoleDescription"),
-      });
-      return;
-    }
-
     try {
       const updatedMemberTypes = [
         ...(association?.memberTypes || []),
         newMemberType,
       ];
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ memberTypes: updatedMemberTypes }),
-        }
-      );
+      await associationsApi.updateConfiguration(associationId, {
+        memberTypes: updatedMemberTypes,
+      });
 
-      if (response.ok) {
-        await refetch();
-        setNewMemberType({
-          name: "",
-          cotisationAmount: 0,
-          description: "",
-          defaultRole: "",
-        });
-        setShowAddForm(false);
-        toast.success(t("memberTypes.created"));
-      } else {
-        const error = await response.json();
-        throw new Error(error.error || "Erreur serveur");
-      }
+      await refetch();
+      setNewMemberType({
+        name: "",
+        cotisationAmount: 0,
+        description: "",
+      });
+      setShowAddForm(false);
+      toast.success(t("memberTypes.created"));
     } catch (error: unknown) {
       console.error("Erreur ajout type membre:", error);
       const errorMessage =
@@ -236,7 +205,7 @@ export default function AssociationSettingsPage() {
 
   const handleUpdateMemberType = async (
     index: number,
-    updatedType: MemberType
+    updatedType: MemberTypeConfig
   ) => {
     try {
       const updatedMemberTypes =
@@ -244,24 +213,14 @@ export default function AssociationSettingsPage() {
           i === index ? updatedType : type
         ) || [];
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ memberTypes: updatedMemberTypes }),
-        }
-      );
+      await associationsApi.updateConfiguration(associationId, {
+        memberTypes: updatedMemberTypes,
+      });
 
-      if (response.ok) {
-        await refetch();
-        setEditingMemberType(null);
-        toast.success(t("memberTypes.updated"));
-      }
-    } catch (error) {
+      await refetch();
+      setEditingMemberType(null);
+      toast.success(t("memberTypes.updated"));
+    } catch (error: unknown) {
       console.error("Erreur modification type membre:", error);
       toast.error("Erreur lors de la modification");
     }
@@ -278,23 +237,13 @@ export default function AssociationSettingsPage() {
           const updatedMemberTypes =
             association?.memberTypes?.filter((_, i) => i !== index) || [];
 
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-              },
-              body: JSON.stringify({ memberTypes: updatedMemberTypes }),
-            }
-          );
+          await associationsApi.updateConfiguration(associationId, {
+            memberTypes: updatedMemberTypes,
+          });
 
-          if (response.ok) {
-            await refetch();
-            toast.success(t("memberTypes.deleted"));
-          }
-        } catch (error) {
+          await refetch();
+          toast.success(t("memberTypes.deleted"));
+        } catch (error: unknown) {
           console.error("Erreur suppression type membre:", error);
           toast.error("Erreur lors de la suppression");
         } finally {
@@ -330,34 +279,22 @@ export default function AssociationSettingsPage() {
         customRole,
       ];
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ customRoles: updatedCustomRoles }),
-        }
-      );
+      await associationsApi.updateConfiguration(associationId, {
+        customRoles: updatedCustomRoles,
+      });
 
-      if (response.ok) {
-        await refetch();
-        setNewCustomRole({
-          name: "",
-          description: "",
-        });
-        setShowAddCustomRole(false);
-        toast.success(t("organisation.roleCreated"), {
-          description: t("organisation.roleCreatedDescription", {
-            name: newCustomRole.name,
-          }),
-        });
-      } else {
-        throw new Error("Erreur serveur");
-      }
-    } catch (error) {
+      await refetch();
+      setNewCustomRole({
+        name: "",
+        description: "",
+      });
+      setShowAddCustomRole(false);
+      toast.success(t("organisation.roleCreated"), {
+        description: t("organisation.roleCreatedDescription", {
+          name: newCustomRole.name,
+        }),
+      });
+    } catch (error: unknown) {
       console.error("Erreur ajout rôle personnalisé:", error);
       toast.error("Erreur lors de la création du rôle");
     }
@@ -384,23 +321,13 @@ export default function AssociationSettingsPage() {
           const updatedCustomRoles =
             association?.customRoles?.filter((r) => r.id !== roleId) || [];
 
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-              },
-              body: JSON.stringify({ customRoles: updatedCustomRoles }),
-            }
-          );
+          await associationsApi.updateConfiguration(associationId, {
+            customRoles: updatedCustomRoles,
+          });
 
-          if (response.ok) {
-            await refetch();
-            toast.success(t("organisation.roleDeleted"));
-          }
-        } catch (error) {
+          await refetch();
+          toast.success(t("organisation.roleDeleted"));
+        } catch (error: unknown) {
           console.error("Erreur suppression rôle:", error);
           toast.error("Erreur lors de la suppression");
         } finally {
@@ -427,7 +354,7 @@ export default function AssociationSettingsPage() {
         const result = await response.json();
         setMembers(result.data.members || []);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Erreur chargement membres:", error);
     } finally {
       setIsLoadingMembers(false);
@@ -481,31 +408,21 @@ export default function AssociationSettingsPage() {
           return role;
         }) || [];
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ customRoles: updatedCustomRoles }),
-        }
-      );
+      await associationsApi.updateConfiguration(associationId, {
+        customRoles: updatedCustomRoles,
+      });
 
-      if (response.ok) {
-        await refetch();
-        setShowAssignModal(false);
-        setCurrentRole(null);
-        setSelectedMemberId("");
-        toast.success(t("organisation.roleAssignedSuccess"), {
-          description: t("organisation.roleAssignedSuccessDescription", {
-            name: `${selectedMember.user.firstName} ${selectedMember.user.lastName}`,
-            role: currentRole.data.name,
-          }),
-        });
-      }
-    } catch (error) {
+      await refetch();
+      setShowAssignModal(false);
+      setCurrentRole(null);
+      setSelectedMemberId("");
+      toast.success(t("organisation.roleAssignedSuccess"), {
+        description: t("organisation.roleAssignedSuccessDescription", {
+          name: `${selectedMember.user.firstName} ${selectedMember.user.lastName}`,
+          role: currentRole.data.name,
+        }),
+      });
+    } catch (error: unknown) {
       console.error("Erreur attribution rôle:", error);
       toast.error(t("organisation.assignError"), {
         description: t("organisation.assignErrorDescription"),
@@ -533,25 +450,15 @@ export default function AssociationSettingsPage() {
               return role;
             }) || [];
 
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-              },
-              body: JSON.stringify({ customRoles: updatedCustomRoles }),
-            }
-          );
+          await associationsApi.updateConfiguration(associationId, {
+            customRoles: updatedCustomRoles,
+          });
 
-          if (response.ok) {
-            await refetch();
-            setShowAssignModal(false);
-            setCurrentRole(null);
-            toast.success(t("organisation.roleRemovedSuccess"));
-          }
-        } catch (error) {
+          await refetch();
+          setShowAssignModal(false);
+          setCurrentRole(null);
+          toast.success(t("organisation.roleRemovedSuccess"));
+        } catch (error: unknown) {
           console.error("Erreur retrait rôle:", error);
           toast.error(t("organisation.removeError"), {
             description: t("organisation.removeErrorDescription"),
@@ -591,25 +498,13 @@ export default function AssociationSettingsPage() {
         [field]: value,
       };
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/configuration`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({
-            cotisationSettings: updatedCotisationSettings,
-          }),
-        }
-      );
+      await associationsApi.updateConfiguration(associationId, {
+        cotisationSettings: updatedCotisationSettings,
+      });
 
-      if (response.ok) {
-        await refetch();
-        toast.success(t("cotisations.updated"));
-      }
-    } catch (error) {
+      await refetch();
+      toast.success(t("cotisations.updated"));
+    } catch (error: unknown) {
       console.error("Erreur modification paramètres cotisations:", error);
       toast.error("Erreur lors de la modification");
     }
@@ -725,22 +620,7 @@ export default function AssociationSettingsPage() {
                 {t("memberTypes.title")}
               </CardTitle>
               <Button
-                onClick={() => {
-                  if (!roles || roles.length === 0) {
-                    toast.warning(t("memberTypes.noRolesWarning"), {
-                      description: t("memberTypes.noRolesDescription"),
-                      action: {
-                        label: t("memberTypes.createRoles"),
-                        onClick: () =>
-                          router.push(
-                            `/modules/associations/${associationId}/settings/roles`
-                          ),
-                      },
-                    });
-                    return;
-                  }
-                  setShowAddForm(true);
-                }}
+                onClick={() => setShowAddForm(true)}
                 className="flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
@@ -753,7 +633,7 @@ export default function AssociationSettingsPage() {
             {showAddForm && (
               <Card className="p-4 border-dashed border-2 border-gray-300">
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Input
                       placeholder={t("memberTypes.name")}
                       value={newMemberType.name}
@@ -787,33 +667,6 @@ export default function AssociationSettingsPage() {
                     }
                   />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {t("memberTypes.defaultRole")} *
-                    </label>
-                    <select
-                      value={newMemberType.defaultRole}
-                      onChange={(e) =>
-                        setNewMemberType((prev) => ({
-                          ...prev,
-                          defaultRole: e.target.value,
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">{t("memberTypes.selectRole")}</option>
-                      {roles?.map((role) => (
-                        <option key={role.id} value={role.id}>
-                          {role.name} ({role.permissions?.length || 0}{" "}
-                          {t("memberTypes.permissions")})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t("memberTypes.roleHelp")}
-                    </p>
-                  </div>
-
                   <div className="flex gap-2">
                     <Button onClick={handleAddMemberType}>
                       <Save className="h-4 w-4 mr-2" />
@@ -833,86 +686,61 @@ export default function AssociationSettingsPage() {
 
             {/* Liste des types existants */}
             <div className="space-y-3">
-              {association.memberTypes?.map((type, index) => {
-                const linkedRole = roles?.find(
-                  (r) => r.id === type.defaultRole
-                );
+              {association.memberTypes?.map((type, index) => (
+                <Card key={index} className="p-4">
+                  {editingMemberType === index ? (
+                    <EditMemberTypeForm
+                      memberType={type}
+                      onSave={(updatedType) =>
+                        handleUpdateMemberType(index, updatedType)
+                      }
+                      onCancel={() => setEditingMemberType(null)}
+                      translations={{
+                        name: t("memberTypes.name"),
+                        amount: t("memberTypes.amount"),
+                        description: t("memberTypes.description"),
+                        save: t("memberTypes.save"),
+                        cancel: t("memberTypes.cancel"),
+                      }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-4">
+                          <h4 className="font-medium capitalize">
+                            {type.name}
+                          </h4>
 
-                return (
-                  <Card key={index} className="p-4">
-                    {editingMemberType === index ? (
-                      <EditMemberTypeForm
-                        memberType={type}
-                        availableRoles={roles || []}
-                        onSave={(updatedType) =>
-                          handleUpdateMemberType(index, updatedType)
-                        }
-                        onCancel={() => setEditingMemberType(null)}
-                        translations={{
-                          name: t("memberTypes.name"),
-                          amount: t("memberTypes.amount"),
-                          description: t("memberTypes.description"),
-                          defaultRole: t("memberTypes.defaultRole"),
-                          selectRole: t("memberTypes.selectRole"),
-                          permissions: t("memberTypes.permissions"),
-                          save: t("memberTypes.save"),
-                          cancel: t("memberTypes.cancel"),
-                        }}
-                      />
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-4">
-                            <h4 className="font-medium capitalize">
-                              {type.name}
-                            </h4>
-                            <Badge
-                              variant="secondary"
-                              className="bg-green-100 text-green-700"
-                            >
-                              {type.cotisationAmount}
-                              {t("memberTypes.perMonth")}
-                            </Badge>
-                            {linkedRole && (
-                              <Badge variant="outline" className="text-xs">
-                                🎭 {linkedRole.name}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {type.description}
-                          </p>
-                          {linkedRole && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              {t("memberTypes.defaultRoleInfo", {
-                                roleName: linkedRole.name,
-                                count: linkedRole.permissions?.length || 0,
-                              })}
-                            </p>
-                          )}
+                          <Badge variant="secondary" className="bg-green-100 text-green-700">
+  {type.cotisationAmount} {getCurrencySymbol(association.primaryCurrency)}/mois
+</Badge>
+
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditingMemberType(index)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 hover:text-red-700"
-                            onClick={() => handleDeleteMemberType(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {type.description}
+                        </p>
                       </div>
-                    )}
-                  </Card>
-                );
-              })}
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingMemberType(index)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteMemberType(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              ))}
 
               {(!association.memberTypes ||
                 association.memberTypes.length === 0) && (
@@ -954,19 +782,11 @@ export default function AssociationSettingsPage() {
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => {
-                      console.log(
-                        "🔍 Jour:",
-                        day,
-                        "Traduction:",
-                        t("cotisations.dueDayOption", { day })
-                      );
-                      return (
-                        <option key={day} value={day}>
-                          {t("cotisations.dueDayOption", { day })}
-                        </option>
-                      );
-                    })}
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                      <option key={day} value={day}>
+                        {t("cotisations.dueDayOption", { day })}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1111,15 +931,15 @@ export default function AssociationSettingsPage() {
       {/* Content - Sections Tab */}
       {activeTab === "sections" && association && (
         <div className="space-y-6">
-          <SectionsTab
-            association={{
-              id: association.id,
-              name: association.name,
-              isMultiSection: association.isMultiSection || false,
-              features: association.features || { maxSections: 10 },
-            }}
-            token={localStorage.getItem("token")}
-          />
+
+   <SectionsTab
+  association={{
+    ...association,
+    features: association.features || DEFAULT_ASSOCIATION_FEATURES, // ✅ Sécurité
+  }}
+  token={localStorage.getItem("token")}
+/>
+
         </div>
       )}
 
@@ -1170,17 +990,13 @@ export default function AssociationSettingsPage() {
 // ============================================
 
 interface EditMemberTypeFormProps {
-  memberType: MemberType;
-  availableRoles: Array<{ id: string; name: string; permissions?: string[] }>;
-  onSave: (type: MemberType) => void;
+  memberType: MemberTypeConfig;
+  onSave: (type: MemberTypeConfig) => void;
   onCancel: () => void;
   translations: {
     name: string;
     amount: string;
     description: string;
-    defaultRole: string;
-    selectRole: string;
-    permissions: string;
     save: string;
     cancel: string;
   };
@@ -1188,7 +1004,6 @@ interface EditMemberTypeFormProps {
 
 function EditMemberTypeForm({
   memberType,
-  availableRoles,
   onSave,
   onCancel,
   translations: t,
@@ -1197,7 +1012,7 @@ function EditMemberTypeForm({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input
           placeholder={t.name}
           value={editedType.name}
@@ -1230,29 +1045,6 @@ function EditMemberTypeForm({
           }))
         }
       />
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {t.defaultRole} *
-        </label>
-        <select
-          value={editedType.defaultRole}
-          onChange={(e) =>
-            setEditedType((prev) => ({
-              ...prev,
-              defaultRole: e.target.value,
-            }))
-          }
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          <option value="">{t.selectRole}</option>
-          {availableRoles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name} ({role.permissions?.length || 0} {t.permissions})
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className="flex gap-2">
         <Button onClick={() => onSave(editedType)}>

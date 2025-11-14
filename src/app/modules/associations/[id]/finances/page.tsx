@@ -1,588 +1,747 @@
 // src/app/modules/associations/[id]/finances/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { useAuthStore } from "@/stores/authStore";
-import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
-  Plus,
   Wallet,
   TrendingUp,
   AlertTriangle,
   Clock,
-  Euro,
+  Download,
+  Plus,
+  Eye,
+  Filter,
+  X,
   FileText,
   Users,
   Building,
   Handshake,
   Star,
-  Zap
+  Zap,
+  Calendar,
+  Euro,
 } from "lucide-react";
+import { toast } from "sonner";
 
-// Import des types
-import type { 
-  Association, 
-  ExpenseRequest, 
-  FinancialSummary, 
-  ApiResponse,
-  ExpenseRequestsResponse
+// ✅ Imports hooks
+import { useAssociation } from "@/hooks/association/useAssociation";
+import { useExpenseRequests } from "@/hooks/association/useExpenseRequests";
+import { useFinancialSummary } from "@/hooks/association/useFinancialSummary";
+import { usePermissions } from "@/hooks/association/usePermissions";
+import { CURRENCIES } from "@/lib/constants/countries";
+
+// ✅ Imports types
+import type {
+  ExpenseRequest,
+  ExpenseType,
+  ExpenseStatus,
+  UrgencyLevel,
+  ExpenseFilters,
 } from "@/types/association/finances";
 
-export default function FinancesPage() {
-  const { user, token } = useAuthStore();
-  const router = useRouter();
-  const params = useParams();
-  const associationId = params.id as string;
+// ✅ Imports components
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { Pagination } from "@/components/ui/Pagination";
+import { StatCard } from "@/components/ui/StatCard";
 
-  // États avec types stricts
-  const [association, setAssociation] = useState<Association | null>(null);
-  const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([]);
-  const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'pending'>('dashboard');
+export default function FinancesPage() {
+  const params = useParams();
+  const router = useRouter();
+  const t = useTranslations("finances");
+  const tCommon = useTranslations("common");
+  const associationId = Number(params.id);
+
+  // ============================================
+  // HOOKS
+  // ============================================
+  const { association, loading: associationLoading } = useAssociation(associationId);
+  const { expenses, loading, pagination, fetchExpenses, refetch } = useExpenseRequests(associationId);
+  const { summary, loading: summaryLoading, fetchSummary } = useFinancialSummary(associationId);
+  const {
+    canViewFinances,
+    canValidateExpenses,
+    canExportFinancialData,
+  } = usePermissions(associationId);
+
+  // ============================================
+  // ÉTATS LOCAUX
+  // ============================================
+  const [activeTab, setActiveTab] = useState<"dashboard" | "requests" | "pending">("dashboard");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedType, setSelectedType] = useState<string>("all");
+  const [selectedUrgency, setSelectedUrgency] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [showFilters, setShowFilters] = useState(true);
+
+  // ============================================
+  // CHARGEMENT INITIAL
+  // ============================================
+ useEffect(() => {
+  // ✅ Ne rien faire tant que l'association n'est pas chargée
+  if (!association) return;
+
+  // ✅ Charger le résumé financier
+  fetchSummary("all");
+}, [association, fetchSummary]);
 
   useEffect(() => {
-    if (associationId && token) {
-      fetchData();
-    }
-  }, [associationId, token]);
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      await Promise.all([
-        fetchAssociation(),
-        fetchExpenseRequests(),
-        fetchFinancialSummary()
-      ]);
-    } catch (error) {
-      console.error("Erreur chargement données:", error);
-      setError("Erreur de chargement des données");
-      toast.error("Erreur de chargement des données");
-    } finally {
-      setIsLoading(false);
-    }
+  const filters: ExpenseFilters = {
+    status: selectedStatus !== "all" ? (selectedStatus as ExpenseStatus) : undefined,
+    expenseType: selectedType !== "all" ? (selectedType as ExpenseType) : undefined,
+    urgencyLevel: selectedUrgency !== "all" ? (selectedUrgency as UrgencyLevel) : undefined,
+    search: searchQuery || undefined,
+    page: currentPage,
+    limit: itemsPerPage,
+    sortBy: "created_at",
+    sortOrder: "DESC",
   };
 
-  const fetchAssociation = async () => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+  fetchExpenses(filters);
+}, [
+  selectedStatus,
+  selectedType,
+  selectedUrgency,
+  searchQuery,
+  currentPage,
+  itemsPerPage,
+  fetchExpenses,
+]);
 
-      if (response.ok) {
-        const result: ApiResponse<{ association: Association }> = await response.json();
-        setAssociation(result.data.association);
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
-    } catch (error) {
-      console.error("Erreur chargement association:", error);
-      throw error;
-    }
-  };
+  // ============================================
+  // HELPERS
+  // ============================================
+  const getCurrencySymbol = useCallback((currencyCode: string): string => {
+    const currency = CURRENCIES.find((c) => c.code === currencyCode);
+    return currency?.symbol || currencyCode;
+  }, []);
 
-  const fetchExpenseRequests = async () => {
-  try {
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/expense-requests?limit=10&sortBy=created_at&sortOrder=DESC`;
-    console.log('🔍 Fetching from URL:', url);
+  const formatAmount = useCallback(
+  (amount: number | string | undefined | null, currencyCode: string): string => {
+    // Convertir en nombre et gérer les cas invalides
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
     
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    console.log('📡 Response status:', response.status);
-
-    if (response.ok) {
-      const result: ExpenseRequestsResponse = await response.json();
-      console.log('📋 Résultat reçu:', result);
-      console.log('📊 Nombre de demandes:', result.expenseRequests?.length);
-      setExpenseRequests(result.expenseRequests || []);
-    } else {
-      console.warn("❌ Erreur réponse:", response.status);
-      setExpenseRequests([]);
+    // Si le montant est invalide, retourner 0.00
+    if (numAmount === null || numAmount === undefined || isNaN(numAmount)) {
+      return `0.00 ${getCurrencySymbol(currencyCode)}`;
     }
-  } catch (error) {
-    console.error("❌ Erreur fetch:", error);
-    setExpenseRequests([]);
+    
+    return `${numAmount.toFixed(2)} ${getCurrencySymbol(currencyCode)}`;
+  },
+  [getCurrencySymbol]
+);
+
+  const formatDate = useCallback((dateString: string): string => {
+    return new Date(dateString).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }, []);
+
+  // ============================================
+// STATUS BADGE
+// ============================================
+const getStatusBadge = (status: ExpenseStatus) => {
+  switch (status) {
+    case 'pending':
+      return <Badge variant="warning">{t("status.pending")}</Badge>;
+    case 'under_review':
+      return <Badge variant="secondary">{t("status.under_review")}</Badge>;
+    case 'additional_info_needed':
+      return <Badge variant="warning">{t("status.additional_info_needed")}</Badge>;
+    case 'approved':
+      return <Badge variant="success">{t("status.approved")}</Badge>;
+    case 'rejected':
+      return <Badge variant="danger">{t("status.rejected")}</Badge>;
+    case 'paid':
+      return <Badge variant="success">{t("status.paid")}</Badge>;
+    case 'cancelled':
+      return <Badge variant="secondary">{t("status.cancelled")}</Badge>;
+    default:
+      return <Badge variant="secondary">{status}</Badge>;
   }
 };
 
-  const fetchFinancialSummary = async () => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/associations/${associationId}/financial-summary`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
 
-      if (response.ok) {
-        const result: { success: boolean; data: FinancialSummary } = await response.json();
-        setFinancialSummary(result.data);
-        
-        // Afficher les alertes s'il y en a
-        if (result.data.alerts && result.data.alerts.length > 0) {
-          result.data.alerts.forEach(alert => {
-            if (alert.severity === 'warning') {
-              toast.warning(alert.message);
-            } else if (alert.severity === 'danger') {
-              toast.error(alert.message);
-            } else {
-              toast.info(alert.message);
-            }
-          });
-        }
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
-    } catch (error) {
-      console.error("Erreur chargement résumé financier:", error);
-      toast.error("Impossible de charger le résumé financier");
-      setFinancialSummary(null);
-    }
+  // ============================================
+  // URGENCY BADGE
+  // ============================================
+ const getUrgencyBadge = (urgency: UrgencyLevel) => {
+  switch (urgency) {
+    case 'low':
+      return <Badge variant="secondary">{t("urgencyLevels.low")}</Badge>;
+    case 'normal':
+      return <Badge variant="default">{t("urgencyLevels.normal")}</Badge>;
+    case 'high':
+      return <Badge variant="warning">{t("urgencyLevels.high")}</Badge>;
+    case 'critical':
+      return <Badge variant="danger">{t("urgencyLevels.critical")}</Badge>;
+    default:
+      return <Badge variant="default">{urgency}</Badge>;
+  }
+};
+
+  // ============================================
+  // EXPENSE TYPE HELPERS
+  // ============================================
+  const getExpenseTypeIcon = (type: ExpenseType) => {
+    const icons: Record<ExpenseType, typeof FileText> = {
+      aide_membre: Users,
+      depense_operationnelle: Building,
+      pret_partenariat: Handshake,
+      projet_special: Star,
+      urgence_communautaire: Zap,
+    };
+    return icons[type] || FileText;
   };
 
-  const getExpenseTypeIcon = (type: string) => {
-    switch (type) {
-      case 'aide_membre': return Users;
-      case 'depense_operationnelle': return Building;
-      case 'pret_partenariat': return Handshake;
-      case 'projet_special': return Star;
-      case 'urgence_communautaire': return Zap;
-      default: return FileText;
-    }
+  const getExpenseTypeLabel = (type: ExpenseType): string => {
+    return t(`expenseTypes.${type}`);
   };
 
-  const getExpenseTypeLabel = (type: string): string => {
-    switch (type) {
-      case 'aide_membre': return 'Aide aux membres';
-      case 'depense_operationnelle': return 'Dépense opérationnelle';
-      case 'pret_partenariat': return 'Prêt & partenariat';
-      case 'projet_special': return 'Projet spécial';
-      case 'urgence_communautaire': return 'Urgence communautaire';
-      default: return type;
-    }
+  // ============================================
+  // HANDLERS FILTRES
+  // ============================================
+  const handleSearch = () => {
+    setCurrentPage(1);
   };
 
-  const getStatusBadge = (status: ExpenseRequest['status']) => {
-    switch (status) {
-      case 'pending':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">En attente</Badge>;
-      case 'under_review':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">En cours</Badge>;
-      case 'additional_info_needed':
-        return <Badge variant="warning" className="bg-orange-50 text-orange-700 border-orange-200">Info requise</Badge>;
-      case 'approved':
-        return <Badge variant="success" className="bg-green-50 text-green-700 border-green-200">Approuvée</Badge>;
-      case 'paid':
-        return <Badge variant="success" className="bg-green-100 text-green-800 border-green-300">Payée</Badge>;
-      case 'rejected':
-        return <Badge variant="danger" className="bg-red-50 text-red-700 border-red-200">Refusée</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+  const handleResetFilters = () => {
+    setSelectedStatus("all");
+    setSelectedType("all");
+    setSelectedUrgency("all");
+    setSearchQuery("");
+    setCurrentPage(1);
   };
 
-  const getUrgencyBadge = (level: ExpenseRequest['urgencyLevel']) => {
-    switch (level) {
-      case 'critical':
-        return <Badge variant="danger" className="ml-2">Critique</Badge>;
-      case 'high':
-        return <Badge variant="warning" className="ml-2">Urgent</Badge>;
-      case 'normal':
-        return null;
-      case 'low':
-        return <Badge variant="outline" className="ml-2 bg-gray-50 text-gray-600">Faible</Badge>;
-      default:
-        return null;
-    }
+  const handleStatusChange = (value: string) => {
+    setSelectedStatus(value);
+    setCurrentPage(1);
   };
 
-  if (isLoading) {
+  const handleTypeChange = (value: string) => {
+    setSelectedType(value);
+    setCurrentPage(1);
+  };
+
+  const handleUrgencyChange = (value: string) => {
+    setSelectedUrgency(value);
+    setCurrentPage(1);
+  };
+
+  // ============================================
+  // HANDLERS PAGINATION
+  // ============================================
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  // ============================================
+  // HANDLERS ACTIONS
+  // ============================================
+  const handleViewDetails = (expense: ExpenseRequest) => {
+    router.push(`/modules/associations/${associationId}/finances/${expense.id}`);
+  };
+
+  const handleExport = async () => {
+    if (!canExportFinancialData) {
+      toast.error(t("errors.noPermission"));
+      return;
+    }
+
+    toast.info(tCommon("export.generating"));
+    // TODO: Implémenter export
+  };
+
+  const handleNewRequest = () => {
+    router.push(`/modules/associations/${associationId}/finances/new`);
+  };
+
+  // ============================================
+  // LOADING STATES
+  // ============================================
+  if (associationLoading) {
     return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="flex items-center justify-center min-h-screen">
-          <LoadingSpinner size="lg" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner size="lg" />
+      </div>
     );
   }
 
-  if (error) {
+  if (!association) {
     return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-6xl mx-auto p-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Erreur</h1>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
-            </Button>
-          </div>
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-600">{tCommon("errors.notFound")}</p>
+      </div>
     );
   }
 
+  // ============================================
+  // RENDER
+  // ============================================
   return (
-    <ProtectedRoute requiredModule="associations">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      {/* ✅ HEADER */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
             <Button
               variant="ghost"
-              onClick={() => router.push(`/modules/associations/${associationId}`)}
+              size="sm"
+              onClick={() => router.push(`/modules/associations/${associationId}/dashboard`)}
+              className="hover:bg-gray-100"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
+              <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestion Financière</h1>
-              <p className="text-gray-600">{financialSummary?.association.name || association?.name}</p>
+              <h1 className="text-3xl font-bold text-gray-900">{t("title")}</h1>
+              <p className="text-gray-600 mt-2">{t("subtitle")}</p>
             </div>
           </div>
-          
-          {/* Bouton "Nouvelle demande" - Le backend gérera les permissions */}
-          <Button
-            onClick={() => router.push(`/modules/associations/${associationId}/finances/create`)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nouvelle demande
-          </Button>
-        </div>
-
-        {/* Navigation tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'dashboard'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Wallet className="h-4 w-4 inline mr-2" />
-              Tableau de bord
-            </button>
-            
-            <button
-              onClick={() => setActiveTab('requests')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'requests'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <FileText className="h-4 w-4 inline mr-2" />
-              Toutes les demandes
-            </button>
-            
-            <button
-              onClick={() => setActiveTab('pending')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm relative ${
-                activeTab === 'pending'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Clock className="h-4 w-4 inline mr-2" />
-              En attente de validation
-            </button>
-          </nav>
-        </div>
-
-        {/* Content based on active tab */}
-        {activeTab === 'dashboard' && financialSummary && (
-          <div className="space-y-6">
-            {/* Financial overview cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Solde disponible</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {financialSummary.balance.current.availableBalance.toFixed(2)} {financialSummary.association.currency}
-                      </p>
-                    </div>
-                    <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                      <Euro className="h-6 w-6 text-green-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total revenus</p>
-                      <p className="text-2xl font-bold text-blue-600">
-                        {financialSummary.balance.current.totalIncome.toFixed(2)} {financialSummary.association.currency}
-                      </p>
-                    </div>
-                    <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6 text-blue-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Dépenses payées</p>
-                      <p className="text-2xl font-bold text-orange-600">
-                        {financialSummary.balance.current.totalExpenses.toFixed(2)} {financialSummary.association.currency}
-                      </p>
-                    </div>
-                    <div className="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center">
-                      <FileText className="h-6 w-6 text-orange-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Prêts en cours</p>
-                      <p className="text-2xl font-bold text-purple-600">
-                        {financialSummary.balance.current.outstandingLoans.toFixed(2)} {financialSummary.association.currency}
-                      </p>
-                    </div>
-                    <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                      <Handshake className="h-6 w-6 text-purple-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Alerts - Seulement si disponible dans les données */}
-            {financialSummary.alerts && financialSummary.alerts.some(alert => alert.severity === 'warning') && (
-              <Card className="border-yellow-200 bg-yellow-50">
-                <CardContent className="p-4">
-                  <div className="flex items-center">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-yellow-800">Alertes financières</p>
-                      <div className="text-sm text-yellow-700 mt-1">
-                        {financialSummary.alerts
-                          .filter(alert => alert.severity === 'warning')
-                          .map((alert, index) => (
-                            <div key={index}>{alert.message}</div>
-                          ))
-                        }
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Membership Statistics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Statistiques membres</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Total membres actifs</span>
-                      <span className="font-semibold">{financialSummary.membership.total}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Sections</span>
-                      <span className="font-semibold">{financialSummary.association.sectionsCount}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cotisations</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Nombre de paiements</span>
-                      <span className="font-semibold">{financialSummary.cotisations.count}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Total net</span>
-                      <span className="font-semibold">{financialSummary.cotisations.totalNet.toFixed(2)} {financialSummary.association.currency}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Commissions</span>
-                      <span className="font-semibold">{financialSummary.cotisations.totalCommissions.toFixed(2)} {financialSummary.association.currency}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Expenses by type - Seulement s'il y a des données */}
-            {financialSummary.expenses.byType.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Répartition des dépenses par type</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {financialSummary.expenses.byType.map((item) => {
-                      const Icon = getExpenseTypeIcon(item.type);
-                      return (
-                        <div key={item.type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <Icon className="h-4 w-4 text-blue-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">{getExpenseTypeLabel(item.type)}</p>
-                              <p className="text-sm text-gray-600">{item.count} demande(s)</p>
-                            </div>
-                          </div>
-                          <p className="font-semibold text-gray-900">{item.total.toFixed(2)} {financialSummary.association.currency}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {/* Recent requests tab */}
-        {activeTab === 'requests' && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Demandes récentes</CardTitle>
+          <div className="flex items-center gap-3">
+            {canExportFinancialData && (
               <Button
+                onClick={handleExport}
                 variant="outline"
-                onClick={() => router.push(`/modules/associations/${associationId}/finances/history`)}
+                className="flex items-center gap-2 shadow-sm"
               >
-                Voir tout l'historique
+                <Download className="h-4 w-4" />
+                {t("actions.export")}
               </Button>
+            )}
+            <Button
+              onClick={handleNewRequest}
+              className="flex items-center gap-2 shadow-md hover:shadow-lg transition-shadow"
+            >
+              <Plus className="h-4 w-4" />
+              {t("actions.newRequest")}
+            </Button>
+          </div>
+        </div>
+
+        {/* ✅ TABS */}
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === "dashboard"
+                ? "text-primary border-b-2 border-primary"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {t("tabs.dashboard")}
+          </button>
+          <button
+            onClick={() => setActiveTab("requests")}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === "requests"
+                ? "text-primary border-b-2 border-primary"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {t("tabs.requests")}
+          </button>
+          {canValidateExpenses && (
+            <button
+              onClick={() => setActiveTab("pending")}
+              className={`px-6 py-3 font-medium transition-colors ${
+                activeTab === "pending"
+                  ? "text-primary border-b-2 border-primary"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {t("tabs.pending")}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ✅ STATISTIQUES */}
+      {activeTab === "dashboard" && summary && (
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <StatCard
+      title={t("stats.currentBalance")}
+      value={formatAmount(
+        summary.balance?.current ?? 0, 
+        association.primaryCurrency
+      )}
+      icon={Wallet}
+      color="blue"
+    />
+    <StatCard
+      title={t("stats.totalExpenses")}
+      value={formatAmount(
+        summary.expenses?.total ?? 0, 
+        association.primaryCurrency
+      )}
+      icon={TrendingUp}
+      color="purple"
+    />
+    <StatCard
+      title={t("stats.pendingRequests")}
+      value={(summary.expenses?.pending ?? 0).toString()}
+      icon={Clock}
+      color="orange"
+    />
+    <StatCard
+      title={t("stats.approvedAmount")}
+      value={formatAmount(
+        summary.expenses?.approved ?? 0, 
+        association.primaryCurrency
+      )}
+      icon={AlertTriangle}
+      color="green"
+    />
+  </div>
+)}
+
+      {/* ✅ FILTRES */}
+      {activeTab !== "dashboard" && (
+        <Card className="shadow-sm mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">{t("filters.title")}</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          {showFilters && (
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Recherche */}
+                <div className="md:col-span-2">
+                  <Input
+                    placeholder={t("filters.search")}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  />
+                </div>
+
+                {/* Statut */}
+                <Select value={selectedStatus} onValueChange={handleStatusChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("filters.status")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("status.all")}</SelectItem>
+                    <SelectItem value="pending">{t("status.pending")}</SelectItem>
+                    <SelectItem value="under_review">{t("status.under_review")}</SelectItem>
+                    <SelectItem value="approved">{t("status.approved")}</SelectItem>
+                    <SelectItem value="rejected">{t("status.rejected")}</SelectItem>
+                    <SelectItem value="paid">{t("status.paid")}</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Type */}
+                <Select value={selectedType} onValueChange={handleTypeChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("filters.type")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("expenseTypes.all")}</SelectItem>
+                    <SelectItem value="aide_membre">{t("expenseTypes.aide_membre")}</SelectItem>
+                    <SelectItem value="depense_operationnelle">
+                      {t("expenseTypes.depense_operationnelle")}
+                    </SelectItem>
+                    <SelectItem value="pret_partenariat">
+                      {t("expenseTypes.pret_partenariat")}
+                    </SelectItem>
+                    <SelectItem value="projet_special">
+                      {t("expenseTypes.projet_special")}
+                    </SelectItem>
+                    <SelectItem value="urgence_communautaire">
+                      {t("expenseTypes.urgence_communautaire")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Urgence */}
+                <Select value={selectedUrgency} onValueChange={handleUrgencyChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("filters.urgency")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("urgencyLevels.all")}</SelectItem>
+                    <SelectItem value="low">{t("urgencyLevels.low")}</SelectItem>
+                    <SelectItem value="normal">{t("urgencyLevels.normal")}</SelectItem>
+                    <SelectItem value="high">{t("urgencyLevels.high")}</SelectItem>
+                    <SelectItem value="critical">{t("urgencyLevels.critical")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Boutons actions filtres */}
+              <div className="flex items-center gap-3 mt-4">
+                <Button onClick={handleSearch} size="sm" className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  {tCommon("actions.apply")}
+                </Button>
+                <Button
+                  onClick={handleResetFilters}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  {t("filters.reset")}
+                </Button>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* ✅ CONTENU SELON TAB */}
+      {activeTab === "dashboard" && summary && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Dépenses par type */}
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>{t("charts.expensesByType")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {expenseRequests.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">Aucune demande financière pour le moment</p>
-                    <Button
-                      className="mt-4"
-                      onClick={() => router.push(`/modules/associations/${associationId}/finances/create`)}
+                {summary.expenses.byType.map((item) => {
+                  const Icon = getExpenseTypeIcon(item.type);
+                  return (
+                    <div
+                      key={item.type}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                     >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Créer la première demande
-                    </Button>
-                  </div>
-                ) : (
-                  expenseRequests.map((request) => {
-                    const Icon = getExpenseTypeIcon(request.expenseType);
-                    return (
-                      <div
-                        key={request.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => router.push(`/modules/associations/${associationId}/finances/${request.id}`)}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-2">
-                              <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <Icon className="h-4 w-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <h3 className="font-medium text-gray-900">{request.title}</h3>
-                                <p className="text-sm text-gray-600">{getExpenseTypeLabel(request.expenseType)}</p>
-                              </div>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">{request.description}</p>
-                            <div className="flex items-center space-x-4 text-sm text-gray-500">
-                              <span>Par {request.requester.firstName} {request.requester.lastName}</span>
-                              <span>•</span>
-                              <span>{new Date(request.createdAt).toLocaleDateString()}</span>
-                              {request.isLoan && (
-                                <>
-                                  <span>•</span>
-                                  <Badge variant="outline" className="bg-purple-50 text-purple-700">Prêt</Badge>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right ml-4">
-                            <p className="font-semibold text-lg text-gray-900">
-                             {parseFloat(request.amountRequested).toFixed(2)} {request.currency}
-                            </p>
-                            <div className="flex items-center mt-1">
-                              {getStatusBadge(request.status)}
-                              {getUrgencyBadge(request.urgencyLevel)}
-                            </div>
-                            {request.validationProgress && request.validationProgress.total > 0 && (
-                              <div className="mt-2">
-                                <div className="flex items-center text-xs text-gray-500">
-                                  <span>Validation: {request.validationProgress.completed}/{request.validationProgress.total}</span>
-                                </div>
-                                <div className="w-20 bg-gray-200 rounded-full h-1.5 mt-1">
-                                  <div
-                                    className="bg-blue-600 h-1.5 rounded-full transition-all"
-                                    style={{ width: `${request.validationProgress.percentage}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Icon className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {getExpenseTypeLabel(item.type)}
+                          </p>
+                          <p className="text-sm text-gray-600">{item.count} demande(s)</p>
                         </div>
                       </div>
-                    );
-                  })
-                )}
+                      <p className="font-semibold text-gray-900">
+                        {formatAmount(item.total, association.primaryCurrency)}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Pending validations tab */}
-        {activeTab === 'pending' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>En attente de validation</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">Fonctionnalité en cours de développement</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Les demandes nécessitant votre validation apparaîtront ici
-                </p>
+          {/* Alertes */}
+          {summary.alerts && summary.alerts.length > 0 && (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>{t("alerts.title")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {summary.alerts.map((alert, index) => (
+                    <div
+                      key={index}
+                      className={`p-4 rounded-lg border-l-4 ${
+                        alert.severity === "danger"
+                          ? "bg-red-50 border-red-500"
+                          : alert.severity === "warning"
+                          ? "bg-orange-50 border-orange-500"
+                          : "bg-blue-50 border-blue-500"
+                      }`}
+                    >
+                      <p className="text-sm font-medium text-gray-900">{alert.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ✅ LISTE DES DEMANDES */}
+      {activeTab !== "dashboard" && (
+        <>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : expenses.length === 0 ? (
+            <Card className="shadow-sm">
+              <CardContent className="py-20">
+                <div className="text-center">
+                  <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Euro className="h-10 w-10 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {t("empty.title")}
+                  </h3>
+                  <p className="text-gray-600 mb-6">{t("empty.description")}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card className="shadow-sm mb-6">
+                <CardHeader className="border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{t("table.title")}</CardTitle>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {pagination.total} {tCommon("results")}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.date")}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.title")}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.type")}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.requester")}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.amount")}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.urgency")}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.status")}
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {t("table.actions")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {expenses.map((expense) => (
+                          <tr
+                            key={expense.id}
+                            className="hover:bg-gray-50 transition-colors"
+                          >
+                            {/* Date */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Calendar className="h-3 w-3 text-gray-400" />
+                                {formatDate(expense.createdAt)}
+                              </div>
+                            </td>
+
+                            {/* Titre */}
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-medium text-gray-900 max-w-xs truncate">
+                                {expense.title}
+                              </div>
+                            </td>
+
+                            {/* Type */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge variant="secondary">
+                                {getExpenseTypeLabel(expense.expenseType)}
+                              </Badge>
+                            </td>
+
+                            {/* Demandeur */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {expense.requester ? (
+                                <div className="text-sm text-gray-900">
+                                  {expense.requester.firstName} {expense.requester.lastName}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+
+                            {/* Montant */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="font-medium text-gray-900">
+                                {formatAmount(expense.amountRequested, expense.currency)}
+                              </div>
+                            </td>
+
+                            {/* Urgence */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {getUrgencyBadge(expense.urgencyLevel)}
+                            </td>
+
+                            {/* Statut */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {getStatusBadge(expense.status)}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewDetails(expense)}
+                                title={t("actions.viewDetails")}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* ✅ PAGINATION */}
+              <div className="flex justify-center">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={pagination.totalPages}
+                  totalItems={pagination.total}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={handlePageChange}
+                  onItemsPerPageChange={handleItemsPerPageChange}
+                  itemsPerPageOptions={[10, 25, 50, 100]}
+                  showItemsPerPage={true}
+                />
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </ProtectedRoute>
+            </>
+          )}
+        </>
+      )}
+    </div>
   );
 }

@@ -1,612 +1,973 @@
 // src/app/modules/associations/[id]/members/page.tsx
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Badge } from "@/components/ui/Badge";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { EditMemberModal } from "@/components/modules/associations/EditMemberModal";
-import { MemberDetailsModal } from "@/components/modules/associations/MemberDetailsModal";
 import {
-  ArrowLeft,
   Users,
-  Search,
   UserPlus,
-  Edit,
+  Search,
+  Filter,
+  X,
   Eye,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Phone,
-  Shield,
+  Edit,
+  Trash2,
   Crown,
-  XCircle,
+  MapPin,
+  Mail,
+  Phone,
+  Calendar,
+  AlertCircle,
+  FileDown,
+  LayoutGrid,
+  List,
+  Settings2,
 } from "lucide-react";
+import { toast } from "sonner";
 
-// ✅ IMPORTS TYPES
-import type { AssociationMember } from "@/types/association/member";
-import type { Association } from "@/types/association/association";
-
-// ✅ IMPORTS HOOKS
+// ✅ Imports hooks
 import { useAssociation } from "@/hooks/association/useAssociation";
 import { useAssociationMembers } from "@/hooks/association/useAssociationMembers";
+import { useSections } from "@/hooks/association/useSections";
 import { usePermissions } from "@/hooks/association/usePermissions";
+import { useRoles } from "@/hooks/association/useRoles";
+import { membersApi } from "@/lib/api/association/members";
 
-// ============================================
-// INTERFACES LOCALES
-// ============================================
+// ✅ Imports types
+import type {
+  AssociationMember,
+  FetchMembersParams,
+} from "@/types/association/member";
 
-interface MemberFilters {
-  search: string;
-  status: string;
-  memberType: string;
-}
-
-// ============================================
-// COMPOSANT PRINCIPAL
-// ============================================
+// ✅ Imports components
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { Pagination } from "@/components/ui/Pagination";
+import { Avatar } from "@/components/ui/Avatar";
+import { StatCard } from "@/components/ui/StatCard";
+import { MemberCard } from "@/components/modules/associations/MemberCard";
+import { MemberDetailsModal } from "@/components/modules/associations/MemberDetailsModal";
+import EditMemberModal from "@/components/modules/associations/EditMemberModal";
 
 export default function MembersPage() {
   const params = useParams();
   const router = useRouter();
   const t = useTranslations("members");
-  const tCommon = useTranslations("common");
+  const associationId = Number(params.id);
 
-  const associationId = parseInt(params.id as string);
-
-  // ✅ HOOKS
+  // ============================================
+  // HOOKS
+  // ============================================
+  const { association, loading: associationLoading } =
+    useAssociation(associationId);
   const {
-    association,
-    currentMembership,
-    loading: assocLoading,
-  } = useAssociation(associationId);
-  const {
-    membersWithRoleDetails,
+    members,
+    pagination,
     loading: membersLoading,
     fetchMembers,
   } = useAssociationMembers(associationId);
-  const { hasPermission } = usePermissions(associationId);
-
-  // ✅ ÉTATS LOCAUX
-  const [filters, setFilters] = useState<MemberFilters>({
-    search: "",
-    status: "all",
-    memberType: "all",
-  });
-  const [editingMember, setEditingMember] = useState<number | null>(null);
-  const [viewingMember, setViewingMember] = useState<number | null>(null);
-
-  // ✅ PERMISSIONS
-  const canViewMembers = hasPermission("membres.view_list");
-  const canManageMembers = hasPermission("membres.manage_members");
-  const canViewDetails = hasPermission("membres.view_details");
-
-  // ✅ LOADING GLOBAL
-  const isLoading = assocLoading || membersLoading;
+  const { sections, fetchSections } = useSections();
+  const { canManageMembers, canViewDetails } =
+    usePermissions(associationId);
+  const { roles } = useRoles(associationId);
 
   // ============================================
-  // FILTRAGE MEMBRES
+  // ÉTATS LOCAUX
   // ============================================
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedMemberType, setSelectedMemberType] = useState<string>("all");
+  const [selectedSection, setSelectedSection] = useState<number | undefined>(
+    undefined
+  );
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
-  const filteredMembers = useMemo(() => {
-    return membersWithRoleDetails.filter((member) => {
-      // Filtre recherche
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        const fullName =
-          `${member.user?.firstName} ${member.user?.lastName}`.toLowerCase();
-        const phone = member.user?.phoneNumber?.toLowerCase() || "";
+  // ✅ NOUVEAU : Colonnes optionnelles
+  const [showStatusColumn, setShowStatusColumn] = useState(false);
+  const [showJoinDateColumn, setShowJoinDateColumn] = useState(false);
+  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
-        if (!fullName.includes(searchLower) && !phone.includes(searchLower)) {
-          return false;
-        }
-      }
-
-      // Filtre statut
-      if (filters.status !== "all" && member.status !== filters.status) {
-        return false;
-      }
-
-      // Filtre type de membre
-      if (
-        filters.memberType !== "all" &&
-        member.memberType !== filters.memberType
-      ) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [membersWithRoleDetails, filters]);
+  // États modals
+  const [selectedMember, setSelectedMember] =
+    useState<AssociationMember | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<AssociationMember | null>(
+    null
+  );
 
   // ============================================
-  // STATISTIQUES
+  // CHARGEMENT INITIAL
   // ============================================
-
-  const stats = useMemo(() => {
-    return {
-      total: membersWithRoleDetails.length,
-      active: membersWithRoleDetails.filter((m) => m.status === "active")
-        .length,
-      pending: membersWithRoleDetails.filter((m) => m.status === "pending")
-        .length,
-      admins: membersWithRoleDetails.filter((m) => m.isAdmin).length,
+  useEffect(() => {
+    const params: FetchMembersParams = {
+      search: searchQuery || undefined,
+      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      memberType: selectedMemberType !== "all" ? selectedMemberType : undefined,
+      sectionId: selectedSection,
+      page: currentPage,
+      limit: itemsPerPage,
     };
-  }, [membersWithRoleDetails]);
+
+    fetchMembers(params);
+  }, [
+    currentPage,
+    itemsPerPage,
+    searchQuery,
+    selectedStatus,
+    selectedMemberType,
+    selectedSection,
+    fetchMembers,
+  ]);
+
+  useEffect(() => {
+    if (association?.isMultiSection) {
+      fetchSections(associationId);
+    }
+  }, [association, associationId, fetchSections]);
 
   // ============================================
-  // OPTIONS FILTRES
+  // HANDLERS FILTRES
   // ============================================
+  const handleSearch = () => {
+    setCurrentPage(1);
+  };
 
-  const statusOptions = [
-    { key: "all", label: t("filters.allStatuses") },
-    { key: "active", label: t("filters.active") },
-    { key: "pending", label: t("filters.pending") },
-    { key: "suspended", label: t("filters.suspended") },
-    { key: "inactive", label: t("filters.inactive") },
-  ];
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setSelectedStatus("all");
+    setSelectedMemberType("all");
+    setSelectedSection(undefined);
+    setCurrentPage(1);
+  };
 
-  const memberTypeOptions = useMemo(() => {
-    if (!association?.memberTypes)
-      return [{ key: "all", label: t("filters.allTypes") }];
+  const handleStatusChange = (value: string) => {
+    setSelectedStatus(value);
+    setCurrentPage(1);
+  };
 
-    return [
-      { key: "all", label: t("filters.allTypes") },
-      ...association.memberTypes.map((type) => ({
-        key: type.name,
-        label: type.name,
-      })),
-    ];
-  }, [association, t]);
+  const handleMemberTypeChange = (value: string) => {
+    setSelectedMemberType(value);
+    setCurrentPage(1);
+  };
+
+  const handleSectionChange = (value: string) => {
+    setSelectedSection(value === "all" ? undefined : Number(value));
+    setCurrentPage(1);
+  };
 
   // ============================================
-  // HELPERS BADGES
+  // HANDLERS PAGINATION
   // ============================================
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  // ============================================
+  // HANDLERS ACTIONS
+  // ============================================
+  const handleExportPDF = async () => {
+    try {
+      toast.info(t("export.generating"));
+
+      const blob = await membersApi.exportMembersPDF(associationId, {
+        search: searchQuery || undefined,
+        status: selectedStatus !== "all" ? selectedStatus : undefined,
+        memberType:
+          selectedMemberType !== "all" ? selectedMemberType : undefined,
+        sectionId: selectedSection,
+      });
+
+      const fileName = `Membres_${association?.name}_${new Date().toISOString().split("T")[0]}.pdf`;
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast.success(t("export.success"));
+    } catch (error: unknown) {
+      console.error("❌ Erreur export PDF:", error);
+      toast.error(t("export.error"));
+    }
+  };
+
+  const handleViewDetails = (member: AssociationMember) => {
+    if (!canViewDetails) {
+      toast.error(t("errors.noPermission"));
+      return;
+    }
+    setSelectedMember(member);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleEditMember = (member: AssociationMember) => {
+    if (!canManageMembers) {
+      toast.error(t("errors.noPermission"));
+      return;
+    }
+    setEditingMember(member);
+  };
+
+  const handleDeleteMember = async (member: AssociationMember) => {
+    if (!canManageMembers) {
+      toast.error(t("errors.noPermission"));
+      return;
+    }
+    toast.info("Fonctionnalité de suppression à venir");
+  };
+
+  const loadData = useCallback(async () => {
+    const params: FetchMembersParams = {
+      search: searchQuery || undefined,
+      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      memberType: selectedMemberType !== "all" ? selectedMemberType : undefined,
+      sectionId: selectedSection,
+      page: currentPage,
+      limit: itemsPerPage,
+    };
+    await fetchMembers(params);
+  }, [
+    searchQuery,
+    selectedStatus,
+    selectedMemberType,
+    selectedSection,
+    currentPage,
+    itemsPerPage,
+    fetchMembers,
+  ]);
+
+  // ============================================
+  // HELPERS
+  // ============================================
   const getStatusBadge = (status: AssociationMember["status"]) => {
     const config = {
-      active: {
-        variant: "success" as const,
-        icon: CheckCircle,
-        label: t("status.active"),
-      },
-      pending: {
-        variant: "warning" as const,
-        icon: Clock,
-        label: t("status.pending"),
-      },
-      suspended: {
-        variant: "danger" as const,
-        icon: XCircle,
-        label: t("status.suspended"),
-      },
-      inactive: {
-        variant: "secondary" as const,
-        icon: AlertCircle,
-        label: t("status.inactive"),
-      },
+      active: { variant: "success" as const, label: t("status.active") },
+      pending: { variant: "warning" as const, label: t("status.pending") },
+      inactive: { variant: "secondary" as const, label: t("status.inactive") },
+      suspended: { variant: "danger" as const, label: t("status.suspended") },
     };
-
-    const { variant, icon: Icon, label } = config[status] || config.inactive;
-
-    return (
-      <Badge variant={variant} className="flex items-center gap-1">
-        <Icon className="h-3 w-3" />
-        {label}
-      </Badge>
-    );
+    const statusConfig = config[status] || config.inactive;
+    return <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>;
   };
 
-  const getRoleBadge = (role: { id: string; name: string; color: string }) => {
-    return (
-      <Badge
-        key={role.id}
-        style={{ backgroundColor: role.color + "20", color: role.color }}
-        className="text-xs font-medium"
-      >
-        {role.name}
-      </Badge>
-    );
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("fr-FR", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  // Calculer statistiques
+  const stats = {
+    total: pagination.total,
+    active: members.filter((m) => m.status === "active").length,
+    pending: members.filter((m) => m.status === "pending").length,
+    sections: association?.isMultiSection ? sections.length : 1,
   };
 
   // ============================================
-  // GESTION PERMISSIONS - ACCÈS REFUSÉ
+  // RENDU LOADING
   // ============================================
-
-  if (!isLoading && !canViewMembers) {
+  if (associationLoading) {
     return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-7xl mx-auto p-6">
-          <Card className="border-red-200">
-            <CardContent className="p-6 text-center">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                {t("errors.accessDenied")}
-              </h2>
-              <p className="text-gray-600 mb-4">{t("errors.noPermission")}</p>
-              <Button variant="outline" onClick={() => router.back()}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                {tCommon("back")}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!association) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              <p>{t("errors.associationNotFound")}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   // ============================================
-  // LOADING STATE
+  // RENDU PRINCIPAL
   // ============================================
-
-  if (isLoading) {
-    return (
-      <ProtectedRoute requiredModule="associations">
-        <div className="max-w-7xl mx-auto p-6 flex items-center justify-center min-h-screen">
-          <LoadingSpinner size="lg" />
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
-  // ============================================
-  // RENDER
-  // ============================================
-
   return (
-    <ProtectedRoute requiredModule="associations">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        {/* ✅ HEADER */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t("title")}</h1>
-              <p className="text-gray-600">
-                {association?.name} • {stats.total} {t("members")}
-              </p>
-            </div>
-          </div>
-
-          {canManageMembers && (
-            <Button
-              onClick={() =>
-                router.push(
-                  `/modules/associations/${associationId}/members/add`
-                )
-              }
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              {t("addMember")}
-            </Button>
-          )}
-        </div>
-
-        {/* Statistiques */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Users className="h-8 w-8 mx-auto mb-2 text-gray-600" />
-              <div className="text-2xl font-bold text-gray-900">
-                {stats.total}
-              </div>
-              <div className="text-sm text-gray-600">
-                {t("stats.totalMembers")}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 text-center">
-              <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
-              <div className="text-2xl font-bold text-green-600">
-                {stats.active}
-              </div>
-              <div className="text-sm text-gray-600">
-                {t("stats.activeMembers")}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Clock className="h-8 w-8 mx-auto mb-2 text-yellow-600" />
-              <div className="text-2xl font-bold text-yellow-600">
-                {stats.pending}
-              </div>
-              <div className="text-sm text-gray-600">
-                {t("stats.pendingMembers")}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Crown className="h-8 w-8 mx-auto mb-2 text-blue-600" />
-              <div className="text-2xl font-bold text-blue-600">
-                {stats.admins}
-              </div>
-              <div className="text-sm text-gray-600">
-                {t("stats.adminMembers")}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filtres */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              {t("filters.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Recherche */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t("filters.search")}
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    value={filters.search}
-                    onChange={(e) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        search: e.target.value,
-                      }))
-                    }
-                    placeholder={t("filters.searchPlaceholder")}
-                    className="pl-10"
-                  />
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <div className="bg-primary/10 p-3 rounded-xl">
+                  <Users className="h-8 w-8 text-primary" />
                 </div>
-              </div>
-
-              {/* Filtre statut */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t("filters.status")}
-                </label>
-                <select
-                  value={filters.status}
-                  onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, status: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filtre type membre */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t("filters.memberType")}
-                </label>
-                <select
-                  value={filters.memberType}
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      memberType: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  {memberTypeOptions.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                {t("title")}
+              </h1>
+              <p className="text-gray-600 mt-2">{t("subtitle")}</p>
             </div>
-
-            {/* Résultats filtres */}
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-gray-600">
-                {filteredMembers.length} {t("filters.results")}
-              </span>
-              {(filters.search ||
-                filters.status !== "all" ||
-                filters.memberType !== "all") && (
+            <div className="flex items-center gap-3">
+              {/* Toggle Vue Liste/Grille */}
+              <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-1">
                 <Button
-                  variant="outline"
+                  variant={viewMode === "list" ? "default" : "ghost"}
                   size="sm"
-                  onClick={() =>
-                    setFilters({ search: "", status: "all", memberType: "all" })
-                  }
+                  onClick={() => setViewMode("list")}
+                  className="flex items-center gap-2"
                 >
-                  {t("filters.reset")}
+                  <List className="h-4 w-4" />
+                  {t("viewList")}
+                </Button>
+                <Button
+                  variant={viewMode === "grid" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("grid")}
+                  className="flex items-center gap-2"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                  {t("viewGrid")}
+                </Button>
+              </div>
+
+              <Button
+                onClick={handleExportPDF}
+                variant="outline"
+                className="flex items-center gap-2 shadow-sm"
+              >
+                <FileDown className="h-4 w-4" />
+                {t("exportPDF")}
+              </Button>
+              {canManageMembers && (
+                <Button
+                  onClick={() =>
+                    router.push(
+                      `/modules/associations/${associationId}/members/add`
+                    )
+                  }
+                  className="flex items-center gap-2 shadow-md hover:shadow-lg transition-shadow"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  {t("addMember")}
                 </Button>
               )}
             </div>
-          </CardContent>
+          </div>
+
+          {/* ✅ STATISTIQUES */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <StatCard
+              title={t("stats.totalMembers")}
+              value={stats.total}
+              icon={Users}
+              color="blue"
+              subtitle={t("stats.registered")}
+            />
+            <StatCard
+              title={t("stats.activeMembers")}
+              value={stats.active}
+              icon={Users}
+              color="green"
+              trend={{
+                value: "+12%",
+                isPositive: true,
+              }}
+            />
+            <StatCard
+              title={t("stats.pendingMembers")}
+              value={stats.pending}
+              icon={Users}
+              color="orange"
+              subtitle={t("stats.awaitingValidation")}
+            />
+            <StatCard
+              title={t("stats.sections")}
+              value={stats.sections}
+              icon={Users}
+              color="purple"
+            />
+          </div>
+        </div>
+
+        {/* ✅ FILTRES */}
+        <Card className="mb-6 shadow-sm">
+          <CardHeader className="border-b border-gray-100">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Filter className="h-5 w-5 text-primary" />
+                {t("filters.title")}
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                {showFilters ? t("filters.hide") : t("filters.show")}
+              </Button>
+            </div>
+          </CardHeader>
+          {showFilters && (
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                {/* Barre de recherche */}
+                <div className="flex gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      placeholder={t("filters.searchPlaceholder")}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      className="pl-10 h-11"
+                    />
+                  </div>
+                  <Button onClick={handleSearch} className="h-11 px-6">
+                    {t("filters.search")}
+                  </Button>
+                </div>
+
+                {/* Filtres avancés */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <Select
+                    value={selectedStatus}
+                    onValueChange={handleStatusChange}
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder={t("filters.status")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {t("filters.allStatuses")}
+                      </SelectItem>
+                      <SelectItem value="active">
+                        {t("status.active")}
+                      </SelectItem>
+                      <SelectItem value="pending">
+                        {t("status.pending")}
+                      </SelectItem>
+                      <SelectItem value="inactive">
+                        {t("status.inactive")}
+                      </SelectItem>
+                      <SelectItem value="suspended">
+                        {t("status.suspended")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={selectedMemberType}
+                    onValueChange={handleMemberTypeChange}
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder={t("filters.memberType")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {t("filters.allTypes")}
+                      </SelectItem>
+                      {association.memberTypes?.map((type) => (
+                        <SelectItem key={type.name} value={type.name}>
+                          {type.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {association.isMultiSection && (
+                    <Select
+                      value={selectedSection?.toString() || "all"}
+                      onValueChange={handleSectionChange}
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder={t("filters.section")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          {t("filters.allSections")}
+                        </SelectItem>
+                        {sections.map((section) => (
+                          <SelectItem
+                            key={section.id}
+                            value={section.id.toString()}
+                          >
+                            {section.name} ({section.city})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    onClick={handleResetFilters}
+                    className="flex items-center gap-2 h-11"
+                  >
+                    <X className="h-4 w-4" />
+                    {t("filters.reset")}
+                  </Button>
+                </div>
+
+                {/* Pills filtres actifs */}
+                <div className="flex flex-wrap gap-2">
+                  {selectedStatus !== "all" && (
+                    <Badge variant="secondary" className="pl-3 pr-2 py-1">
+                      {t("filters.filterStatus")}: {selectedStatus}
+                      <button
+                        onClick={() => setSelectedStatus("all")}
+                        className="ml-2 hover:text-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {selectedMemberType !== "all" && (
+                    <Badge variant="secondary" className="pl-3 pr-2 py-1">
+                      {t("filters.filterType")}: {selectedMemberType}
+                      <button
+                        onClick={() => setSelectedMemberType("all")}
+                        className="ml-2 hover:text-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {selectedSection && (
+                    <Badge variant="secondary" className="pl-3 pr-2 py-1">
+                      {t("filters.filterSection")}:{" "}
+                      {sections.find((s) => s.id === selectedSection)?.name}
+                      <button
+                        onClick={() => setSelectedSection(undefined)}
+                        className="ml-2 hover:text-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {searchQuery && (
+                    <Badge variant="secondary" className="pl-3 pr-2 py-1">
+                      {t("filters.filterSearch")}: {searchQuery}
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="ml-2 hover:text-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          )}
         </Card>
 
-        {/* Liste des membres */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              {t("list.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {filteredMembers.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p>{t("list.noMembers")}</p>
-                <p className="text-sm">{t("list.noMembersHint")}</p>
+        {/* ✅ CONTENU PRINCIPAL */}
+        {membersLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : members.length === 0 ? (
+          <Card className="shadow-sm">
+            <CardContent className="py-20">
+              <div className="text-center">
+                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="h-10 w-10 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {t("list.noMembers")}
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {t("list.noMembersDescription")}
+                </p>
+                {canManageMembers && (
+                  <Button
+                    onClick={() =>
+                      router.push(
+                        `/modules/associations/${associationId}/members/add`
+                      )
+                    }
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    {t("addFirstMember")}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* ✅ VUE GRILLE */}
+            {viewMode === "grid" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                {members.map((member) => (
+                  <MemberCard
+                    key={member.id}
+                    member={member}
+                    roles={roles || []}
+                    onView={() => handleViewDetails(member)}
+                    onEdit={() => handleEditMember(member)}
+                    onDelete={() => handleDeleteMember(member)}
+                    canManage={canManageMembers}
+                    isMultiSection={association.isMultiSection || false}
+                  />
+                ))}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        {t("table.name")}
-                      </th>
-                      <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        {t("table.contact")}
-                      </th>
-                      <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        {t("table.memberType")}
-                      </th>
-                      {association?.isMultiSection && (
-                        <th className="text-left py-3 px-2 font-medium text-gray-900">
-                          {t("table.section")}
-                        </th>
-                      )}
-                      <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        {t("table.status")}
-                      </th>
-                      <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        {t("table.roles")}
-                      </th>
-                      <th className="text-left py-3 px-2 font-medium text-gray-900">
-                        {t("table.actions")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMembers.map((member) => (
-                      <tr
-                        key={member.id}
-                        className="border-b border-gray-100 hover:bg-gray-50"
+              /* ✅ VUE LISTE (TABLEAU AVEC COLONNES PERSONNALISABLES) */
+              <Card className="shadow-sm mb-6">
+                {/* ✅ HEADER AVEC BOUTON COLONNES */}
+                <CardHeader className="border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{t("list.title")}</CardTitle>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {pagination.total} {t("list.membersFound")}
+                      </p>
+                    </div>
+                    {/* ✅ DROPDOWN COLONNES */}
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+                        className="flex items-center gap-2"
                       >
-                        {/* Nom */}
-                        <td className="py-3 px-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">
-                              {member.user?.firstName} {member.user?.lastName}
-                            </span>
-
-                            {member.isAdmin && (
-                              <span title={t("admin")}>
-                                <Crown className="h-4 w-4 text-yellow-500" />
+                        <Settings2 className="h-4 w-4" />
+                        {t("columns.customize")}
+                      </Button>
+                      {showColumnsMenu && (
+                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 p-4 z-10">
+                          <h4 className="font-semibold text-sm text-gray-900 mb-3">
+                            {t("columns.title")}
+                          </h4>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={showStatusColumn}
+                                onChange={(e) =>
+                                  setShowStatusColumn(e.target.checked)
+                                }
+                                className="rounded border-gray-300"
+                              />
+                              <span className="text-sm">{t("columns.status")}</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={showJoinDateColumn}
+                                onChange={(e) =>
+                                  setShowJoinDateColumn(e.target.checked)
+                                }
+                                className="rounded border-gray-300"
+                              />
+                              <span className="text-sm">
+                                {t("columns.joinDate")}
                               </span>
-                            )}
+                            </label>
                           </div>
-                        </td>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          {/* ✅ COLONNES PAR DÉFAUT */}
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            {t("table.member")}
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            {t("table.contact")}
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            {t("table.type")}
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            {t("table.roles")}
+                          </th>
+                          {association.isMultiSection && (
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                              {t("table.section")}
+                            </th>
+                          )}
+                          
+                          {/* ✅ COLONNES OPTIONNELLES */}
+                          {showStatusColumn && (
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                              {t("table.status")}
+                            </th>
+                          )}
+                          {showJoinDateColumn && (
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                              {t("table.joinDate")}
+                            </th>
+                          )}
+                          
+                          <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            {t("table.actions")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {members.map((member) => (
+                          <tr
+                            key={member.id}
+                            className="hover:bg-gray-50 transition-colors"
+                          >
+                            {/* Membre avec Avatar */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <Avatar
+                                  firstName={member.user?.firstName}
+                                  lastName={member.user?.lastName}
+                                  imageUrl={member.user?.profilePicture}
+                                  size="md"
+                                />
+                                <div>
+                                  <div className="font-medium text-gray-900 flex items-center gap-2">
+                                    {member.user?.firstName}{" "}
+                                    {member.user?.lastName}
+                                    {member.isAdmin && (
+                                      <Crown className="h-4 w-4 text-yellow-500" />
+                                    )}
+                                  </div>
+                                  {member.profession && (
+                                    <div className="text-sm text-gray-500">
+                                      {member.profession}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
 
-                        {/* Contact */}
-                        <td className="py-3 px-2">
-                          <div className="flex items-center gap-1 text-gray-600 text-sm">
-                            <Phone className="h-3 w-3" />
-                            {member.user?.phoneNumber || "N/A"}
-                          </div>
-                        </td>
+                            {/* Contact */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="space-y-1">
+                                {member.user?.phoneNumber && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <Phone className="h-3 w-3 text-gray-400" />
+                                    {member.user.phoneNumber}
+                                  </div>
+                                )}
+                                {member.user?.email && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <Mail className="h-3 w-3 text-gray-400" />
+                                    <span className="truncate max-w-[200px]">
+                                      {member.user.email}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
 
-                        {/* Type membre */}
-                        <td className="py-3 px-2">
-                          <span className="text-sm">
-                            {member.memberType || "N/A"}
-                          </span>
-                        </td>
+                            {/* Type */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge variant="secondary">
+                                {member.memberType || "-"}
+                              </Badge>
+                            </td>
 
-                        {/* Section (si multi-sections) */}
-                        {association?.isMultiSection && (
-                          <td className="py-3 px-2">
-                            {member.section ? (
-                              <span className="text-sm text-gray-600">
-                                {member.section.name}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400 text-sm">-</span>
+                            {/* Rôles */}
+                            <td className="px-6 py-4">
+                              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                {member.assignedRoles &&
+                                member.assignedRoles.length > 0 ? (
+                                  <>
+                                    {member.assignedRoles
+                                      .slice(0, 2)
+                                      .map((roleId) => {
+                                        const role = roles?.find(
+                                          (r) => r.id === roleId
+                                        );
+                                        return role ? (
+                                          <Badge
+                                            key={roleId}
+                                            variant="secondary"
+                                            style={{
+                                              backgroundColor:
+                                                role.color + "20",
+                                              color: role.color,
+                                              borderColor: role.color,
+                                            }}
+                                            className="border text-xs"
+                                          >
+                                            {role.name}
+                                          </Badge>
+                                        ) : null;
+                                      })}
+                                    {member.assignedRoles.length > 2 && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-xs"
+                                      >
+                                        +{member.assignedRoles.length - 2}
+                                      </Badge>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-gray-400">
+                                    {t("table.noRoles")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Section */}
+                            {association.isMultiSection && (
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {member.section ? (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <MapPin className="h-3 w-3 text-gray-400" />
+                                    <span>{member.section.name}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
                             )}
-                          </td>
-                        )}
 
-                        {/* Statut */}
-                        <td className="py-3 px-2">
-                          {getStatusBadge(member.status)}
-                        </td>
-
-                        {/* Rôles */}
-                        <td className="py-3 px-2">
-                          <div className="flex flex-wrap gap-1">
-                            {member.roleDetails &&
-                            member.roleDetails.length > 0 ? (
-                              member.roleDetails.map((role) =>
-                                getRoleBadge(role)
-                              )
-                            ) : (
-                              <span className="text-gray-400 text-sm">
-                                {t("table.noRoles")}
-                              </span>
+                            {/* ✅ COLONNES OPTIONNELLES */}
+                            {showStatusColumn && (
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {getStatusBadge(member.status)}
+                              </td>
                             )}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-3 px-2">
-                          <div className="flex items-center gap-2">
-                            {canViewDetails && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setViewingMember(member.id)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                            {showJoinDateColumn && (
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Calendar className="h-3 w-3 text-gray-400" />
+                                  {formatDate(member.joinDate)}
+                                </div>
+                              </td>
                             )}
 
-                            {canManageMembers && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingMember(member.id)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            {/* Actions */}
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleViewDetails(member)}
+                                  title={t("actions.view")}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                {canManageMembers && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEditMember(member)}
+                                      title={t("actions.edit")}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleDeleteMember(member)
+                                      }
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      title={t("actions.delete")}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
 
-        {/* Modales */}
-        {editingMember && (
-          <EditMemberModal
-            isOpen={!!editingMember}
-            onClose={() => {
-              setEditingMember(null);
-              fetchMembers();
-            }}
-            associationId={associationId}
-            memberId={editingMember}
-          />
-        )}
-
-        {viewingMember && (
-          <MemberDetailsModal
-            isOpen={!!viewingMember}
-            onClose={() => setViewingMember(null)}
-            associationId={associationId}
-            memberId={viewingMember}
-          />
+            {/* ✅ PAGINATION */}
+            <div className="flex justify-center">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={pagination.totalPages}
+                totalItems={pagination.total}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+                itemsPerPageOptions={[10, 25, 50, 100]}
+                showItemsPerPage={true}
+              />
+            </div>
+          </>
         )}
       </div>
-    </ProtectedRoute>
+
+      {/* ✅ MODALS */}
+      {selectedMember && (
+        <MemberDetailsModal
+          isOpen={isDetailsModalOpen}
+          onClose={() => {
+            setIsDetailsModalOpen(false);
+            setSelectedMember(null);
+          }}
+          memberId={selectedMember.id}
+          associationId={associationId}
+          primaryCurrency={association.primaryCurrency}
+        />
+      )}
+
+      {editingMember && (
+        <EditMemberModal
+          open={true}
+          onClose={() => {
+            setEditingMember(null);
+          }}
+          member={editingMember}
+          associationId={associationId}
+          isMultiSection={association.isMultiSection || false}
+          memberTypes={association.memberTypes || []}
+          primaryCurrency={association.primaryCurrency || "EUR"}
+          onSuccess={() => {
+            setEditingMember(null);
+            loadData();
+          }}
+        />
+      )}
+    </div>
   );
 }

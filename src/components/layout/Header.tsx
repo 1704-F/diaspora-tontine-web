@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from "next/image";
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
@@ -50,12 +51,12 @@ export function Header({ user, currentModule, onMenuClick }: HeaderProps) {
 
           {/* Logo */}
           <div className="flex items-center space-x-3">
-            <div className="flex items-center justify-center w-8 h-8 bg-primary-500 rounded text-white font-bold text-sm">
-              DT
-            </div>
-            <span className="hidden sm:block text-xl font-semibold text-gray-900">
-              DiasporaTontine
-            </span>
+             <div className="flex items-center space-x-3">
+                          <div className="flex items-center gap-3">
+                            {/* Logo SVG from file */}
+                            <Image src="/logo.svg" alt="Logo" width={156} height={156} />
+                          </div>
+                        </div>
           </div>
 
           {/* Current module badge */}

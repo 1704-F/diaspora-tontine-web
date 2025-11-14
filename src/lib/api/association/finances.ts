@@ -2,52 +2,49 @@
 
 import { apiClient } from '../client';
 import type {
-  ExpenseRequest,
-  IncomeEntry,
-  GetFinancesResponse,
   GetExpensesResponse,
-  GetIncomeResponse,
+  GetExpenseByIdResponse,
   CreateExpensePayload,
+  CreateExpenseResponse,
   ApproveExpensePayload,
+  ApproveExpenseResponse,
   RejectExpensePayload,
-  CreateIncomePayload,
-  FinancialReport
-} from '@/types/association';
+  RejectExpenseResponse,
+  ProcessPaymentPayload,
+  GetFinancialSummaryResponse,
+  ExpenseFilters,
+} from '@/types/association/finances';
 
 /**
- * 💰 API Finances
+ * 🏦 API Finances - Gestion des dépenses
  */
 export const financesApi = {
-  
-  /**
-   * 📊 Récupérer résumé financier
-   */
-  getSummary: async (associationId: number): Promise<GetFinancesResponse> => {
-    const response = await apiClient.get(`/associations/${associationId}/finances`);
-    return response.data;
-  },
-
   // ============================================
-  // DÉPENSES
+  // DEMANDES DE DÉPENSES
   // ============================================
 
   /**
-   * 📋 Récupérer toutes les dépenses
+   * 📋 Récupérer toutes les demandes de dépenses
    */
   getExpenses: async (
     associationId: number,
-    params?: {
-      page?: number;
-      limit?: number;
-      status?: string;
-      category?: string;
-      startDate?: string;
-      endDate?: string;
-    }
+    filters?: ExpenseFilters
   ): Promise<GetExpensesResponse> => {
-    const response = await apiClient.get(`/associations/${associationId}/expense-requests`, {
-      params
-    });
+    const params = new URLSearchParams();
+    
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.expenseType) params.append('expenseType', filters.expenseType);
+    if (filters?.urgencyLevel) params.append('urgencyLevel', filters.urgencyLevel);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.page) params.append('page', filters.page.toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.sortBy) params.append('sortBy', filters.sortBy);
+    if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder);
+    
+    const response = await apiClient.get(
+      `/associations/${associationId}/expense-requests?${params.toString()}`
+    );
+    
     return response.data;
   },
 
@@ -57,7 +54,7 @@ export const financesApi = {
   getExpenseById: async (
     associationId: number,
     expenseId: number
-  ): Promise<{ success: boolean; data: { expense: ExpenseRequest } }> => {
+  ): Promise<GetExpenseByIdResponse> => {
     const response = await apiClient.get(
       `/associations/${associationId}/expense-requests/${expenseId}`
     );
@@ -65,13 +62,16 @@ export const financesApi = {
   },
 
   /**
-   * ➕ Créer demande de dépense
+   * ➕ Créer une demande de dépense
    */
   createExpense: async (
     associationId: number,
-    data: CreateExpensePayload
-  ): Promise<{ success: boolean; data: { expense: ExpenseRequest } }> => {
-    const response = await apiClient.post(`/associations/${associationId}/expense-requests`, data);
+    payload: CreateExpensePayload
+  ): Promise<CreateExpenseResponse> => {
+    const response = await apiClient.post(
+      `/associations/${associationId}/expense-requests`,
+      payload
+    );
     return response.data;
   },
 
@@ -81,11 +81,11 @@ export const financesApi = {
   approveExpense: async (
     associationId: number,
     expenseId: number,
-    data: ApproveExpensePayload
-  ): Promise<{ success: boolean; message: string }> => {
+    payload: ApproveExpensePayload
+  ): Promise<ApproveExpenseResponse> => {
     const response = await apiClient.post(
       `/associations/${associationId}/expense-requests/${expenseId}/approve`,
-      data
+      payload
     );
     return response.data;
   },
@@ -96,11 +96,26 @@ export const financesApi = {
   rejectExpense: async (
     associationId: number,
     expenseId: number,
-    data: RejectExpensePayload
-  ): Promise<{ success: boolean; message: string }> => {
+    payload: RejectExpensePayload
+  ): Promise<RejectExpenseResponse> => {
     const response = await apiClient.post(
       `/associations/${associationId}/expense-requests/${expenseId}/reject`,
-      data
+      payload
+    );
+    return response.data;
+  },
+
+  /**
+   * 💳 Traiter le paiement
+   */
+  processPayment: async (
+    associationId: number,
+    expenseId: number,
+    payload: ProcessPaymentPayload
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await apiClient.post(
+      `/associations/${associationId}/expense-requests/${expenseId}/pay`,
+      payload
     );
     return response.data;
   },
@@ -119,87 +134,32 @@ export const financesApi = {
   },
 
   // ============================================
-  // REVENUS
+  // RÉSUMÉ FINANCIER
   // ============================================
 
   /**
-   * 📋 Récupérer tous les revenus
+   * 📊 Récupérer le résumé financier
    */
-  getIncome: async (
+  getFinancialSummary: async (
     associationId: number,
-    params?: {
-      page?: number;
-      limit?: number;
-      category?: string;
-      startDate?: string;
-      endDate?: string;
-    }
-  ): Promise<GetIncomeResponse> => {
-    const response = await apiClient.get(`/associations/${associationId}/income-entries`, {
-      params
-    });
-    return response.data;
-  },
-
-  /**
-   * ➕ Créer entrée de revenu
-   */
-  createIncome: async (
-    associationId: number,
-    data: CreateIncomePayload
-  ): Promise<{ success: boolean; data: { income: IncomeEntry } }> => {
-    const response = await apiClient.post(`/associations/${associationId}/income-entries`, data);
-    return response.data;
-  },
-
-  /**
-   * 🗑️ Supprimer un revenu
-   */
-  deleteIncome: async (associationId: number, incomeId: number): Promise<{ success: boolean }> => {
-    const response = await apiClient.delete(
-      `/associations/${associationId}/income-entries/${incomeId}`
+    period: 'all' | 'month' | 'quarter' | 'year' = 'all'
+  ): Promise<GetFinancialSummaryResponse> => {
+    const response = await apiClient.get(
+      `/associations/${associationId}/financial-summary?period=${period}`
     );
     return response.data;
   },
 
-  // ============================================
-  // RAPPORTS
-  // ============================================
-
   /**
-   * 📄 Générer rapport financier
+   * 📈 Récupérer les statistiques des dépenses
    */
-  generateReport: async (
+  getExpenseStatistics: async (
     associationId: number,
-    params: {
-      startDate: string;
-      endDate: string;
-      format?: 'pdf' | 'excel' | 'json';
-    }
-  ): Promise<{ success: boolean; data: FinancialReport | Blob }> => {
-    const response = await apiClient.get(`/associations/${associationId}/finances/report`, {
-      params,
-      responseType: params.format === 'json' ? 'json' : 'blob'
-    });
-
+    period: 'month' | 'quarter' | 'year' | 'all' = 'all'
+  ): Promise<{ success: boolean; data: unknown }> => {
+    const response = await apiClient.get(
+      `/associations/${associationId}/expense-requests/statistics?period=${period}`
+    );
     return response.data;
   },
-
-  /**
-   * 📊 Export Excel
-   */
-  exportToExcel: async (
-    associationId: number,
-    params: {
-      startDate: string;
-      endDate: string;
-    }
-  ): Promise<Blob> => {
-    const response = await apiClient.get(`/associations/${associationId}/finances/export/excel`, {
-      params,
-      responseType: 'blob'
-    });
-
-    return response.data;
-  }
 };
